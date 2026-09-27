@@ -1,0 +1,32 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- Shared DataTemplates for DocumentItem display across Grid and List views. -->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:models="using:QuickView.Models">
+
+    <!-- Minimal list row (used when a lightweight template is needed) -->
+    <DataTemplate x:Key="DocumentListRowTemplate">
+        <Grid Padding="8,6" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <FontIcon Grid.Column="0" Glyph="{Binding FileGlyph}" FontSize="16"
+                      Foreground="{Binding TypeColor}" VerticalAlignment="Center"/>
+            <TextBlock Grid.Column="1" Text="{Binding Title}"
+                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+            <TextBlock Grid.Column="2" Text="{Binding LastModified}"
+                       Style="{StaticResource CaptionTextBlockStyle}"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       VerticalAlignment="Center"/>
+            <TextBlock Grid.Column="3" Text="{Binding FileSize}"
+                       Style="{StaticResource CaptionTextBlockStyle}"
+                       Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                       VerticalAlignment="Center" MinWidth="56" TextAlignment="Right"/>
+        </Grid>
+    </DataTemplate>
+
+</ResourceDictionary>

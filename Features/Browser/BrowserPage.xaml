@@ -1,0 +1,12 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="QuickView.Features.Browser.BrowserPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid>
+        <!-- TODO: File browser tree + content grid -->
+        <TextBlock Text="Browser" VerticalAlignment="Center" HorizontalAlignment="Center"
+                   Style="{StaticResource SubtitleTextBlockStyle}"/>
+    </Grid>
+</Page>

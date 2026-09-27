@@ -1,0 +1,93 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!--
+    TitleBarWindow.xaml
+    Chrome-style TabView: Home tab (fixed, no close) + document tabs (closeable).
+    Pattern from Rune/MainWindow.xaml — TabView IS the title bar.
+-->
+<Window
+    x:Class="Document.Shell.TitleBarWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:update="using:QuickView.Infrastructure.Update"
+    Title="QuickView">
+
+    <Window.SystemBackdrop>
+        <MicaBackdrop/>
+    </Window.SystemBackdrop>
+
+    <Grid x:Name="RootGrid" AllowDrop="True"
+          DragOver="RootGrid_DragOver"
+          Drop="RootGrid_Drop">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>  <!-- TabView strip (= title bar) -->
+            <RowDefinition Height="Auto"/>  <!-- Update notification banner -->
+            <RowDefinition Height="*"/>     <!-- Page content -->
+        </Grid.RowDefinitions>
+
+        <!-- Update notification banner (hidden until an update is found) -->
+        <update:UpdateBanner x:Name="UpdateBannerControl" Grid.Row="1" />
+
+        <!-- ═══════════════════════════════════════════════════════
+             TAB STRIP  — the Chrome/Rune pattern:
+             the tab strip IS the title bar, drag area in footer.
+             Home tab is fixed (no close), documents get close buttons.
+             ═══════════════════════════════════════════════════════ -->
+        <TabView
+            x:Name="Tabs"
+            Grid.Row="0"
+            TabWidthMode="Equal"
+            CloseButtonOverlayMode="Always"
+            SelectionChanged="Tabs_SelectionChanged"
+            AddTabButtonClick="Tabs_AddTabButtonClick"
+            TabCloseRequested="Tabs_TabCloseRequested">
+
+            <!-- Left of tabs: app wordmark / home button -->
+            <TabView.TabStripHeader>
+                <Button x:Name="HomeButton"
+                        Click="HomeButton_Click"
+                        VerticalAlignment="Center"
+                        Margin="8,0,4,0"
+                        Padding="10,2"
+                        MinHeight="36" MinWidth="36"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        ToolTipService.ToolTip="Home — recent files">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Image Source="/Assets/AppIcon.png" Width="16" Height="16"/>
+                        <TextBlock Text="QuickView"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+            </TabView.TabStripHeader>
+
+            <!-- Right of tabs: window drag region -->
+            <TabView.TabStripFooter>
+                <Grid x:Name="TitleBarDragArea"
+                      Background="Transparent"
+                      MinWidth="188"/>
+            </TabView.TabStripFooter>
+
+        </TabView>
+
+        <!-- ═══════════════════════════════════════════════════════
+             CONTENT AREA — each tab's page is shown here.
+             Home page always present; viewer pages added per tab.
+             ═══════════════════════════════════════════════════════ -->
+        <Grid Grid.Row="2">
+
+            <!-- Home page — always loaded, shown/hidden per tab selection -->
+            <Frame x:Name="HomeFrame"
+                   Visibility="Visible"/>
+
+            <!-- Document host — ViewerPage content is swapped in here -->
+            <ContentControl
+                x:Name="DocHost"
+                Visibility="Collapsed"
+                HorizontalContentAlignment="Stretch"
+                VerticalContentAlignment="Stretch"/>
+
+        </Grid>
+    </Grid>
+</Window>

@@ -1,0 +1,169 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="QuickView.Controls.DocumentListItem"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <!--
+        8 px bottom margin = gap between rows.
+        No hover effects, no container chrome.
+        Left side: gradient preview box with real thumbnail (if available)
+        or file-type icon over coloured gradient — matching the card.
+    -->
+    <Border
+        x:Name="RowRoot"
+        Margin="0,0,0,8"
+        Height="68"
+        CornerRadius="12"
+        Background="#FF242424"
+        BorderBrush="#18FFFFFF"
+        BorderThickness="1">
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <!-- Preview / thumbnail box -->
+                <ColumnDefinition Width="80"/>
+                <!-- Name + type -->
+                <ColumnDefinition Width="*"/>
+                <!-- Date -->
+                <ColumnDefinition Width="90"/>
+                <!-- Size -->
+                <ColumnDefinition Width="72"/>
+                <!-- Three-dot -->
+                <ColumnDefinition Width="44"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- ── Left preview box: gradient + icon, or real thumbnail ──── -->
+            <Border
+                Grid.Column="0"
+                CornerRadius="11,0,0,11">
+
+                <!-- Gradient background — same colours as the card -->
+                <Grid>
+                    <Rectangle x:Name="PreviewBackground" RadiusX="11" RadiusY="11">
+                        <Rectangle.Fill>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop x:Name="GradientStart" Offset="0" Color="#FFDC3545"/>
+                                <GradientStop x:Name="GradientEnd"   Offset="1" Color="#FFF0505F"/>
+                            </LinearGradientBrush>
+                        </Rectangle.Fill>
+                    </Rectangle>
+
+                    <!-- Real thumbnail (shown when available) -->
+                    <Image
+                        x:Name="ThumbnailImage"
+                        Stretch="UniformToFill"
+                        Visibility="Collapsed"/>
+
+                    <!-- File-type icon centred over gradient -->
+                    <Border
+                        x:Name="IconOverlay"
+                        Background="Transparent"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+                        <FontIcon
+                            x:Name="FileTypeIcon"
+                            FontFamily="Segoe Fluent Icons"
+                            FontSize="26"
+                            Foreground="#DDFFFFFF"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"/>
+                    </Border>
+
+                    <!-- Extension label at the bottom of the preview -->
+                    <Border
+                        VerticalAlignment="Bottom"
+                        HorizontalAlignment="Center"
+                        Margin="0,0,0,5"
+                        Padding="5,2"
+                        CornerRadius="4"
+                        Background="#40000000">
+                        <TextBlock
+                            x:Name="ExtensionText"
+                            FontSize="9"
+                            FontWeight="SemiBold"
+                            Foreground="White"/>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <!-- ── Name + type description ──────────────────────────────── -->
+            <StackPanel
+                Grid.Column="1"
+                VerticalAlignment="Center"
+                Spacing="3"
+                Margin="14,0,12,0">
+
+                <TextBlock
+                    x:Name="FileNameText"
+                    FontSize="13"
+                    FontWeight="SemiBold"
+                    Foreground="#FFFFFFFF"
+                    TextTrimming="CharacterEllipsis"
+                    MaxLines="1"/>
+
+                <TextBlock
+                    x:Name="FileTypeDesc"
+                    FontSize="11"
+                    Foreground="#80FFFFFF"/>
+            </StackPanel>
+
+            <!-- ── Date modified ─────────────────────────────────────────── -->
+            <StackPanel
+                Grid.Column="2"
+                Orientation="Horizontal"
+                Spacing="4"
+                VerticalAlignment="Center"
+                HorizontalAlignment="Right"
+                Margin="0,0,12,0">
+                <FontIcon
+                    Glyph="&#xE787;"
+                    FontFamily="Segoe Fluent Icons"
+                    FontSize="10"
+                    Foreground="#60FFFFFF"
+                    VerticalAlignment="Center"/>
+                <TextBlock
+                    x:Name="ModifiedText"
+                    FontSize="11"
+                    Foreground="#80FFFFFF"
+                    VerticalAlignment="Center"/>
+            </StackPanel>
+
+            <!-- ── File size ─────────────────────────────────────────────── -->
+            <TextBlock
+                x:Name="FileSizeText"
+                Grid.Column="3"
+                FontSize="11"
+                FontWeight="SemiBold"
+                Foreground="#B8FFFFFF"
+                VerticalAlignment="Center"
+                HorizontalAlignment="Right"
+                Margin="0,0,12,0"/>
+
+            <!-- ── Three-dot menu ────────────────────────────────────────── -->
+            <Button
+                x:Name="ContextMenuButton"
+                Grid.Column="4"
+                Width="32" Height="32"
+                Padding="0"
+                Background="Transparent"
+                BorderThickness="0"
+                CornerRadius="16"
+                VerticalAlignment="Center"
+                HorizontalAlignment="Center"
+                Click="ContextMenuButton_Click"
+                ToolTipService.ToolTip="More options">
+                <FontIcon
+                    Glyph="&#xE712;"
+                    FontFamily="Segoe Fluent Icons"
+                    FontSize="13"
+                    Foreground="#D8FFFFFF"/>
+            </Button>
+
+        </Grid>
+    </Border>
+
+</UserControl>

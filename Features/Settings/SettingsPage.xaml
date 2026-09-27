@@ -1,0 +1,186 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Copyright (c) Microsoft Corporation. All rights reserved.
+    Licensed under the MIT License.
+-->
+<Page
+    x:Class="QuickView.Features.Settings.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Page.Resources>
+        <ResourceDictionary Source="ms-appx:///Microsoft.UI.Xaml/DensityStyles/Compact.xaml" />
+    </Page.Resources>
+
+    <ScrollViewer HorizontalContentAlignment="Stretch">
+        <Grid
+            HorizontalAlignment="Stretch"
+            Padding="28,22,28,32">
+            <StackPanel Spacing="12">
+            <!-- Header -->
+            <TextBlock
+                Margin="0,0,0,4"
+                FontSize="28"
+                FontWeight="SemiBold"
+                Text="Settings" />
+            <TextBlock
+                Margin="0,0,0,16"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Text="Tune QuickView to match the way you work." />
+
+            <!-- Appearance Section -->
+            <Border
+                HorizontalAlignment="Stretch"
+                Padding="18"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="8">
+                <StackPanel Spacing="12">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Appearance" />
+                    <ComboBox
+                        x:Name="ThemeComboBox"
+                        HorizontalAlignment="Stretch"
+                        Header="Theme"
+                        SelectionChanged="ThemeComboBox_SelectionChanged">
+                        <ComboBoxItem Content="Light" />
+                        <ComboBoxItem Content="Dark" />
+                        <ComboBoxItem Content="Use system setting" IsSelected="True" />
+                    </ComboBox>
+                    <ToggleSwitch Header="Enable Mica background" IsOn="True" />
+                </StackPanel>
+            </Border>
+
+            <!-- Viewer Section -->
+            <Border
+                HorizontalAlignment="Stretch"
+                Padding="18"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="8">
+                <StackPanel Spacing="12">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Viewer" />
+                    <ToggleSwitch Header="Show page thumbnails" IsOn="True" />
+                    <Slider
+                        HorizontalAlignment="Stretch"
+                        Header="Default zoom level"
+                        Maximum="200"
+                        Minimum="50"
+                        StepFrequency="25"
+                        Value="100" />
+                    <ComboBox
+                        HorizontalAlignment="Stretch"
+                        Header="Default view mode">
+                        <ComboBoxItem Content="Fit to width" IsSelected="True" />
+                        <ComboBoxItem Content="Fit to page" />
+                        <ComboBoxItem Content="Actual size" />
+                    </ComboBox>
+                </StackPanel>
+            </Border>
+
+            <!-- File Associations Section -->
+            <Border
+                HorizontalAlignment="Stretch"
+                Padding="18"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="8">
+                <StackPanel Spacing="14">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="File associations" />
+
+                    <!-- Status row -->
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon x:Name="AssocStatusIcon"
+                                  Grid.Column="0"
+                                  Glyph="&#xE73E;"
+                                  FontSize="16"
+                                  Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                                  VerticalAlignment="Center" />
+                        <TextBlock x:Name="AssocStatusText"
+                                   Grid.Column="1"
+                                   VerticalAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   Text="Checking…"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </Grid>
+
+                    <!-- Description -->
+                    <TextBlock
+                        TextWrapping="Wrap"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="When registered, QuickView appears in the 'Open with' menu for all supported file types. Individual defaults are set per file type in Windows Settings → Default apps." />
+
+                    <!-- Supported types preview -->
+                    <Expander HorizontalAlignment="Stretch" Header="Supported file types">
+                        <TextBlock
+                            Margin="0,6,0,0"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            FontFamily="Cascadia Code, Consolas, Courier New"
+                            FontSize="12"
+                            TextWrapping="Wrap"
+                            x:Name="SupportedTypesText" />
+                    </Expander>
+
+                    <!-- Action buttons -->
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="RegisterButton"
+                                Content="Register with Windows"
+                                Style="{StaticResource AccentButtonStyle}"
+                                Click="RegisterButton_Click" />
+                        <Button x:Name="UnregisterButton"
+                                Content="Remove registration"
+                                Click="UnregisterButton_Click" />
+                        <Button Content="Open Default Apps"
+                                Click="OpenDefaultApps_Click" />
+                    </StackPanel>
+
+                    <!-- Inline feedback -->
+                    <InfoBar x:Name="AssocInfoBar"
+                             IsOpen="False"
+                             IsClosable="True" />
+                </StackPanel>
+            </Border>
+
+            <!-- About Section -->
+            <Border
+                HorizontalAlignment="Stretch"
+                Padding="18"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="8">
+                <StackPanel Spacing="6">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="About" />
+                    <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                        <Image Source="/Assets/AppIcon.png" Width="36" Height="36"/>
+                        <StackPanel Spacing="2" VerticalAlignment="Center">
+                            <TextBlock
+                                FontSize="16" FontWeight="SemiBold"
+                                Text="QuickView"/>
+                            <TextBlock
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="Version 1.0.0"/>
+                        </StackPanel>
+                    </StackPanel>
+                    <TextBlock
+                        Style="{StaticResource BodyTextBlockStyle}"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="QuickView every file, fast. A lightweight universal file viewer for Windows."
+                        TextWrapping="Wrap"/>
+                    <HyperlinkButton Content="View on GitHub" NavigateUri="https://github.com" />
+                </StackPanel>
+            </Border>
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</Page>

@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!--
+    ViewerToolbar.xaml
+    Extracted toolbar UserControl for the ViewerPage.
+    Currently the toolbar is built directly in ViewerPage.xaml for simplicity.
+    This file is the future home once it is promoted to a standalone control.
+-->
+<UserControl
+    x:Class="QuickView.Features.Viewer.Components.ViewerToolbar"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid Height="48"
+          Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+          BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+          BorderThickness="0,0,0,1">
+        <!-- Toolbar buttons defined here when extracted from ViewerPage.xaml -->
+    </Grid>
+</UserControl>

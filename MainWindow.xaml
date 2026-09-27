@@ -1,0 +1,114 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Document.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:QuickView.Controls"
+    xmlns:pages="using:QuickView.Features.Home"
+    xmlns:update="using:QuickView.Infrastructure.Update"
+    Title="QuickView">
+
+    <Window.SystemBackdrop>
+        <MicaBackdrop />
+    </Window.SystemBackdrop>
+
+    <Grid x:Name="MainGrid">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Update notification banner (hidden until an update is found) -->
+        <update:UpdateBanner x:Name="UpdateBanner" Grid.Row="0" />
+
+        <!-- Tab Strip (Chrome-style) -->
+        <TabView
+            x:Name="DocumentTabs"
+            Grid.Row="1"
+            TabWidthMode="Equal"
+            CloseButtonOverlayMode="Always"
+            SelectionChanged="DocumentTabs_SelectionChanged"
+            AddTabButtonClick="DocumentTabs_AddTabButtonClick"
+            TabCloseRequested="DocumentTabs_TabCloseRequested">
+            <TabView.TabStripHeader>
+                <Button
+                    x:Name="HomeButton"
+                    Click="HomeButton_Click"
+                    VerticalAlignment="Center"
+                    Margin="8,0,4,0"
+                    Padding="10,2"
+                    MinHeight="40"
+                    MinWidth="40"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    ToolTipService.ToolTip="Home — recent documents">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE80F;" FontSize="16" />
+                        <TextBlock
+                            Text="QuickView"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                </Button>
+            </TabView.TabStripHeader>
+            <TabView.TabStripFooter>
+                <Grid x:Name="TitleBarDragArea" Background="Transparent" MinWidth="188" />
+            </TabView.TabStripFooter>
+        </TabView>
+
+        <!-- PDF Action Bar (shown when document is open) -->
+        <controls:PdfActionBar
+            x:Name="PdfActionBar"
+            Grid.Row="1"
+            Visibility="Collapsed"
+            PageChanged="PdfActionBar_PageChanged"
+            ZoomInRequested="PdfActionBar_ZoomInRequested"
+            ZoomOutRequested="PdfActionBar_ZoomOutRequested"
+            FitWidthRequested="PdfActionBar_FitWidthRequested"
+            RotateRequested="PdfActionBar_RotateRequested"
+            SearchRequested="PdfActionBar_SearchRequested"
+            PrintRequested="PdfActionBar_PrintRequested"
+            SaveAsRequested="PdfActionBar_SaveAsRequested"
+            PropertiesRequested="PdfActionBar_PropertiesRequested"
+            SettingsRequested="PdfActionBar_SettingsRequested" />
+
+        <!-- Main Content Area -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Thumbnail Sidebar -->
+            <controls:PageThumbnailSidebar
+                x:Name="ThumbnailSidebar"
+                Grid.Column="0"
+                Visibility="Collapsed"
+                PageSelected="ThumbnailSidebar_PageSelected" />
+
+            <!-- Sidebar Separator -->
+            <Border
+                Grid.Column="0"
+                Width="1"
+                HorizontalAlignment="Right"
+                Background="{ThemeResource DividerStrokeColorDefaultBrush}"
+                Visibility="{x:Bind ThumbnailSidebar.Visibility, Mode=OneWay}" />
+
+            <!-- Document Content Host -->
+            <Grid Grid.Column="1">
+                <!-- Document will be loaded here dynamically -->
+                <ContentControl
+                    x:Name="DocumentHost"
+                    Visibility="Collapsed"
+                    HorizontalContentAlignment="Stretch"
+                    VerticalContentAlignment="Stretch" />
+
+                <!-- Home Page (recent documents grid) -->
+                <pages:HomePage
+                    x:Name="HomePageView"
+                    DocumentOpened="HomePage_DocumentOpened" />
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>
