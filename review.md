@@ -1,110 +1,157 @@
-﻿QuickView viewer review
-PDF + text/code paths, read 2026-09-25. Source: Rendering/Pdf, Features/Viewer, Rendering/Code, Rendering/Text, Rendering/Web.
+﻿# QuickView — Code Review
 
-Ship-blocker before images or Office
-PDFium is the right engine and first-page-first is the right load sequence. The remaining cost is architectural: one global PDFium lock is split across two APIs, every page is laid out at bitmap pixels inside a non-virtualized StackPanel, and text/code ReadToEnd the whole file before truncating. Fix those three and open time plus RAM drop by a large factor on real documents.
-5
-Crash or RAM defects
-8
-High cost on large files
-192
-Claimed render DPI
-768
-Zoom re-raster cap (DPI)
-What is already working
-Direct PDFium BGRA into a rented buffer, then WriteableBitmap, is the correct replacement for Windows.Data.Pdf PNG round-trips. Page sizes come from FPDF_GetPageSizeByIndexF without loading content. First page paints before prefetch. Visible pages are prioritized, far pages are evicted (±6). Text/code load on a worker thread. Those choices should stay.
+> First pass: 2026-09-25 | Updated: 2026-09-27
+> Source: Rendering/Pdf, Features/Viewer, Rendering/Code, Rendering/Text, App.xaml.cs
 
-Hot path as it runs today
-Derived from ViewerPage.Pdf.cs, PdfRenderer.cs, PdfTextService.cs, ViewerPage.Text.cs. Letter page = 612×792 pt.
+---
 
-Stage	What happens	Cost on a 200-page PDF
-Open	FPDF_LoadDocument + size loop; then N Border+Grid placeholders in a StackPanel	UI thread walks 200 visual nodes before first paint finishes settling
-First page	BGRA @ RenderDpi, copy into WriteableBitmap on UI thread	~7.4 MiB bitmap (612×792 × 192/96 × 4 bytes)
-Scroll	Prefetch ±2, keep ±6, drop Image sources outside window	~13 pages × 7.4 MiB ≈ 96 MiB live page bitmaps
-Zoom	Keep layout size, re-raster up to 768 DPI, Stretch.Fill	One page at cap ≈ 118 MiB; a few visible pages can spike hundreds of MiB
-Find	PdfTextService opens the file again via PDFiumCore (second init + second lock)	Full-doc parse concurrent with render; PDFium is not safe for that
-Severity map
-ID	Area	Issue	Why it hurts
-C1
-PDF	Two PDFium entry points, two locks	PdfRenderer uses custom P/Invoke + PdfiumLock. PdfTextService uses PDFiumCore + SemaphoreSlim. Search, copy-text, and raster can run on the same pdfium.dll without a shared gate. That is undefined behavior and a crash class, not a polish item.
-C2
-PDF	Dispose races the renderer	CancelLoad / new document disposes PdfDocumentState while Task.Run still holds the IntPtr. Dispose does not zero Document, so a second Dispose can CloseDocument twice. Prefetch and zoom re-render are fire-and-forget.
-C3
-PDF	FPDF_LoadDocument as LPStr	Ansi marshalling. Paths with non-ANSI characters fail silently (null handle). Use UTF-8, FPDF_LoadMemDocument, or a file-access callback.
-C4
-Text/code	ReadToEnd then truncate	MaxChars is 1e6 / 5e5, but StreamReader.ReadToEnd loads the entire file first. A 200 MB log still allocates the full string. LoadTextFileAsync then assigns that string to a TextBox with no cap at all.
-C5
-PDF layout	No virtualization	PagesPanel is a StackPanel. Every page gets a Border whose Grid is sized to physical pixels (letter about 1224x1584). An 800-page doc builds 800 layout nodes plus 800 thumbnail VMs on open. Evicting the Image does not evict the layout slot.
-H1
-PDF zoom	Bitmap space != layout space	NaturalZoom = 96/RenderDpi, so the visual tree is huge and ScrollViewer.ZoomMode scales it down. Chrome/PDF.js layout in CSS pixels and rasterize at devicePixels x zoom. ReRenderVisiblePagesAsync then allocates up to 768 DPI into the same slot.
-H2
-Code	One Paragraph per line in RichTextBlock	10k Paragraph + Run + line-number TextBlock is a full visual tree, not a viewport. Search splits Runs into InlineUIContainer borders on every keystroke with no debounce.
-H3
-PDF search	Re-opens the file from disk	SearchCore / ExtractTextCore call FPDF_LoadDocument again instead of using _pdfState. Outline uses a third parser (PdfSharpCore). Three copies of document structure in memory.
-H4
-PDF RAM	Thumbnails never evicted	_renderedThumbs only grows. Sidebar prefetch +/-4 is fine; visited pages keep 96 DPI WriteableBitmaps forever.
-H5
-Markdown	WebView2 per file	EnsureCoreWebView2Async starts a Chromium process for a .md preview. That fights the low-RAM goal. A RichTextBlock or Win2D markdown path is cheaper for Quick Look.
-M1
-PDF	DPI uses /96 on PDF points	PDF user space is 1/72 in. Formula pt * dpi / 96 yields 144 dpi on an 8.5 in page when RenderDpi is 192. Fit-width comments still mention 384. Decide DIP layout vs true inches and use one scale everywhere (render, search rects, NaturalZoom).
-M2
-PDF	FPDF_LCD_TEXT + Stretch.Fill	Subpixel glyphs baked at one size, then scaled. At non-100% zoom, text fringes. Use grayscale AA when the blit will be scaled; LCD only when 1:1 device pixels.
-Memory model (derived)
-BGRA uncompressed. Formula used in code: px = round(pt × dpi / 96). Letter 612×792. Source: PdfRenderer.RenderPageAsync + ViewerPage.Zoom.cs cap.
+## Current State (2026-09-27)
 
-Raster	Pixels	Bytes / page	When it happens
-Thumbnail 96 DPI	612 × 792	1.9 MiB	Sidebar, never freed
-Base 192 DPI	1224 × 1584	7.4 MiB	Normal view, ±6 kept
-200% zoom (384)	2448 × 3168	29.6 MiB	ReRenderVisiblePagesAsync
-Cap 768 DPI	4896 × 6336	118.4 MiB	High zoom, visible pages only
-True 192 dpi using /72 would be 1632×2112 (13.1 MiB). The /96 shortcut under-renders and still over-lays out because layout uses those pixel counts as XAML Width/Height.
+Build: **0 errors, 0 warnings** (CA1416 and MVVMTK0045 suppressed project-wide — correct for a Windows-only app).
+Installer: `QuickView-Setup-x64.exe` — 40.3 MB, self-contained, `WindowsAppSDKSelfContained=true`.
+App icon: multi-size `.ico` (16, 20, 24, 32, 48, 64, 128, 256 px) — crisp at all DPI and contexts.
 
-PDF: faster, lower RAM
-1. One PDFium session
-Delete the duplicate P/Invoke surface or wrap PDFiumCore only. One FPDF_InitLibrary. One lock around every native call (render, text, outline, close). Search and copy use the open FpdfDocumentT, not a second LoadDocument. FPDFBookmark_* for TOC; drop PdfSharpCore from the hot path.
+---
 
-2. Layout in DIPs, raster at device pixels
-Page slot size = page points mapped to DIPs (or 72-dpi inches converted once). Image.Width/Height stay at that DIP size. Bitmap size = DIP × XamlRoot.RasterizationScale × userZoom, capped (e.g. 2.5× display, not 768 DPI absolute). ScrollViewer ZoomMode should be Disabled; you already implement Ctrl+wheel. This is how Sumatra, Chrome PDFium, and Rune-class viewers avoid a 160k-tall layout tree.
+## What Is Solid ✅
 
-3. Virtualize pages
-ItemsRepeater + StackLayout (or a custom VirtualizingLayout with GetPageSize heights). Realize ±2 viewports of Borders. Prefetch bitmaps into an LRU of decoded frames keyed by (page, dpiBucket). Evict WriteableBitmap by dropping Source and letting GC collect; do the same for thumbs.
+| Area | Detail |
+|---|---|
+| PDFium single session | One `FPDF_InitLibrary`, one `Pdfium.Gate` lock across all render/search/text calls |
+| UTF-8 paths | `FPDF_LoadDocument` via `LPUTF8Str` — non-ANSI filenames work |
+| Pooled render buffers | `ArrayPool<byte>.Shared.Rent` for BGRA frames; returned in `finally` |
+| Progressive load | First page paints before prefetch starts |
+| Page bitmap eviction | ±6 pages kept in `_renderedPages`; others have `Image.Source` cleared |
+| Capped text reads | `TextFileReader.ReadCapped` — 1 MB for plain text, 500 KB / 10 K lines for code |
+| Truncation banner | Shown when file exceeds cap |
+| PDF search debounce | 300 ms; cancels previous token correctly |
+| Search result count | "1 of N" for PDF, text, and code |
+| Code highlight visibility | Forced black text on yellow/orange background |
+| Search clears on delete | Query extracted before routing check; `ClearRichText` before every `ApplyToRichText` |
+| File associations | Full ProgID registry in `HKCU\Software\Classes`; Settings page Register/Unregister |
+| Deployment | `WindowsAppSDKSelfContained=true` bundles runtime; no external dependencies |
 
-4. Raster pipeline
-Keep FPDFBitmap_CreateEx into pooled buffers. Prefer SoftwareBitmap / CanvasVirtualImageSource / Composition surface over WriteableBitmap.PixelBuffer.AsStream() copies on the UI thread. Optional: paint a 96 DPI preview in the slot, then replace with display-DPI (progressive). Reload pages with FPDF_RenderPageBitmapWithMatrix instead of closing/reloading the page handle every time; cache loaded pages for the visible set.
+---
 
-5. Lifecycle
-Generation counter on the document. Render tasks capture gen; if gen != current, return the ArrayPool buffer and skip UI apply. Dispose zeros the handle after CloseDocument. Prompt for password via FPDF_GetLastError / FPDF_PASSWORD. Copy pdfium.dll next to the exe is already implied by DllImport name “pdfium”.
+## Open Bugs (verified in code)
 
-Text and code
-Stream, do not slurp
-FileStream with SequentialScan, read at most MaxChars (or a byte budget) with a Decoder. Never ReadToEnd. Show a truncation banner with file length from FileInfo, which you already compute after the damage is done.
+### C1 — Dispose race | `PdfDocumentState.cs`, `ViewerPage.Pdf.cs`
 
-Virtualize lines
-For Quick Look, an ItemsRepeater of lines (plain TextBlock) beats RichTextBlock-with-10k-paragraphs and beats WebView2 Monaco. Keep ~200 realized rows. Line numbers from the realized index, not a 10k-line string. Syntax color: one brush per line is fine; Tokeniser exists but is unused in the hot path — that is actually good until lines are virtualized.
+`LoadDocumentAsync` calls `_pdfState?.Dispose()` and immediately starts a new load. A background render task on the old state checks `ReferenceEquals(_pdfState, pdfState)` on the dispatcher thread *after* rendering completes — but `FPDF_CloseDocument` may have already run while the native render was in flight. The `IntPtr.Zero` guard inside `Pdfium.Gate` is present but does not cover the window between render dispatch and lock entry.
 
-Search
-Debounce code find like PDF (300 ms). Index matches as (line, column) on the raw string, not by mutating the visual tree. Highlight only the visible line containers. TextBox Select() is OK for small files; for large files overlay a canvas or per-row background.
+**No generation counter exists.** Fix: add `int _generation` to `ViewerPage`; capture it per-task; check it inside the lock before using the handle.
 
-Editing
-SaveButton never enables: _textHasChanges is set false and never true; TextBox is IsReadOnly. Either drop Save from a viewer, or make it explicitly an editor with change tracking. GetCodeText reconstructing from Runs will drop unmatched newlines and break files after search highlighting.
+---
 
-Dead architecture
-IFileRenderer, RendererRegistry, and TextRenderer are not on the open path. ViewerPage.LoadDocumentAsync switches on extension. That duplication will hurt when images and Office land. Wire the registry or delete the stubs so the next format cannot fork a third path.
-Bugs that are not “optimization”
-Symptom	Cause in code
-Search highlights misaligned after DPI comments drifted	PdfTextService converts with RenderDpi/96 into pageW/pageH device space; DrawHighlights comments still say 384 and “no scale”. Today it happens to match because both use RenderDpi — it will break the moment layout DIPs and bitmap pixels diverge (which they should).
-Rotate distorts or gaps	Rotate() sets Border.Width = physW / DisplayScale while placeholders were created at physW. Mixed DIP and pixel spaces.
-Home PDF thumbs still slow	PdfThumbnailProvider still uses Windows.Data.Pdf PNG fallback after Shell thumb fails.
-Namespaces mixed	App is Document.App; Save As uses (Application.Current as Document.App). Easy null and a packaging confusion, not a render bug.
-Password PDFs	FPDF_LoadDocument(path, null) only. No retry UI.
-Recommended order after this session
-Do first	Change	Payoff
-1	Single PDFium facade + shared lock; search/copy on open doc	Stops native crashes; cuts search RAM
-2	Capped streaming read for text/code; cap LoadTextFileAsync	Stops log-file OOM
-3	Document generation + safe dispose; zero native handle	Stops use-after-free on tab close / file switch
-4	DIP page slots + disable ScrollViewer zoom; raster at display×zoom with a real cap (e.g. 2×)	Biggest RAM and scroll smoothness win
-5	ItemsRepeater pages + LRU bitmaps/thumbs	Large PDFs open instantly
-6	Virtualized line list for code; debounce find	Large source files usable
-7	Then images (DecodePixelWidth, background decode) and Office	Do not add WebView2 or COM Office until 1–6 land
-What not to do
-Do not raise RenderDpi back toward 384. Do not keep ZoomMode Enabled on a physical-pixel canvas. Do not tokenize every character into XAML Runs. Do not add another PDF library. Do not start Office COM or a second WebView2 instance until the viewer shell is virtualized.
+### C2 — Save corruption after search | `ViewerPage.Text.cs`
+
+`SaveButton_Click` calls `GetCodeText()` which walks `TextViewerBlock.Blocks` collecting `Run.Text`. After `ApplyToRichText` splits runs around highlights, `GetCodeText()` silently drops `InlineUIContainer` spans. Saving while a search is active corrupts the file.
+
+Additionally, `_textHasChanges` is never set to `true` and `SaveButton` is never enabled by any `TextChanged` handler. The Save button is structurally present but permanently grayed-out.
+
+**Recommended fix:** Remove Save/SaveAs from the toolbar entirely. QuickView is a viewer.
+
+---
+
+### C3 — Password PDFs silently fail | `PdfRenderer.cs`
+
+`FPDF_LoadDocument(path, null)` always passes `null` password. On failure, `DescribeLastError()` returns `"This PDF is password protected."` and `ShowErrorCard` is called. No retry dialog, no `PasswordBox`. The document is simply unreadable.
+
+---
+
+## Performance Issues (verified in code)
+
+### H1 — Thumbnail RAM grows unbounded | `ViewerPage.Pdf.cs`
+
+`PrefetchPagesAroundAsync` evicts main-view bitmaps outside ±6 pages. There is **no equivalent eviction for `_renderedThumbs`**. Entries are only cleared when a new document loads. Every visited thumbnail page keeps its `WriteableBitmap` alive for the entire document session. 200-page PDF, all thumbs visited ≈ 380 MB.
+
+**Fix:** Evict `_renderedThumbs` entries outside ±10 pages. Mirror the existing `_renderedPages` eviction loop.
+
+---
+
+### H3 — Zoom DPI cap is absolute 768 | `ViewerPage.Zoom.cs`
+
+```csharp
+effectiveDpi = Math.Min(effectiveDpi, 768f);  // hardcoded
+```
+
+768 DPI produces a 118 MB bitmap for a single letter page. No relation to the actual display DPI. `DisplayScale` (the XAML rasterization scale) is available but unused in this calculation.
+
+**Fix:** `Math.Min(effectiveDpi, DisplayScale * 96f * 2.5f)` — caps relative to physical display DPI.
+
+---
+
+### H4 — Text/code search has no debounce | `ViewerPage.Search.cs`
+
+```csharp
+if (IsTextViewerActive())
+{
+    SearchInTextViewer(query, matchCase);
+    return;  // ← bypasses the 300ms debounce entirely
+}
+```
+
+`ClearRichText` + `ApplyToRichText` on a 10 000-line `RichTextBlock` runs synchronously on the UI thread on every keystroke. Visible freeze on large files.
+
+**Fix:** Move `SearchInTextViewer` behind a 150 ms debounce using the same `_searchDebounceCts` pattern already used for PDF.
+
+---
+
+### H5 — Disk thumbnail cache unbounded | `ThumbnailCache.cs`
+
+`%LocalAppData%\QuickView\thumbcache\` grows without limit. No LRU eviction, no size threshold, no cleanup on startup.
+
+---
+
+## Architecture
+
+### A1 — RendererRegistry is completely unwired
+
+`RendererRegistry.Register()` is never called anywhere in the codebase. `App.xaml.cs` `OnLaunched` does not register any renderer. `LoadDocumentAsync` dispatches by hardcoded extension chain (`if ext == ".pdf" ... else if IsMarkdownFile ... else ShowInfoCard`). `IFileRenderer` implementations for images, HTML, video, and Office exist but are unreachable.
+
+```
+RendererRegistry.GetRenderer()  ← zero call sites
+RendererRegistry.Register()     ← zero call sites
+ImageRenderer, MediaRenderer, DocxRenderer, XlsxRenderer, PptxRenderer, HtmlRenderer
+                                ← all exist, all unreachable
+```
+
+This must be wired before any new format is added, otherwise every format forks another `else if` chain.
+
+### A2 — `TextRenderer.cs` is unused
+
+`LoadTextFileAsync` bypasses `TextRenderer` and assigns text directly to a `TextBox`. `TextRenderer` (chunked `RichTextBlock` paragraph splitting) is never called.
+
+---
+
+## Memory Model Reference
+
+BGRA uncompressed. Formula: `px = round(pt × dpi / 96)`. Letter page = 612×792 pt.
+
+| Raster | Pixels | Bytes/page | Context |
+|---|---|---|---|
+| Thumbnail 96 DPI | 612×792 | 1.9 MB | Sidebar — never freed (H1) |
+| Base 192 DPI | 1224×1584 | 7.4 MB | Normal view, ±6 kept |
+| 200% zoom (384 DPI) | 2448×3168 | 29.6 MB | Re-render |
+| Cap 768 DPI | 4896×6336 | 118.4 MB | High zoom (H3) |
+
+---
+
+## What Not To Do
+
+- Do not raise `RenderDpi` above 192 as a default. Re-render at zoom-relative DPI instead.
+- Do not add a second PDFium library (PdfSharpCore is already being pulled in — remove it from hot paths).
+- Do not add WebView2 for Office rendering; wire `RendererRegistry` first.
+- Do not add another `else if` to `LoadDocumentAsync` for a new format — wire `RendererRegistry` instead.
+- Do not enable `ZoomMode` on the `ScrollViewer` — Ctrl+Wheel zoom is already implemented correctly.
+
+---
+
+## Recommended Next Steps
+
+1. **C2 + M2** — Remove Save/SaveAs. Eliminates the save-corruption risk in one move.
+2. **H4** — Add 150 ms debounce to text/code search. 2-line change, immediate UX win.
+3. **C1** — Add generation counter to `ViewerPage`. Prevents native crashes on rapid file switching.
+4. **H1** — Thumbnail eviction ±10 pages. Copy the existing `_renderedPages` eviction pattern.
+5. **H3** — Replace `768f` cap with `DisplayScale * 96f * 2.5f`. One-line change.
+6. **A1** — Wire `RendererRegistry`. Unlocks images, Office, video without code duplication.
