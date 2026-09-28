@@ -10,7 +10,7 @@ param(
 )
 
 $Project  = "$PSScriptRoot\QuickView.csproj"
-$Exe      = "$PSScriptRoot\bin\x64\Debug\net8.0-windows10.0.19041.0\QuickView.exe"
+$Exe      = "$PSScriptRoot\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\QuickView.exe"
 $LogFile  = "$PSScriptRoot\build.log"
 $ExeName  = "QuickView"
 
@@ -109,7 +109,7 @@ if (-not (Test-Path $Exe)) {
 # rcedit patches the PE directly so the icon appears in Explorer, taskbar,
 # and Alt+Tab without requiring a packaged build.
 $rcedit = "$PSScriptRoot\tools\rcedit.exe"
-$ico    = "$PSScriptRoot\bin\x64\Debug\net8.0-windows10.0.19041.0\Assets\AppIcon.ico"
+$ico    = "$PSScriptRoot\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\Assets\AppIcon.ico"
 if ((Test-Path $rcedit) -and (Test-Path $ico)) {
     Write-Step "Stamping icon into exe…"
     & $rcedit $Exe --set-icon $ico 2>&1 | Out-Null
