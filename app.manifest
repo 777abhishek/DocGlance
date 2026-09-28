@@ -1,11 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
-  <assemblyIdentity version="1.0.0.0" name="Document.app"/>
+  <assemblyIdentity version="1.0.0.0" name="QuickView.app"/>
 
   <application xmlns="urn:schemas-microsoft-com:asm.v3">
     <windowsSettings>
+      <!-- Per-Monitor DPI Awareness V2 for crisp rendering on high-DPI displays -->
       <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/PM</dpiAware>
       <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2, PerMonitor</dpiAwareness>
+      
+      <!-- Long path awareness (paths > 260 chars) -->
+      <longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>
+      
+      <!-- Printer driver isolation for better stability -->
+      <printerDriverIsolation xmlns="http://schemas.microsoft.com/SMI/2011/WindowsSettings">true</printerDriverIsolation>
+      
+      <!-- High resolution scrolling for smooth trackpad/mouse wheel -->
+      <highResolutionScrollingAware xmlns="http://schemas.microsoft.com/SMI/2013/WindowsSettings">true</highResolutionScrollingAware>
     </windowsSettings>
   </application>
 

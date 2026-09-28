@@ -3,7 +3,7 @@
 
 using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
-using Document.Shell;
+using QuickView.Shell;
 using System;
 using System.IO;
 using System.Linq;
@@ -11,7 +11,7 @@ using QuickView.Infrastructure.Logging;
 using QuickView.Infrastructure.Registration;
 using QuickView.Models;
 
-namespace Document;
+namespace QuickView;
 
 public partial class App : Application
 {
@@ -65,28 +65,33 @@ public partial class App : Application
         try
         {
             Logger.Log("OnLaunched called");
+            
+            // Create and show window IMMEDIATELY (empty) to prevent black screen
             m_window = new TitleBarWindow();
             m_window.Activate();
             Logger.Log("Window activated");
 
-            // Register file associations in the background after the window is
-            // shown — first-run or exe-path-changed only, never blocks startup.
-            _ = RegistrationHelper.EnsureRegisteredAsync();
+            // Now do expensive initialization on background/dispatcher
+            m_window.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            {
+                try
+                {
+                    // A1: Register file renderers (fast, but do it after window shows)
+                    RegisterRenderers();
+                    
+                    // Register file associations in the background
+                    _ = RegistrationHelper.EnsureRegisteredAsync();
 
-            // Check whether the app was launched by the OS to open a specific
-            // file (e.g. double-click in File Explorer, "Open with QuickView",
-            // or command-line: QuickView.exe "C:\path\to\file.pdf").
-            //
-            // For an unpackaged app the launch args arrive in two ways:
-            //   1. AppInstance.GetCurrent().GetActivatedEventArgs() — covers
-            //      both cold launches and re-activations.
-            //   2. Environment.GetCommandLineArgs()[1..] — reliable fallback
-            //      for a cold launch from the shell.
-            //
-            // We try (1) first; if that yields nothing we fall back to (2).
-            var activatedArgs = AppInstance.GetCurrent().GetActivatedEventArgs();
-            if (!TryOpenFromActivationArgs(activatedArgs))
-                TryOpenFromCommandLine();
+                    // Check for file-open activation
+                    var activatedArgs = AppInstance.GetCurrent().GetActivatedEventArgs();
+                    if (!TryOpenFromActivationArgs(activatedArgs))
+                        TryOpenFromCommandLine();
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error("Post-launch initialization failed", ex);
+                }
+            });
         }
         catch (Exception ex)
         {
@@ -108,6 +113,25 @@ public partial class App : Application
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// A1: Register all IFileRenderer implementations with the RendererRegistry.
+    /// This allows ViewerPage to fall back to the registry after checking for
+    /// PDF/text/code/Markdown, enabling image and Office format support.
+    /// </summary>
+    private static void RegisterRenderers()
+    {
+        QuickView.Rendering.RendererRegistry.Register(new QuickView.Rendering.Images.ImageRenderer());
+        
+        // F7: Office, Media, and HTML renderers enabled
+        // Note: Office renderers (DOCX, XLSX, PPTX) currently show info cards only.
+        // Full Office rendering would require COM interop or third-party libraries.
+        QuickView.Rendering.RendererRegistry.Register(new QuickView.Rendering.Office.DocxRenderer());
+        QuickView.Rendering.RendererRegistry.Register(new QuickView.Rendering.Office.XlsxRenderer());
+        QuickView.Rendering.RendererRegistry.Register(new QuickView.Rendering.Office.PptxRenderer());
+        QuickView.Rendering.RendererRegistry.Register(new QuickView.Rendering.Media.MediaRenderer());
+        QuickView.Rendering.RendererRegistry.Register(new QuickView.Rendering.Web.HtmlRenderer());
+    }
 
     /// <summary>
     /// Inspects AppActivationArguments and opens the file if a path is found.

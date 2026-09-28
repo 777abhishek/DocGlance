@@ -328,8 +328,11 @@ public sealed partial class ViewerPage
         // NaturalZoom maps RenderDpi → 100% reading size, so:
         //   effectiveDpi = RenderDpi × (_zoom / NaturalZoom)
         float effectiveDpi = PdfRenderer.RenderDpi * (float)(_zoom / NaturalZoom);
-        // Cap at 768 DPI to keep memory reasonable at extreme zooms
-        effectiveDpi = Math.Min(effectiveDpi, 768f);
+        // H3: Cap at 2.5× physical display DPI (not a fixed 768)
+        // On 96 DPI display: max 240 DPI. On 192 DPI (200% scaling): max 480 DPI
+        // This prevents excessive memory while respecting high-DPI displays
+        float maxDpi = DisplayScale * 96f * 2.5f;
+        effectiveDpi = Math.Min(effectiveDpi, maxDpi);
 
         foreach (int pageIdx in visiblePages)
         {

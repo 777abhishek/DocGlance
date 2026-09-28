@@ -56,9 +56,6 @@ public sealed partial class ViewerPage
     // ── State ─────────────────────────────────────────────────────────────────
 
     private string? _currentTextFilePath;
-#pragma warning disable CS0414  // assigned but never read — reserved for future save-dirty tracking
-    private bool    _textHasChanges;
-#pragma warning restore CS0414
 
     // Shared search state — one instance per active query, replaced on new search
     private SearchState? _textSearchState;
@@ -96,8 +93,6 @@ public sealed partial class ViewerPage
                     GeneratePlainLineNumbers(lineCount);
 
                     _currentTextFilePath = filePath;
-                    _textHasChanges      = false;
-                    SaveButton.IsEnabled = false;
                     WordWrapButton.IsChecked = false;
                     ClearTextHighlights();
 
@@ -149,8 +144,6 @@ public sealed partial class ViewerPage
                     GenerateCodeLineNumbers(result.Paragraphs.Count);
 
                     _currentTextFilePath = filePath;
-                    _textHasChanges      = false;
-                    SaveButton.IsEnabled = false;
                     WordWrapButton.IsChecked = result.TextWrapping == TextWrapping.Wrap;
                     ClearTextHighlights();
 
@@ -207,8 +200,6 @@ public sealed partial class ViewerPage
         ZoomPill.Visibility             = Visibility.Collapsed;
 
         WordWrapButton.Visibility  = Visibility.Visible;
-        SaveButton.Visibility      = Visibility.Visible;
-        SaveAsButton.Visibility    = Visibility.Visible;
         SidebarButton.Visibility   = Visibility.Collapsed;
         SidebarCard.Visibility     = Visibility.Collapsed;
         SidebarColumn.Width        = new GridLength(0);
@@ -225,8 +216,6 @@ public sealed partial class ViewerPage
         ZoomPill.Visibility             = Visibility.Collapsed;
 
         WordWrapButton.Visibility  = Visibility.Visible;
-        SaveButton.Visibility      = Visibility.Visible;
-        SaveAsButton.Visibility    = Visibility.Visible;
         SidebarButton.Visibility   = Visibility.Collapsed;
         SidebarCard.Visibility     = Visibility.Collapsed;
         SidebarColumn.Width        = new GridLength(0);
@@ -243,8 +232,6 @@ public sealed partial class ViewerPage
         ZoomPill.Visibility             = Visibility.Collapsed;
 
         WordWrapButton.Visibility  = Visibility.Collapsed;
-        SaveButton.Visibility      = Visibility.Collapsed;
-        SaveAsButton.Visibility    = Visibility.Collapsed;
         SidebarButton.Visibility   = Visibility.Collapsed;
         SidebarCard.Visibility     = Visibility.Collapsed;
         SidebarColumn.Width        = new GridLength(0);
@@ -261,8 +248,6 @@ public sealed partial class ViewerPage
         ZoomPill.Visibility             = Visibility.Visible;
 
         WordWrapButton.Visibility  = Visibility.Collapsed;
-        SaveButton.Visibility      = Visibility.Collapsed;
-        SaveAsButton.Visibility    = Visibility.Collapsed;
         SidebarButton.Visibility   = Visibility.Visible;
         FitWidthButton.Visibility  = Visibility.Visible;
         FitPageButton.Visibility   = Visibility.Visible;
@@ -304,48 +289,7 @@ public sealed partial class ViewerPage
     }
 
     // ── Save ──────────────────────────────────────────────────────────────────
-
-    private async void SaveButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (_currentTextFilePath == null) return;
-        try
-        {
-            string content = PlainTextViewerGrid.Visibility == Visibility.Visible
-                ? PlainTextBlock.Text : GetCodeText();
-            await System.IO.File.WriteAllTextAsync(_currentTextFilePath, content);
-            SaveButton.IsEnabled = false;
-            Logger.Log($"[TextViewer] Saved: {_currentTextFilePath}");
-        }
-        catch (Exception ex) { Logger.Log($"[TextViewer] Save error: {ex.Message}"); }
-    }
-
-    private async void SaveAsButton_Click(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            var picker = new Windows.Storage.Pickers.FileSavePicker();
-            var hWnd   = WinRT.Interop.WindowNative.GetWindowHandle(
-                (Application.Current as Document.App)?.MainWindow);
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, hWnd);
-            picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
-            if (_currentTextFilePath != null)
-            {
-                picker.SuggestedFileName = System.IO.Path.GetFileName(_currentTextFilePath);
-                string ext = System.IO.Path.GetExtension(_currentTextFilePath);
-                if (!string.IsNullOrEmpty(ext))
-                    picker.FileTypeChoices.Add($"{ext.TrimStart('.')} files", new[] { ext });
-            }
-            picker.FileTypeChoices.Add("All files", new[] { "." });
-            var file = await picker.PickSaveFileAsync();
-            if (file == null) return;
-            string text = PlainTextViewerGrid.Visibility == Visibility.Visible
-                ? PlainTextBlock.Text : GetCodeText();
-            await Windows.Storage.FileIO.WriteTextAsync(file, text);
-            _currentTextFilePath = file.Path;
-            Logger.Log($"[TextViewer] Saved as: {file.Path}");
-        }
-        catch (Exception ex) { Logger.Log($"[TextViewer] SaveAs error: {ex.Message}"); }
-    }
+    // M2: SaveButton and SaveAsButton removed from UI and code
 
     private string GetCodeText()
     {

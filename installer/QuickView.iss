@@ -37,10 +37,10 @@ SolidCompression=yes
 ; Output
 OutputDir=output
 OutputBaseFilename=QuickView-Setup-x64
-; Require 64-bit Windows 10 1809+
+; Require 64-bit Windows 10 2004+ (19041)
 ArchitecturesInstallIn64BitMode=x64compatible
 ArchitecturesAllowed=x64compatible
-MinVersion=10.0.17763
+MinVersion=10.0.19041
 ; Icon
 SetupIconFile=..\Assets\AppIcon.ico
 ; Wizard style — classic (no sidebar/header images)
@@ -68,8 +68,10 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 ; ── Optional tasks ───────────────────────────────────────────────────────────
 [Tasks]
-Name: "desktopicon";  Description: "Create a &desktop shortcut";           GroupDescription: "Additional icons:"; Flags: unchecked
-Name: "startupicon";  Description: "Launch QuickView at &Windows startup"; GroupDescription: "Additional icons:"; Flags: unchecked
+Name: "desktopicon";     Description: "Create a &desktop shortcut";           GroupDescription: "Additional icons:"; Flags: unchecked
+Name: "startupicon";     Description: "Launch QuickView at &Windows startup"; GroupDescription: "Additional icons:"; Flags: unchecked
+Name: "setdefaultpdf";   Description: "Set as default viewer for &PDF files";  GroupDescription: "File associations:"; Flags: unchecked
+Name: "setdefaultimage"; Description: "Set as default viewer for common &image formats (PNG, JPG, etc.)"; GroupDescription: "File associations:"; Flags: unchecked
 
 ; ── Files to install ─────────────────────────────────────────────────────────
 [Files]
@@ -82,21 +84,98 @@ Name: "{autoprograms}\{#AppName}";            Filename: "{app}\{#AppExeName}"
 Name: "{autodesktop}\{#AppName}";      Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
 Name: "{autostartup}\{#AppName}";    Filename: "{app}\{#AppExeName}"; Tasks: startupicon
 
-; ── Registry — "Open with QuickView" shell registration ──────────────────────
+; ── Registry — File type icons and "Open with QuickView" shell registration ──
 [Registry]
+; Register as a known application
 Root: HKA; Subkey: "Software\Classes\Applications\QuickView.exe";                    ValueType: string; ValueName: ""; ValueData: "QuickView File Viewer"; Flags: uninsdeletekey
 Root: HKA; Subkey: "Software\Classes\Applications\QuickView.exe\DefaultIcon";        ValueType: string; ValueName: ""; ValueData: "{app}\{#AppExeName},0"
 Root: HKA; Subkey: "Software\Classes\Applications\QuickView.exe\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"" ""%1"""
 
-; ── Run: Windows App SDK + launch ─────────────────────────────────────────────
+; ── PDF Files ──
+Root: HKA; Subkey: "Software\Classes\.pdf\OpenWithProgids";                ValueType: none;   ValueName: "QuickView.PDF";       Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\QuickView.PDF";                       ValueType: string; ValueName: "";                    ValueData: "PDF Document"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\QuickView.PDF\DefaultIcon";           ValueType: string; ValueName: "";                    ValueData: "{app}\Assets\FileTypeIcons\PDF.ico,0"
+Root: HKA; Subkey: "Software\Classes\QuickView.PDF\shell\open\command";    ValueType: string; ValueName: "";                    ValueData: """{app}\{#AppExeName}"" ""%1"""
+
+; ── Text Files (TXT, MD, LOG) ──
+Root: HKA; Subkey: "Software\Classes\.txt\OpenWithProgids";                ValueType: none;   ValueName: "QuickView.Text";      Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.md\OpenWithProgids";                 ValueType: none;   ValueName: "QuickView.Markdown";  Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.log\OpenWithProgids";                ValueType: none;   ValueName: "QuickView.Log";       Flags: uninsdeletevalue
+
+Root: HKA; Subkey: "Software\Classes\QuickView.Text";                      ValueType: string; ValueName: "";                    ValueData: "Text Document"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\QuickView.Text\DefaultIcon";          ValueType: string; ValueName: "";                    ValueData: "{app}\Assets\FileTypeIcons\Text.ico,0"
+Root: HKA; Subkey: "Software\Classes\QuickView.Text\shell\open\command";   ValueType: string; ValueName: "";                    ValueData: """{app}\{#AppExeName}"" ""%1"""
+
+Root: HKA; Subkey: "Software\Classes\QuickView.Markdown";                  ValueType: string; ValueName: "";                    ValueData: "Markdown Document"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\QuickView.Markdown\DefaultIcon";      ValueType: string; ValueName: "";                    ValueData: "{app}\Assets\FileTypeIcons\Markdown.ico,0"
+Root: HKA; Subkey: "Software\Classes\QuickView.Markdown\shell\open\command"; ValueType: string; ValueName: "";                  ValueData: """{app}\{#AppExeName}"" ""%1"""
+
+Root: HKA; Subkey: "Software\Classes\QuickView.Log";                       ValueType: string; ValueName: "";                    ValueData: "Log File"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\QuickView.Log\DefaultIcon";           ValueType: string; ValueName: "";                    ValueData: "{app}\Assets\FileTypeIcons\LOG.ico,0"
+Root: HKA; Subkey: "Software\Classes\QuickView.Log\shell\open\command";    ValueType: string; ValueName: "";                    ValueData: """{app}\{#AppExeName}"" ""%1"""
+
+; ── Code Files (JSON, XML, various programming languages) ──
+Root: HKA; Subkey: "Software\Classes\.json\OpenWithProgids";               ValueType: none;   ValueName: "QuickView.Code";      Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.xml\OpenWithProgids";                ValueType: none;   ValueName: "QuickView.Code";      Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.cs\OpenWithProgids";                 ValueType: none;   ValueName: "QuickView.Code";      Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.py\OpenWithProgids";                 ValueType: none;   ValueName: "QuickView.Code";      Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.java\OpenWithProgids";               ValueType: none;   ValueName: "QuickView.Code";      Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.cpp\OpenWithProgids";                ValueType: none;   ValueName: "QuickView.Code";      Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.js\OpenWithProgids";                 ValueType: none;   ValueName: "QuickView.Code";      Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.ts\OpenWithProgids";                 ValueType: none;   ValueName: "QuickView.Code";      Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.html\OpenWithProgids";               ValueType: none;   ValueName: "QuickView.Code";      Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.css\OpenWithProgids";                ValueType: none;   ValueName: "QuickView.Code";      Flags: uninsdeletevalue
+
+Root: HKA; Subkey: "Software\Classes\QuickView.Code";                      ValueType: string; ValueName: "";                    ValueData: "Code File"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\QuickView.Code\DefaultIcon";          ValueType: string; ValueName: "";                    ValueData: "{app}\Assets\FileTypeIcons\Code.ico,0"
+Root: HKA; Subkey: "Software\Classes\QuickView.Code\shell\open\command";   ValueType: string; ValueName: "";                    ValueData: """{app}\{#AppExeName}"" ""%1"""
+
+; ── Office Files (DOCX, XLSX, PPTX, CSV) ──
+Root: HKA; Subkey: "Software\Classes\.docx\OpenWithProgids";               ValueType: none;   ValueName: "QuickView.Word";      Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.doc\OpenWithProgids";                ValueType: none;   ValueName: "QuickView.Word";      Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.xlsx\OpenWithProgids";               ValueType: none;   ValueName: "QuickView.Excel";     Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.xls\OpenWithProgids";                ValueType: none;   ValueName: "QuickView.Excel";     Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.pptx\OpenWithProgids";               ValueType: none;   ValueName: "QuickView.PowerPoint"; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.ppt\OpenWithProgids";                ValueType: none;   ValueName: "QuickView.PowerPoint"; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.csv\OpenWithProgids";                ValueType: none;   ValueName: "QuickView.CSV";       Flags: uninsdeletevalue
+
+Root: HKA; Subkey: "Software\Classes\QuickView.Word";                      ValueType: string; ValueName: "";                    ValueData: "Word Document"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\QuickView.Word\DefaultIcon";          ValueType: string; ValueName: "";                    ValueData: "{app}\Assets\FileTypeIcons\Word.ico,0"
+Root: HKA; Subkey: "Software\Classes\QuickView.Word\shell\open\command";   ValueType: string; ValueName: "";                    ValueData: """{app}\{#AppExeName}"" ""%1"""
+
+Root: HKA; Subkey: "Software\Classes\QuickView.Excel";                     ValueType: string; ValueName: "";                    ValueData: "Excel Spreadsheet"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\QuickView.Excel\DefaultIcon";         ValueType: string; ValueName: "";                    ValueData: "{app}\Assets\FileTypeIcons\Excel.ico,0"
+Root: HKA; Subkey: "Software\Classes\QuickView.Excel\shell\open\command";  ValueType: string; ValueName: "";                    ValueData: """{app}\{#AppExeName}"" ""%1"""
+
+Root: HKA; Subkey: "Software\Classes\QuickView.PowerPoint";                ValueType: string; ValueName: "";                    ValueData: "PowerPoint Presentation"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\QuickView.PowerPoint\DefaultIcon";    ValueType: string; ValueName: "";                    ValueData: "{app}\Assets\FileTypeIcons\PowerPoint.ico,0"
+Root: HKA; Subkey: "Software\Classes\QuickView.PowerPoint\shell\open\command"; ValueType: string; ValueName: "";                ValueData: """{app}\{#AppExeName}"" ""%1"""
+
+Root: HKA; Subkey: "Software\Classes\QuickView.CSV";                       ValueType: string; ValueName: "";                    ValueData: "CSV File"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\QuickView.CSV\DefaultIcon";           ValueType: string; ValueName: "";                    ValueData: "{app}\Assets\FileTypeIcons\CSV.ico,0"
+Root: HKA; Subkey: "Software\Classes\QuickView.CSV\shell\open\command";    ValueType: string; ValueName: "";                    ValueData: """{app}\{#AppExeName}"" ""%1"""
+
+; Optional: Set as default for PDF and images (if tasks selected)
+Root: HKA; Subkey: "Software\Classes\.pdf"; ValueType: string; ValueName: ""; ValueData: "QuickView.PDF"; Tasks: setdefaultpdf
+Root: HKA; Subkey: "Software\Classes\.png"; ValueType: string; ValueName: ""; ValueData: "QuickView.Image"; Tasks: setdefaultimage
+Root: HKA; Subkey: "Software\Classes\.jpg"; ValueType: string; ValueName: ""; ValueData: "QuickView.Image"; Tasks: setdefaultimage
+Root: HKA; Subkey: "Software\Classes\.jpeg"; ValueType: string; ValueName: ""; ValueData: "QuickView.Image"; Tasks: setdefaultimage
+
+; ── Run: VC++ Redistributable + Windows App SDK + launch ──────────────────────
 [Run]
-; 1. Install Windows App SDK if it was downloaded
+; 1. Install VC++ Redistributable 2015-2022 x64 if downloaded
+Filename: "{tmp}\vc_redist.x64.exe"; \
+    Parameters: "/install /quiet /norestart"; \
+    StatusMsg: "Installing Visual C++ Redistributable…"; \
+    Flags: waituntilterminated skipifdoesntexist
+
+; 2. Install Windows App SDK if it was downloaded
 Filename: "{tmp}\windowsappsdk-installer.exe"; \
     Parameters: "--quiet"; \
     StatusMsg: "Installing Windows App SDK runtime…"; \
     Flags: waituntilterminated skipifdoesntexist
 
-; 2. Launch the app after install (optional, skipped in silent mode)
+; 3. Launch the app after install (optional, skipped in silent mode)
 Filename: "{app}\{#AppExeName}"; \
     Description: "Launch {#AppName}"; \
     Flags: nowait postinstall skipifsilent
@@ -105,8 +184,32 @@ Filename: "{app}\{#AppExeName}"; \
 [UninstallRun]
 Filename: "{cmd}"; Parameters: "/C taskkill /F /IM {#AppExeName} 2>nul"; Flags: runhidden; RunOnceId: "KillQuickView"
 
-; ── Pascal/Delphi code — download Windows App SDK if needed ───────────────────
+; ── Pascal/Delphi code — download dependencies if needed ──────────────────────
 [Code]
+
+{ ──────────────────────────────────────────────────────────────────────────── }
+{ Check whether Visual C++ Redistributable 2015-2022 x64 is installed          }
+{                                                                               }
+{ Checks registry keys written by both old (2015-2019) and new (2022+) installers}
+{ ──────────────────────────────────────────────────────────────────────────── }
+function NeedsVCRedist: Boolean;
+var
+  Major: Cardinal;
+begin
+  Result := True;
+  { Check 2015-2022 unified runtime (14.x) - most common }
+  if RegQueryDWordValue(HKLM64, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64', 
+                        'Major', Major) then
+    if Major >= 14 then
+      Result := False;
+  
+  { Also check older registry location for 2015-2019 }
+  if Result then
+    if RegQueryDWordValue(HKLM64, 'SOFTWARE\Microsoft\DevDiv\VC\Servicing\14.0\RuntimeMinimum', 
+                          'Version', Major) then
+      if Major >= 14 then
+        Result := False;
+end;
 
 { ──────────────────────────────────────────────────────────────────────────── }
 { Check whether Windows App SDK 2.x is installed                               }
@@ -164,11 +267,28 @@ end;
 { ──────────────────────────────────────────────────────────────────────────── }
 procedure CurStepChanged(CurStep: TSetupStep);
 var
+  VCUrl:      string;
+  VCDest:     string;
   SdkUrl:     string;
   SdkDest:    string;
 begin
   if CurStep = ssInstall then
   begin
+    { ── Visual C++ Redistributable 2015-2022 x64 ── }
+    if NeedsVCRedist then
+    begin
+      { Stable permalink — always points to latest 2015-2022 x64 unified runtime }
+      VCUrl  := 'https://aka.ms/vs/17/release/vc_redist.x64.exe';
+      VCDest := ExpandConstant('{tmp}\vc_redist.x64.exe');
+      if not DownloadFile(VCUrl, VCDest) then
+        MsgBox(
+          'Visual C++ Redistributable download failed.' + #13#10 +
+          'Please install it manually from:' + #13#10 +
+          'https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist' + #13#10 + #13#10 +
+          'The app may not launch until the runtime is installed.',
+          mbInformation, MB_OK);
+    end;
+    
     { ── Windows App SDK 2.4 ── }
     if NeedsWindowsAppSdk then
     begin

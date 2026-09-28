@@ -110,7 +110,7 @@ public sealed partial class SettingsPage : Page
             _ => ElementTheme.Default,
         };
 
-        ((Document.App)Application.Current).SetTheme(theme);
+        ((QuickView.App)Application.Current).SetTheme(theme);
     }
 
     // ── InfoBar helper ────────────────────────────────────────────────────────

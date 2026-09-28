@@ -134,17 +134,20 @@ public sealed partial class ViewerPage
 
             if (physW <= 0 || physH <= 0) continue;
 
+            // M3: Use the same physical pixel units consistently as placeholder creation.
+            // Placeholders set Grid.Width/Height = physW/physH (physical pixels).
+            // Rotation swaps dimensions but stays in the same unit space.
             if (swap)
             {
                 // 90° or 270°: layout slot is landscape (physH wide × physW tall)
-                border.Width  = physH / DisplayScale;
-                border.Height = physW / DisplayScale;
+                border.Width  = physH;
+                border.Height = physW;
             }
             else
             {
                 // 0° or 180°: layout slot is portrait
-                border.Width  = physW / DisplayScale;
-                border.Height = physH / DisplayScale;
+                border.Width  = physW;
+                border.Height = physH;
             }
             border.RenderTransformOrigin = new Windows.Foundation.Point(0.5, 0.5);
             border.RenderTransform = new Microsoft.UI.Xaml.Media.RotateTransform { Angle = _rotation };
@@ -259,7 +262,7 @@ public sealed partial class ViewerPage
 
     private void PresentationModeMenuItem_Click(object sender, RoutedEventArgs e)
     {
-        var app = Microsoft.UI.Xaml.Application.Current as Document.App;
+        var app = Microsoft.UI.Xaml.Application.Current as QuickView.App;
         var window = app?.MainWindow;
         if (window == null) return;
 
@@ -328,8 +331,6 @@ public sealed partial class ViewerPage
 
     private void SettingsMenuItem_Click(object sender, RoutedEventArgs e)
     {
-        if (Microsoft.UI.Xaml.Application.Current is Document.App app &&
-            app.MainWindow is Document.MainWindow win)
-            win.NavigateToSettings();
+        Shell.TitleBarWindow.Current?.NavigateTo(typeof(Features.Settings.SettingsPage));
     }
 }

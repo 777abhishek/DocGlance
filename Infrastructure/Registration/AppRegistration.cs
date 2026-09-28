@@ -77,23 +77,29 @@ public static class AppRegistration
         string openCmd  = $"\"{exePath}\" \"%1\"";
 
         // 1 ── ProgID under HKCU\Software\Classes
+        // NOTE: We deliberately DO NOT set DefaultIcon here to preserve Windows 11 native file icons
+        // Only the open command is registered, so we appear in "Open With" without changing file appearance
         using (var progId = EnsureKey($@"Software\Classes\{ProgId}"))
         {
             progId.SetValue("", "QuickView Document");
             progId.SetValue("FriendlyTypeName", "QuickView Document");
             progId.SetValue("EditFlags", 0x00010000, RegistryValueKind.DWord); // FTA_OpenIsSafe
         }
-        using (var icon = EnsureKey($@"Software\Classes\{ProgId}\DefaultIcon"))
-            icon.SetValue("", $"\"{iconPath}\"", RegistryValueKind.ExpandString);
-
+        // DefaultIcon intentionally NOT set - preserves native Windows file icons
+        
         using (var cmd = EnsureKey($@"Software\Classes\{ProgId}\shell\open\command"))
             cmd.SetValue("", openCmd);
 
-        // 2 ── Map each extension → ProgID
+        // 2 ── Add to OpenWithProgids (recommended approach for preserving icons)
+        // Instead of setting extension default directly, register via OpenWithProgids
+        // This makes us available in "Open With" without taking over file icons
         foreach (var ext in SupportedExtensions)
         {
             using var extKey = EnsureKey($@"Software\Classes\{ext}");
-            extKey.SetValue("", ProgId);
+            // Don't set (Default) value - this would take ownership and change icons
+            // Instead, only add to OpenWithProgids
+            using var openWith = EnsureKey($@"Software\Classes\{ext}\OpenWithProgids");
+            openWith.SetValue(ProgId, new byte[0], RegistryValueKind.None); // REG_NONE
         }
 
         // 3 ── HKCU\Software\Classes\Applications\QuickView.exe

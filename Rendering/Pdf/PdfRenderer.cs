@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 
 namespace QuickView.Rendering.Pdf;
 
-public readonly record struct PdfOpenResult(PdfDocumentState? Document, string? Error)
+public readonly record struct PdfOpenResult(PdfDocumentState? Document, string? Error, bool NeedsPassword = false)
 {
     public bool Ok => Document != null;
 }
@@ -29,7 +29,7 @@ public static class PdfRenderer
 
     public static void EnsureInitialized() => Pdfium.EnsureInitialized();
 
-    public static async Task<PdfOpenResult> OpenDocumentAsync(string filePath, CancellationToken ct = default)
+    public static async Task<PdfOpenResult> OpenDocumentAsync(string filePath, CancellationToken ct = default, string? password = null)
     {
         if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
             return new PdfOpenResult(null, "File not found.");
@@ -41,9 +41,14 @@ public static class PdfRenderer
             {
                 if (ct.IsCancellationRequested) return new PdfOpenResult(null, null);
 
-                IntPtr doc = Pdfium.FPDF_LoadDocument(filePath, null);
+                IntPtr doc = Pdfium.FPDF_LoadDocument(filePath, password);
                 if (doc == IntPtr.Zero)
-                    return new PdfOpenResult(null, Pdfium.DescribeLastError());
+                {
+                    // F5: Check if password is required
+                    uint lastError = Pdfium.FPDF_GetLastError();
+                    bool needsPassword = (lastError == Pdfium.ErrPassword);
+                    return new PdfOpenResult(null, Pdfium.DescribeLastError(), needsPassword);
+                }
 
                 if (ct.IsCancellationRequested)
                 {

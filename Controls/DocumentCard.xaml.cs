@@ -47,7 +47,7 @@ public sealed partial class DocumentCard : UserControl
     private void CardButton_Click(object sender, RoutedEventArgs e)
     {
         if (Document == null) return;
-        global::Document.Shell.TitleBarWindow.Current?.OpenDocument(Document);
+        global::QuickView.Shell.TitleBarWindow.Current?.OpenDocument(Document);
     }
 
     // ── Card visuals ──────────────────────────────────────────────────────────
@@ -89,7 +89,7 @@ public sealed partial class DocumentCard : UserControl
     private void OpenMenuItem_Click(object sender, RoutedEventArgs e)
     {
         if (Document == null) return;
-        global::Document.Shell.TitleBarWindow.Current?.OpenDocument(Document);
+        global::QuickView.Shell.TitleBarWindow.Current?.OpenDocument(Document);
     }
 
     private void BookmarkMenuItem_Click(object sender, RoutedEventArgs e)

@@ -163,21 +163,6 @@
                     ToolTipService.ToolTip="Word wrap (Alt+Z)">
                     <FontIcon Glyph="&#xE8C1;" FontSize="14"/>
                 </ToggleButton>
-                <Button x:Name="SaveButton"
-                    Style="{StaticResource IB}"
-                    Visibility="Collapsed"
-                    Click="SaveButton_Click"
-                    IsEnabled="False"
-                    ToolTipService.ToolTip="Save (Ctrl+S)">
-                    <FontIcon Glyph="&#xE74E;" FontSize="14"/>
-                </Button>
-                <Button x:Name="SaveAsButton"
-                    Style="{StaticResource IB}"
-                    Visibility="Collapsed"
-                    Click="SaveAsButton_Click"
-                    ToolTipService.ToolTip="Save as... (Ctrl+Shift+S)">
-                    <FontIcon Glyph="&#xE792;" FontSize="14"/>
-                </Button>
                 <Button x:Name="FindButton"
                     Style="{StaticResource IB}"
                     Click="FindButton_Click"

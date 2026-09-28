@@ -11,9 +11,13 @@ namespace QuickView.Rendering.Pdf;
 public sealed class PdfDocumentState : IDisposable
 {
     private IntPtr _document;
+    private int _generation;
 
     public int PageCount { get; }
     public IReadOnlyList<(double Width, double Height)> PageSizes { get; }
+    
+    /// <summary>Generation counter incremented each time document is opened. Helps detect stale async operations.</summary>
+    public int Generation => _generation;
 
     /// <summary>Native handle. Read only while holding <see cref="Pdfium.Gate"/>.</summary>
     internal IntPtr Handle => _document;
@@ -23,6 +27,7 @@ public sealed class PdfDocumentState : IDisposable
         _document = doc;
         PageCount = pageCount;
         PageSizes = pageSizes;
+        _generation = Environment.TickCount;
     }
 
     public (double Width, double Height) GetPageSize(int pageIndex)

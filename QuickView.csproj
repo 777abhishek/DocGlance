@@ -3,11 +3,11 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
-    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
     <UseWinUI>true</UseWinUI>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>x64</Platforms>
-    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
@@ -19,8 +19,22 @@
     <AppxGeneratePrisForPortableLibraries>false</AppxGeneratePrisForPortableLibraries>
     <AppxGeneratePriEnabled>true</AppxGeneratePriEnabled>
 
-    <!-- Self-contained Windows App SDK — bundles Windows App SDK runtime -->
+    <!-- Self-contained deployment: .NET runtime + Windows App SDK runtime -->
+    <SelfContained>true</SelfContained>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+
+    <!-- Performance optimizations for Release builds -->
+    <PublishReadyToRun>true</PublishReadyToRun>           <!-- AOT compilation for faster startup -->
+    <PublishReadyToRunShowWarnings>true</PublishReadyToRunShowWarnings>
+    <TieredCompilation>true</TieredCompilation>           <!-- JIT optimization tiers -->
+    <TieredCompilationQuickJit>true</TieredCompilationQuickJit>
+    
+    <!-- Assembly trimming - reduces size by removing unused code -->
+    <PublishTrimmed>false</PublishTrimmed>                <!-- WinUI 3 doesn't support trimming yet -->
+    
+    <!-- Debug symbols for crash reports (embedded PDB) -->
+    <DebugType>embedded</DebugType>                       <!-- Single-file debugging without separate .pdb -->
+    <DebugSymbols>true</DebugSymbols>
 
     <!-- This is a Windows-only app — suppress the CA1416 "Windows-only API"
          flood that the Windows App SDK injects on every WinUI call (~1600 hits). -->

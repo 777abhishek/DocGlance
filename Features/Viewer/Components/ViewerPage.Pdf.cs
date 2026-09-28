@@ -68,7 +68,14 @@ public sealed partial class ViewerPage
         else if (IsTextFile(ext))
             await LoadTextFileAsync(doc.FilePath ?? string.Empty, ct);
         else
-            ShowInfoCard(doc);
+        {
+            // A1: Try RendererRegistry before showing "unsupported" info card
+            var renderer = QuickView.Rendering.RendererRegistry.GetRenderer(ext);
+            if (renderer != null)
+                await LoadViaRendererAsync(renderer, doc.FilePath ?? string.Empty, ct);
+            else
+                ShowInfoCard(doc);
+        }
     }
 
     private async Task LoadPdfAsync(string filePath, CancellationToken ct)
@@ -78,6 +85,18 @@ public sealed partial class ViewerPage
         {
             // 1. Open PDF with PDFium & pre-cache page sizes instantaneously
             var opened = await PdfRenderer.OpenDocumentAsync(filePath, ct);
+            
+            // F5: Handle password-protected PDFs
+            if (!opened.Ok && opened.NeedsPassword)
+            {
+                string? password = await ShowPasswordDialogAsync();
+                if (password != null)
+                {
+                    // Retry with password
+                    opened = await PdfRenderer.OpenDocumentAsync(filePath, ct, password);
+                }
+            }
+            
             if (ct.IsCancellationRequested)
             {
                 opened.Document?.Dispose();
@@ -176,6 +195,46 @@ public sealed partial class ViewerPage
         finally { ShowLoading(false); }
     }
 
+    // ── F5: Password dialog ───────────────────────────────────────────────────
+
+    private async Task<string?> ShowPasswordDialogAsync()
+    {
+        var dialog = new ContentDialog
+        {
+            Title = "Password Required",
+            Content = CreatePasswordDialogContent(out var passwordBox),
+            PrimaryButtonText = "Open",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = this.XamlRoot
+        };
+
+        var result = await dialog.ShowAsync();
+        return result == ContentDialogResult.Primary ? passwordBox.Password : null;
+    }
+
+    private StackPanel CreatePasswordDialogContent(out PasswordBox passwordBox)
+    {
+        var stack = new StackPanel { Spacing = 12 };
+        
+        stack.Children.Add(new TextBlock
+        {
+            Text = "This PDF is password protected. Enter the password to open it:",
+            TextWrapping = TextWrapping.Wrap
+        });
+
+        passwordBox = new PasswordBox
+        {
+            PlaceholderText = "Enter password",
+            Width = 300
+        };
+        stack.Children.Add(passwordBox);
+
+        return stack;
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+
     internal void PrefetchPagesAround(int centerPage)
     {
         if (_pdfState == null || _doc == null) return;
@@ -219,6 +278,19 @@ public sealed partial class ViewerPage
                         Height = physH > 0 ? physH : 140,
                     };
                     _renderedPages.Remove(i);
+                }
+                
+                // H1: Evict thumbnails far outside a wider window (±10 pages)
+                int thumbEvictFirst = Math.Max(0, centerPage - 10);
+                int thumbEvictLast = Math.Min(pdfState.PageCount - 1, centerPage + 10);
+                for (int i = 0; i < Thumbnails.Count; i++)
+                {
+                    if (i >= thumbEvictFirst && i <= thumbEvictLast) continue;
+                    if (_renderedThumbs.Contains(i))
+                    {
+                        Thumbnails[i].Thumbnail = null;
+                        _renderedThumbs.Remove(i);
+                    }
                 }
             });
 
@@ -275,18 +347,53 @@ public sealed partial class ViewerPage
 
         try
         {
-            var bmp = await PdfRenderer.RenderPageAsync(pdfState, pageIdx, PdfRenderer.RenderDpi, ct);
-            if (bmp == null || ct.IsCancellationRequested)
+            var (ptW, ptH) = pdfState.GetPageSize(pageIdx);
+            double physW = Math.Round(ptW * PdfRenderer.RenderDpi / 96.0);
+            double physH = Math.Round(ptH * PdfRenderer.RenderDpi / 96.0);
+
+            // F4: Progressive rendering - fast 96 DPI preview first
+            var previewBmp = await PdfRenderer.RenderPageAsync(pdfState, pageIdx, 96f, ct);
+            if (previewBmp != null && !ct.IsCancellationRequested)
+            {
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (!ReferenceEquals(_pdfState, pdfState)) return;
+                    if (pageIdx >= PagesPanel.Children.Count) return;
+                    if (PagesPanel.Children[pageIdx] is not Border border) return;
+
+                    var pageGrid = new Grid
+                    {
+                        Width               = physW,
+                        Height              = physH,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                    };
+                    pageGrid.Children.Add(new Image
+                    {
+                        Source  = previewBmp,
+                        Stretch = Stretch.Fill, // Fill to match layout size
+                        Width   = physW,
+                        Height  = physH,
+                    });
+                    pageGrid.Children.Add(CreateHighlightCanvas(pageIdx, physW, physH));
+                    border.Child = pageGrid;
+                });
+            }
+
+            if (ct.IsCancellationRequested)
             {
                 _renderedPages.Remove(pageIdx);
                 return;
             }
 
-            var (ptW, ptH) = pdfState.GetPageSize(pageIdx);
-            double physW = Math.Round(ptW * PdfRenderer.RenderDpi / 96.0);
-            double physH = Math.Round(ptH * PdfRenderer.RenderDpi / 96.0);
+            // F4: Now render at full quality in background
+            var fullBmp = await PdfRenderer.RenderPageAsync(pdfState, pageIdx, PdfRenderer.RenderDpi, ct);
+            if (fullBmp == null || ct.IsCancellationRequested)
+            {
+                _renderedPages.Remove(pageIdx);
+                return;
+            }
 
-            // Update UI on dispatcher thread
+            // Update to full quality
             DispatcherQueue.TryEnqueue(() =>
             {
                 if (!ReferenceEquals(_pdfState, pdfState)) return;
@@ -301,7 +408,7 @@ public sealed partial class ViewerPage
                 };
                 pageGrid.Children.Add(new Image
                 {
-                    Source  = bmp,
+                    Source  = fullBmp,
                     Stretch = Stretch.None,
                     Width   = physW,
                     Height  = physH,
@@ -361,6 +468,51 @@ public sealed partial class ViewerPage
         var card = new ViewerInfoCard(doc);
         card.OpenRequested += (_, _) => OpenExternalButton_Click(card, new RoutedEventArgs());
         PagesPanel.Children.Add(card);
+    }
+
+    // ── A1: Renderer Registry integration ─────────────────────────────────────
+
+    private async Task LoadViaRendererAsync(QuickView.Core.Interfaces.IFileRenderer renderer,
+                                           string filePath, CancellationToken ct)
+    {
+        try
+        {
+            ShowLoading(true);
+            var element = await renderer.RenderAsync(filePath, ct);
+            ShowLoading(false);
+
+            if (ct.IsCancellationRequested || element == null)
+                return;
+
+            // Hide all standard viewers and show the custom renderer's element
+            PlainTextViewerGrid.Visibility  = Visibility.Collapsed;
+            TextViewerScroll.Visibility     = Visibility.Collapsed;
+            DocumentScrollViewer.Visibility = Visibility.Collapsed;
+            MarkdownViewerHost.Visibility   = Visibility.Collapsed;
+            
+            // Clear PagesPanel and place the rendered element
+            PagesPanel.Children.Clear();
+            PagesPanel.Children.Add(element);
+            
+            // Hide toolbar buttons not applicable to generic renderer view
+            ZoomPill.Visibility        = Visibility.Collapsed;
+            WordWrapButton.Visibility  = Visibility.Collapsed;
+            SidebarButton.Visibility   = Visibility.Collapsed;
+            SidebarCard.Visibility     = Visibility.Collapsed;
+            SidebarColumn.Width        = new GridLength(0);
+            FitWidthButton.Visibility  = Visibility.Collapsed;
+            FitPageButton.Visibility   = Visibility.Collapsed;
+            
+            _total = 1;
+            TotalPagesText.Text = "/ 1";
+            PageNumberBox.Text  = "1";
+        }
+        catch (System.Exception ex)
+        {
+            ShowLoading(false);
+            QuickView.Infrastructure.Logging.Logger.Error($"Renderer failed for {filePath}", ex);
+            ShowErrorCard($"Failed to load file: {ex.Message}");
+        }
     }
 
     private void ShowErrorCard(string message)

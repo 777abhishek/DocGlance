@@ -59,12 +59,17 @@ if (-not $SkipPublish) {
         "publish", $Project,
         "-c", "Release",
         "-r", "win-x64",
+        "--self-contained", "true",                  # bundle .NET 8 runtime
         "-p:Platform=x64",
         "-p:PublishSingleFile=false",                # keep DLLs separate (required by WinUI 3)
+        "-p:PublishReadyToRun=true",                 # AOT compile for faster startup
+        "-p:DebugType=embedded",                     # embed PDB for crash reports
+        "-p:DebugSymbols=true",
         "-p:GenerateAssemblyInfo=false",             # avoid CS0579 duplicate attribute when -r + -p:Platform are both set
         "-p:GenerateTargetFrameworkAttribute=false", # same: suppress the second TargetFrameworkAttribute
         "--output", $PublishDir,
-        "--nologo"
+        "--nologo",
+        "-v", "minimal"                              # reduce console noise
     )
 
     & dotnet @publishArgs

@@ -16,7 +16,7 @@ using QuickView.Models;
 using QuickView.Features.Home;
 using QuickView.Features.Viewer;
 
-namespace Document.Shell;
+namespace QuickView.Shell;
 
 public sealed partial class TitleBarWindow : Window
 {
@@ -41,9 +41,7 @@ public sealed partial class TitleBarWindow : Window
         SetTitleBar(TitleBarDragArea);
         Title = "QuickView";
 
-        // Set the window icon via both AppWindow (title bar) and
-        // Win32 WM_SETICON (taskbar + Alt+Tab) — both are needed for
-        // unpackaged apps to show the correct icon everywhere.
+        // Set the window icon
         SetWindowIcon();
 
         // Drag & drop files onto window
@@ -52,11 +50,15 @@ public sealed partial class TitleBarWindow : Window
         // Add the permanent Home tab
         AddHomeTab();
 
-        // Navigate home frame to HomePage
-        HomeFrame.Navigate(typeof(HomePage));
-
-        // Start background update checker
-        UpdateBannerControl.Attach();
+        // Defer HomePage navigation to prevent blocking window show
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            // Navigate home frame to HomePage
+            HomeFrame.Navigate(typeof(HomePage));
+            
+            // Start background update checker
+            UpdateBannerControl.Attach();
+        });
     }
 
     // ── Home tab ──────────────────────────────────────────────────────────────
@@ -176,9 +178,6 @@ public sealed partial class TitleBarWindow : Window
 
     private void Tabs_AddTabButtonClick(TabView sender, object args)
         => _ = OpenFilePicker();
-
-    private void HomeButton_Click(object sender, RoutedEventArgs e)
-        => Tabs.SelectedItem = _homeTab;
 
     // ── File picker (+ tab) ───────────────────────────────────────────────────
 
