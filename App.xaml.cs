@@ -66,40 +66,21 @@ public partial class App : Application
         {
             Logger.Log("OnLaunched called");
             
-            // Check if we're opening a file - do this BEFORE creating window
-            var activatedArgs = AppInstance.GetCurrent().GetActivatedEventArgs();
-            var hasFileToOpen = HasFileActivation(activatedArgs) || HasCommandLineFile();
+            // Register file renderers FIRST (needed for file opening)
+            RegisterRenderers();
             
-            // Create and show window IMMEDIATELY (empty) to prevent black screen
+            // Create and show window with full initialization
             m_window = new TitleBarWindow();
             m_window.Activate();
             Logger.Log("Window activated");
 
-            // If opening a file, do it on Normal priority (fast)
-            // If just launching app, do everything on Low priority
-            var priority = hasFileToOpen 
-                ? Microsoft.UI.Dispatching.DispatcherQueuePriority.Normal 
-                : Microsoft.UI.Dispatching.DispatcherQueuePriority.Low;
+            // Register file associations in background (non-blocking)
+            _ = RegistrationHelper.EnsureRegisteredAsync();
 
-            m_window.DispatcherQueue.TryEnqueue(priority, () =>
-            {
-                try
-                {
-                    // A1: Register file renderers (fast, but do it after window shows)
-                    RegisterRenderers();
-                    
-                    // Register file associations in the background
-                    _ = RegistrationHelper.EnsureRegisteredAsync();
-
-                    // Check for file-open activation
-                    if (!TryOpenFromActivationArgs(activatedArgs))
-                        TryOpenFromCommandLine();
-                }
-                catch (Exception ex)
-                {
-                    Logger.Error("Post-launch initialization failed", ex);
-                }
-            });
+            // Check for file-open activation
+            var activatedArgs = AppInstance.GetCurrent().GetActivatedEventArgs();
+            if (!TryOpenFromActivationArgs(activatedArgs))
+                TryOpenFromCommandLine();
         }
         catch (Exception ex)
         {
@@ -121,42 +102,6 @@ public partial class App : Application
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Check if activation args contain a file to open (before creating window)
-    /// </summary>
-    private static bool HasFileActivation(AppActivationArguments args)
-    {
-        if (args?.Kind == ExtendedActivationKind.File &&
-            args.Data is Windows.ApplicationModel.Activation.IFileActivatedEventArgs fileArgs &&
-            fileArgs.Files.Count > 0)
-        {
-            return true;
-        }
-        return false;
-    }
-
-    /// <summary>
-    /// Check if command line has a file argument
-    /// </summary>
-    private static bool HasCommandLineFile()
-    {
-        try
-        {
-            var cmdArgs = Environment.GetCommandLineArgs();
-            foreach (var arg in cmdArgs.Skip(1))
-            {
-                var path = arg.Trim().Trim('"');
-                if (!path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
-                    File.Exists(path))
-                {
-                    return true;
-                }
-            }
-        }
-        catch { }
-        return false;
-    }
 
     /// <summary>
     /// A1: Register all IFileRenderer implementations with the RendererRegistry.

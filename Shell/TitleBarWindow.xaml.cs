@@ -50,19 +50,9 @@ public sealed partial class TitleBarWindow : Window
         // Add the permanent Home tab
         AddHomeTab();
 
-        // Defer HomePage navigation to prevent blocking window show
-        // This will be skipped if a file is opened immediately
-        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
-        {
-            // Only navigate to HomePage if still on home tab with no content
-            if (ReferenceEquals(Tabs.SelectedItem, _homeTab) && HomeFrame.Content == null)
-            {
-                HomeFrame.Navigate(typeof(HomePage));
-            }
-            
-            // Start background update checker
-            UpdateBannerControl.Attach();
-        });
+        // Navigate to HomePage and start update checker
+        HomeFrame.Navigate(typeof(HomePage));
+        UpdateBannerControl.Attach();
     }
 
     // ── Home tab ──────────────────────────────────────────────────────────────
