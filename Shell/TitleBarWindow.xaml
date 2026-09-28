@@ -70,14 +70,28 @@
 
             <!-- Home page — always loaded, shown/hidden per tab selection -->
             <Frame x:Name="HomeFrame"
-                   Visibility="Visible"/>
+                   Visibility="Visible">
+                <Frame.ContentTransitions>
+                    <TransitionCollection>
+                        <NavigationThemeTransition>
+                            <NavigationThemeTransition.DefaultNavigationTransitionInfo>
+                                <EntranceNavigationTransitionInfo />
+                            </NavigationThemeTransition.DefaultNavigationTransitionInfo>
+                        </NavigationThemeTransition>
+                    </TransitionCollection>
+                </Frame.ContentTransitions>
+            </Frame>
 
             <!-- Document host — ViewerPage content is swapped in here -->
             <ContentControl
                 x:Name="DocHost"
                 Visibility="Collapsed"
                 HorizontalContentAlignment="Stretch"
-                VerticalContentAlignment="Stretch"/>
+                VerticalContentAlignment="Stretch">
+                <ContentControl.OpacityTransition>
+                    <ScalarTransition Duration="0:0:0.25" />
+                </ContentControl.OpacityTransition>
+            </ContentControl>
 
         </Grid>
     </Grid>

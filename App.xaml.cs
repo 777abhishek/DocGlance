@@ -66,13 +66,22 @@ public partial class App : Application
         {
             Logger.Log("OnLaunched called");
             
+            // Check if we're opening a file - do this BEFORE creating window
+            var activatedArgs = AppInstance.GetCurrent().GetActivatedEventArgs();
+            var hasFileToOpen = HasFileActivation(activatedArgs) || HasCommandLineFile();
+            
             // Create and show window IMMEDIATELY (empty) to prevent black screen
             m_window = new TitleBarWindow();
             m_window.Activate();
             Logger.Log("Window activated");
 
-            // Now do expensive initialization on background/dispatcher
-            m_window.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            // If opening a file, do it on Normal priority (fast)
+            // If just launching app, do everything on Low priority
+            var priority = hasFileToOpen 
+                ? Microsoft.UI.Dispatching.DispatcherQueuePriority.Normal 
+                : Microsoft.UI.Dispatching.DispatcherQueuePriority.Low;
+
+            m_window.DispatcherQueue.TryEnqueue(priority, () =>
             {
                 try
                 {
@@ -83,7 +92,6 @@ public partial class App : Application
                     _ = RegistrationHelper.EnsureRegisteredAsync();
 
                     // Check for file-open activation
-                    var activatedArgs = AppInstance.GetCurrent().GetActivatedEventArgs();
                     if (!TryOpenFromActivationArgs(activatedArgs))
                         TryOpenFromCommandLine();
                 }
@@ -113,6 +121,42 @@ public partial class App : Application
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Check if activation args contain a file to open (before creating window)
+    /// </summary>
+    private static bool HasFileActivation(AppActivationArguments args)
+    {
+        if (args?.Kind == ExtendedActivationKind.File &&
+            args.Data is Windows.ApplicationModel.Activation.IFileActivatedEventArgs fileArgs &&
+            fileArgs.Files.Count > 0)
+        {
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Check if command line has a file argument
+    /// </summary>
+    private static bool HasCommandLineFile()
+    {
+        try
+        {
+            var cmdArgs = Environment.GetCommandLineArgs();
+            foreach (var arg in cmdArgs.Skip(1))
+            {
+                var path = arg.Trim().Trim('"');
+                if (!path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
+                    File.Exists(path))
+                {
+                    return true;
+                }
+            }
+        }
+        catch { }
+        return false;
+    }
 
     /// <summary>
     /// A1: Register all IFileRenderer implementations with the RendererRegistry.

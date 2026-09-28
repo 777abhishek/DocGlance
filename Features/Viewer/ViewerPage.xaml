@@ -6,6 +6,12 @@
     xmlns:models="using:QuickView.Models"
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
+    <Page.Transitions>
+        <TransitionCollection>
+            <EntranceThemeTransition />
+        </TransitionCollection>
+    </Page.Transitions>
+
     <Page.Resources>
 
         <!-- Toolbar icon button -->
@@ -592,6 +598,23 @@
                 </Border>
 
             </Grid>
+        </Grid>
+
+        <!-- ── LOADING INDICATOR (overlay) ── -->
+        <Grid x:Name="LoadingOverlay"
+              Grid.Row="1"
+              Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+              Visibility="Collapsed">
+            <Grid.OpacityTransition>
+                <ScalarTransition Duration="0:0:0.2" />
+            </Grid.OpacityTransition>
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="16">
+                <ProgressRing IsActive="True" Width="48" Height="48" />
+                <TextBlock x:Name="LoadingText"
+                           Text="Loading document..."
+                           Style="{StaticResource BodyTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
         </Grid>
     </Grid>
 </Page>
