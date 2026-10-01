@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <UserControl
     x:Class="QuickView.Controls.DocumentListItem"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -19,6 +19,8 @@
         Height="68"
         CornerRadius="12"
         BorderThickness="1"
+        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
         UseLayoutRounding="False">
 
         <Grid>
@@ -42,7 +44,7 @@
 
                 <!-- Gradient background — same colours as the card -->
                 <Grid>
-                    <Rectangle x:Name="PreviewBackground" RadiusX="11" RadiusY="11">
+                    <Rectangle x:Name="PreviewBackground" RadiusX="0" RadiusY="0">
                         <Rectangle.Fill>
                             <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
                                 <GradientStop x:Name="GradientStart" Offset="0" Color="#FFDC3545"/>
@@ -101,11 +103,13 @@
                     FontSize="13"
                     FontWeight="SemiBold"
                     TextTrimming="CharacterEllipsis"
-                    MaxLines="1"/>
+                    MaxLines="1"
+                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
 
                 <TextBlock
                     x:Name="FileTypeDesc"
-                    FontSize="11"/>
+                    FontSize="11"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
             </StackPanel>
 
             <!-- ── Date modified ─────────────────────────────────────────── -->
@@ -121,11 +125,13 @@
                     Glyph="&#xE787;"
                     FontFamily="Segoe Fluent Icons"
                     FontSize="10"
-                    VerticalAlignment="Center"/>
+                    VerticalAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
                 <TextBlock
                     x:Name="ModifiedText"
                     FontSize="11"
-                    VerticalAlignment="Center"/>
+                    VerticalAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
             </StackPanel>
 
             <!-- ── File size ─────────────────────────────────────────────── -->
@@ -136,7 +142,8 @@
                 FontWeight="SemiBold"
                 VerticalAlignment="Center"
                 HorizontalAlignment="Right"
-                Margin="0,0,12,0"/>
+                Margin="0,0,12,0"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
 
             <!-- ── Three-dot menu ────────────────────────────────────────── -->
             <Button
@@ -155,10 +162,12 @@
                     x:Name="MenuIcon"
                     Glyph="&#xE712;"
                     FontFamily="Segoe Fluent Icons"
-                    FontSize="13"/>
+                    FontSize="13"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
             </Button>
 
         </Grid>
     </Border>
 
 </UserControl>
+

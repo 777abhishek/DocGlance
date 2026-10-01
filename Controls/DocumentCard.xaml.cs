@@ -18,55 +18,6 @@ public sealed partial class DocumentCard : UserControl
     public DocumentCard()
     {
         InitializeComponent();
-        UpdateThemeColors();
-        ActualThemeChanged += (s, e) => UpdateThemeColors();
-    }
-
-    private void UpdateThemeColors()
-    {
-        bool isDark = ActualTheme == ElementTheme.Dark;
-
-        // Card border - subtle in both themes
-        var borderColor = isDark
-            ? Color.FromArgb(24, 255, 255, 255)   // #18FFFFFF - subtle white
-            : Color.FromArgb(30, 0, 0, 0);        // #1E000000 - subtle black
-
-        CardBorder.BorderBrush = new SolidColorBrush(borderColor);
-
-        // Info panel background - darker in dark theme, lighter in light theme
-        var infoPanelColor = isDark 
-            ? Color.FromArgb(230, 32, 32, 32)    // #E6202020 - dark
-            : Color.FromArgb(230, 245, 245, 245); // #E6F5F5F5 - light gray
-
-        InfoPanelShape.Fill = new SolidColorBrush(infoPanelColor);
-
-        // Text colors - white in dark theme, dark in light theme
-        var primaryTextColor = isDark 
-            ? Microsoft.UI.Colors.White 
-            : Color.FromArgb(255, 32, 32, 32);
-
-        var secondaryTextColor = isDark
-            ? Color.FromArgb(204, 240, 240, 240) // #CCF0F0F0
-            : Color.FromArgb(204, 64, 64, 64);   // #CC404040
-
-        var tertiaryTextColor = isDark
-            ? Color.FromArgb(153, 255, 255, 255) // #99FFFFFF
-            : Color.FromArgb(153, 96, 96, 96);   // #99606060
-
-        var sizeTextColor = isDark
-            ? Color.FromArgb(230, 255, 255, 255) // #E6FFFFFF
-            : Color.FromArgb(230, 32, 32, 32);   // #E6202020
-
-        FileNameText.Foreground = new SolidColorBrush(primaryTextColor);
-        FileTypeDesc.Foreground = new SolidColorBrush(secondaryTextColor);
-        ModifiedText.Foreground = new SolidColorBrush(tertiaryTextColor);
-        FileSizeText.Foreground = new SolidColorBrush(sizeTextColor);
-
-        // Update the clock icon color
-        if (this.FindName("ModifiedIcon") is FontIcon icon)
-        {
-            icon.Foreground = new SolidColorBrush(tertiaryTextColor);
-        }
     }
 
     // ── Events ────────────────────────────────────────────────────────────────

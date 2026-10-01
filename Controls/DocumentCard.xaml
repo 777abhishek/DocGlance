@@ -18,15 +18,6 @@
         </Style>
     </UserControl.Resources>
 
-    <!--
-        The entire card is a single Button using the built-in WinUI
-        TransparentButtonStyle — this guarantees hit-testing works
-        everywhere because the Button's Grid background is set to a
-        nearly-invisible colour (not Transparent = no hit-test).
-
-        The three-dot context menu Button sits in the same Grid with
-        a higher ZIndex so its clicks don't reach the card Button.
-    -->
     <Button
         x:Name="CardButton"
         Padding="0"
@@ -53,21 +44,24 @@
         <!-- Outer card grid — fixed size scaled by Viewbox -->
         <Grid>
 
-            <!-- Invisible hit-test rectangle — covers the FULL card area.
-                 WinUI treats Alpha=1 as hittable even though it's invisible. -->
+            <!-- Invisible hit-test rectangle — covers the FULL card area. -->
             <Rectangle Fill="#01000000" IsHitTestVisible="True"/>
 
             <Viewbox Stretch="Uniform" HorizontalAlignment="Stretch" VerticalAlignment="Top">
                 <Grid Width="280" Height="200">
 
-                    <Border x:Name="CardBorder" 
-                            CornerRadius="16" 
+                    <Border x:Name="CardBorder"
+                            CornerRadius="12"
                             BorderThickness="1"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             UseLayoutRounding="False">
                         <Grid>
 
-                            <!-- Gradient background -->
-                            <Border CornerRadius="15,15,0,0">
+                            <!-- Gradient background.
+                                 Bottom corners are rounded (14) so the gradient sits
+                                 fully inside the info panel's curve and no red can show
+                                 at the bottom-left / bottom-right corners. -->
+                            <Border CornerRadius="11,11,14,14">
                                 <Grid>
                                     <Rectangle x:Name="PreviewBackground">
                                         <Rectangle.Fill>
@@ -108,23 +102,24 @@
 
                             <TextBlock x:Name="ExtensionText" Visibility="Collapsed"/>
 
-                            <!-- Dark curved info panel -->
+                            <!-- Curved info panel -->
                             <Grid Height="100" VerticalAlignment="Bottom">
                                 <Path x:Name="InfoPanelShape"
+                                      Fill="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                                       Stretch="Fill"
                                       HorizontalAlignment="Stretch"
                                       VerticalAlignment="Stretch">
                                     <Path.Data>
                                         <PathGeometry>
                                             <PathFigure StartPoint="0,28" IsClosed="True">
-                                                <LineSegment Point="0,82"/>
-                                                <QuadraticBezierSegment Point1="0,100"   Point2="16,100"/>
-                                                <LineSegment Point="264,100"/>
-                                                <QuadraticBezierSegment Point1="280,100" Point2="280,82"/>
+                                                <LineSegment Point="0,88"/>
+                                                <QuadraticBezierSegment Point1="0,100"   Point2="12,100"/>
+                                                <LineSegment Point="268,100"/>
+                                                <QuadraticBezierSegment Point1="280,100" Point2="280,88"/>
                                                 <LineSegment Point="280,35"/>
                                                 <BezierSegment Point1="255,35" Point2="230,33" Point3="205,27"/>
                                                 <BezierSegment Point1="180,21" Point2="150,14" Point3="120,12"/>
-                                                <LineSegment Point="16,12"/>
+                                                <LineSegment Point="12,12"/>
                                                 <QuadraticBezierSegment Point1="0,12" Point2="0,28"/>
                                             </PathFigure>
                                         </PathGeometry>
@@ -143,7 +138,8 @@
                                 <TextBlock x:Name="FileNameText" Grid.Row="0"
                                            FontSize="17" FontWeight="SemiBold"
                                            TextTrimming="CharacterEllipsis"
-                                           MaxLines="1" VerticalAlignment="Center"/>
+                                           MaxLines="1" VerticalAlignment="Center"
+                                           Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                 <Grid Grid.Row="1" Margin="0,5,0,0">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
@@ -152,22 +148,26 @@
                                     <TextBlock x:Name="FileTypeDesc" Grid.Column="0"
                                                FontSize="13"
                                                TextTrimming="CharacterEllipsis"
-                                               MaxLines="1" VerticalAlignment="Center"/>
+                                               MaxLines="1" VerticalAlignment="Center"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
                                         <FontIcon x:Name="ModifiedIcon"
                                                   Glyph="&#xE787;"
                                                   FontFamily="Segoe Fluent Icons"
                                                   FontSize="12"
-                                                  VerticalAlignment="Center"/>
+                                                  VerticalAlignment="Center"
+                                                  Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
                                         <TextBlock x:Name="ModifiedText"
                                                    FontSize="13"
-                                                   VerticalAlignment="Center"/>
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
                                     </StackPanel>
                                 </Grid>
                                 <TextBlock x:Name="FileSizeText" Grid.Row="3"
                                            FontSize="14" FontWeight="SemiBold"
                                            HorizontalAlignment="Right"
-                                           VerticalAlignment="Bottom"/>
+                                           VerticalAlignment="Bottom"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                             </Grid>
 
                         </Grid>

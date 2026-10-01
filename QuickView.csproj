@@ -62,11 +62,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Markdig" Version="1.4.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.11" />
-    <PackageReference Include="Microsoft.WindowsAppSDK"              Version="2.4.0" />
-    <PackageReference Include="Microsoft.Graphics.Win2D"             Version="1.4.0" />
-    <PackageReference Include="CommunityToolkit.Mvvm"                Version="8.4.2" />
-    <PackageReference Include="PDFiumCore"                           Version="97.0.4690" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.4.0" />
+    <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="PDFiumCore" Version="97.0.4690" />
     <Manifest Include="$(ApplicationManifest)" />
   </ItemGroup>
 
@@ -76,12 +77,15 @@
     </Content>
     <!-- Exclude tools/ subfolder so EmbedIcon.cs is never compiled into the app -->
     <Compile Remove="tools\**\*" />
-    <None   Remove="tools\**\*" />
+    <None Remove="tools\**\*" />
     <Content Remove="tools\**\*" />
+    <!-- Exclude test project subfolder from main project compilation -->
+    <Compile Remove="QuickView.Tests\**\*" />
+    <None Remove="QuickView.Tests\**\*" />
+    <Content Remove="QuickView.Tests\**\*" />
   </ItemGroup>
 
   <!-- Skip MRT packaging targets for unpackaged apps -->
-  <Target Name="_SkipMrtCoreTargets"
-          BeforeTargets="_GeneratePriConfigXmlForResourcePack;_GeneratePriConfigXml;_GeneratePrisForPortableLibraries;_RemovePayloadDuplicates" />
+  <Target Name="_SkipMrtCoreTargets" BeforeTargets="_GeneratePriConfigXmlForResourcePack;_GeneratePriConfigXml;_GeneratePrisForPortableLibraries;_RemovePayloadDuplicates" />
 
 </Project>

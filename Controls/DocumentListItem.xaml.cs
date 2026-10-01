@@ -17,62 +17,6 @@ public sealed partial class DocumentListItem : UserControl
     public DocumentListItem()
     {
         InitializeComponent();
-        UpdateThemeColors();
-        ActualThemeChanged += (s, e) => UpdateThemeColors();
-    }
-
-    private void UpdateThemeColors()
-    {
-        bool isDark = ActualTheme == ElementTheme.Dark;
-
-        // Row background - dark in dark theme, light in light theme
-        var rowBackgroundColor = isDark
-            ? Color.FromArgb(255, 36, 36, 36)     // #FF242424 - dark
-            : Color.FromArgb(255, 250, 250, 250); // #FFFAFAFA - light
-
-        // Border color - subtle in both themes
-        var borderColor = isDark
-            ? Color.FromArgb(24, 255, 255, 255)   // #18FFFFFF - subtle white
-            : Color.FromArgb(30, 0, 0, 0);        // #1E000000 - subtle black
-
-        RowRoot.Background = new SolidColorBrush(rowBackgroundColor);
-        RowRoot.BorderBrush = new SolidColorBrush(borderColor);
-
-        // Text colors
-        var primaryTextColor = isDark
-            ? Microsoft.UI.Colors.White
-            : Color.FromArgb(255, 32, 32, 32);
-
-        var secondaryTextColor = isDark
-            ? Color.FromArgb(128, 255, 255, 255)  // #80FFFFFF
-            : Color.FromArgb(128, 64, 64, 64);    // #80404040
-
-        var tertiaryTextColor = isDark
-            ? Color.FromArgb(96, 255, 255, 255)   // #60FFFFFF
-            : Color.FromArgb(96, 96, 96, 96);     // #60606060
-
-        var sizeTextColor = isDark
-            ? Color.FromArgb(184, 255, 255, 255)  // #B8FFFFFF
-            : Color.FromArgb(184, 32, 32, 32);    // #B8202020
-
-        var iconColor = isDark
-            ? Color.FromArgb(216, 255, 255, 255)  // #D8FFFFFF
-            : Color.FromArgb(216, 32, 32, 32);    // #D8202020
-
-        FileNameText.Foreground = new SolidColorBrush(primaryTextColor);
-        FileTypeDesc.Foreground = new SolidColorBrush(secondaryTextColor);
-        ModifiedText.Foreground = new SolidColorBrush(secondaryTextColor);
-        FileSizeText.Foreground = new SolidColorBrush(sizeTextColor);
-
-        // Update icons
-        if (this.FindName("ModifiedIcon") is FontIcon modIcon)
-        {
-            modIcon.Foreground = new SolidColorBrush(tertiaryTextColor);
-        }
-        if (this.FindName("MenuIcon") is FontIcon menuIcon)
-        {
-            menuIcon.Foreground = new SolidColorBrush(iconColor);
-        }
     }
 
 

@@ -1,5 +1,6 @@
 ﻿using QuickView.Infrastructure.Logging;
 using QuickView.Models;
+using QuickView.Shared.Validation;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -113,6 +114,14 @@ public static class FolderScanner
                 try
                 {
                     var fi = new FileInfo(path);
+                    
+                    // SEC-05: Validate file path before adding to index
+                    if (!PathValidator.IsValidFilePath(fi.FullName, out var reason))
+                    {
+                        Logger.Log($"[SCAN] Skipped invalid path: {fi.Name} (Reason: {reason})");
+                        continue;
+                    }
+                    
                     if (SupportedExtensions.Contains(fi.Extension))
                         results.Add(DocumentItem.FromFileInfo(fi));
                 }

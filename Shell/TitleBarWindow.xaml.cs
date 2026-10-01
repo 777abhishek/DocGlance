@@ -371,24 +371,27 @@ public sealed partial class TitleBarWindow : Window
                          (theme == ElementTheme.Default &&
                           Application.Current.RequestedTheme == ApplicationTheme.Dark);
 
-            if (isDark)
-            {
-                // Dark theme - light buttons
-                titleBar.ButtonForegroundColor = Windows.UI.Color.FromArgb(255, 255, 255, 255);
-                titleBar.ButtonHoverForegroundColor = Windows.UI.Color.FromArgb(255, 255, 255, 255);
-                titleBar.ButtonHoverBackgroundColor = Windows.UI.Color.FromArgb(25, 255, 255, 255);
-                titleBar.ButtonPressedForegroundColor = Windows.UI.Color.FromArgb(200, 255, 255, 255);
-                titleBar.ButtonPressedBackgroundColor = Windows.UI.Color.FromArgb(40, 255, 255, 255);
-            }
-            else
-            {
-                // Light theme - dark buttons
-                titleBar.ButtonForegroundColor = Windows.UI.Color.FromArgb(255, 0, 0, 0);
-                titleBar.ButtonHoverForegroundColor = Windows.UI.Color.FromArgb(255, 0, 0, 0);
-                titleBar.ButtonHoverBackgroundColor = Windows.UI.Color.FromArgb(25, 0, 0, 0);
-                titleBar.ButtonPressedForegroundColor = Windows.UI.Color.FromArgb(200, 0, 0, 0);
-                titleBar.ButtonPressedBackgroundColor = Windows.UI.Color.FromArgb(40, 0, 0, 0);
-            }
+            // Let Mica show through — keep backgrounds transparent, only tint the icons.
+            var fg      = isDark ? Windows.UI.Color.FromArgb(255, 255, 255, 255)
+                                 : Windows.UI.Color.FromArgb(255,   0,   0,   0);
+            var fgDim   = isDark ? Windows.UI.Color.FromArgb(180, 255, 255, 255)
+                                 : Windows.UI.Color.FromArgb(180,   0,   0,   0);
+            var hoverBg = isDark ? Windows.UI.Color.FromArgb( 20, 255, 255, 255)
+                                 : Windows.UI.Color.FromArgb( 20,   0,   0,   0);
+            var pressBg = isDark ? Windows.UI.Color.FromArgb( 35, 255, 255, 255)
+                                 : Windows.UI.Color.FromArgb( 35,   0,   0,   0);
+            var transp  = Windows.UI.Color.FromArgb(0, 0, 0, 0);
+
+            titleBar.BackgroundColor                 = transp;
+            titleBar.InactiveBackgroundColor         = transp;
+            titleBar.ButtonBackgroundColor           = transp;
+            titleBar.ButtonInactiveBackgroundColor   = transp;
+            titleBar.ButtonForegroundColor           = fg;
+            titleBar.ButtonInactiveForegroundColor   = fgDim;
+            titleBar.ButtonHoverForegroundColor      = fg;
+            titleBar.ButtonHoverBackgroundColor      = hoverBg;
+            titleBar.ButtonPressedForegroundColor    = fgDim;
+            titleBar.ButtonPressedBackgroundColor    = pressBg;
         }
         catch (Exception ex)
         {

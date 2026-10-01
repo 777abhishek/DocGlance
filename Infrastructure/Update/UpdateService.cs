@@ -6,6 +6,7 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using QuickView.Infrastructure.Logging;
@@ -50,7 +51,7 @@ public static class UpdateService
 
     /// <summary>
     /// Download the installer for <paramref name="release"/> to a temp file,
-    /// verify its Authenticode signature, and launch it with the /SILENT flag.
+    /// verify its SHA-256 checksum and Authenticode signature, and launch it with the /SILENT flag.
     /// </summary>
     public static async Task DownloadAndInstallAsync(ReleaseInfo release)
     {
@@ -70,6 +71,26 @@ public static class UpdateService
                 await src.CopyToAsync(fs);
                 
                 Logger.Log($"[Update] Download complete: {tempPath}");
+            }
+
+            // SEC-03: Verify SHA-256 checksum before signature verification
+            if (!string.IsNullOrWhiteSpace(release.Sha256))
+            {
+                Logger.Log($"[Update] Verifying SHA-256 checksum...");
+                if (!VerifySha256Checksum(tempPath, release.Sha256, out var checksumError))
+                {
+                    Logger.Error($"[Update] SHA-256 verification failed: {checksumError}");
+                    
+                    // Delete the tampered installer
+                    try { File.Delete(tempPath); } catch { }
+                    
+                    throw new InvalidOperationException($"Installer checksum verification failed: {checksumError}");
+                }
+                Logger.Log($"[Update] SHA-256 checksum verified successfully");
+            }
+            else
+            {
+                Logger.Log($"[Update] WARNING: No SHA-256 checksum provided - skipping integrity check");
             }
 
             // CRITICAL: Verify Authenticode signature before executing
@@ -190,6 +211,55 @@ public static class UpdateService
         client.DefaultRequestHeaders.UserAgent.ParseAdd($"QuickView/{GetCurrentVersion()}");
         client.Timeout = TimeSpan.FromSeconds(20);
         return client;
+    }
+
+    /// <summary>
+    /// SEC-03: Verifies the SHA-256 checksum of a downloaded file.
+    /// </summary>
+    /// <param name="filePath">Path to the file to verify</param>
+    /// <param name="expectedSha256">Expected SHA-256 checksum (hex string)</param>
+    /// <param name="error">Description of the verification failure</param>
+    /// <returns>True if checksum matches, false otherwise</returns>
+    private static bool VerifySha256Checksum(string filePath, string expectedSha256, out string error)
+    {
+        error = string.Empty;
+
+        try
+        {
+            if (!File.Exists(filePath))
+            {
+                error = "File does not exist";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(expectedSha256))
+            {
+                error = "Expected checksum is empty";
+                return false;
+            }
+
+            // Compute SHA-256 hash of the file
+            using var sha256 = SHA256.Create();
+            using var stream = File.OpenRead(filePath);
+            var hash = sha256.ComputeHash(stream);
+            var computed = Convert.ToHexString(hash);
+
+            // Compare (case-insensitive)
+            if (computed.Equals(expectedSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            else
+            {
+                error = $"Checksum mismatch. Expected: {expectedSha256}, Computed: {computed}";
+                return false;
+            }
+        }
+        catch (Exception ex)
+        {
+            error = $"Exception during checksum verification: {ex.Message}";
+            return false;
+        }
     }
 
     /// <summary>
@@ -344,6 +414,7 @@ public sealed class ReleaseInfo
     public string ReleaseNotes { get; init; } = "";
     public string InstallerUrl { get; init; } = "";
     public string ReleaseUrl   { get; init; } = "";
+    public string Sha256       { get; init; } = ""; // SEC-03: SHA-256 checksum for installer verification
 }
 
 /// <summary>Event args for <see cref="UpdateService.UpdateAvailable"/>.</summary>
