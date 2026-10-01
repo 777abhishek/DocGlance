@@ -46,12 +46,21 @@ public sealed partial class UpdateBanner : UserControl
         if (_pending is null) return;
 
         InstallButton.IsEnabled = false;
+#if PACKAGED
+        InstallButton.Content   = "Opening Store…";
+#else
         InstallButton.Content   = "Downloading…";
+#endif
 
         await UpdateService.DownloadAndInstallAsync(_pending);
 
-        // The installer will close the app; if something went wrong, re-enable.
+        // Packaged: user went to Store page — re-enable the button.
+        // Unpackaged: the installer will close the app; if something went wrong, re-enable.
         InstallButton.IsEnabled = true;
+#if PACKAGED
+        InstallButton.Content   = "Get from Store";
+#else
         InstallButton.Content   = "Install Update";
+#endif
     }
 }

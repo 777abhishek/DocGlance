@@ -18,6 +18,7 @@ public sealed partial class ViewerPage
         bool isOpen = Toolbar.IsSidebarOpen;
         SidebarCard.Visibility = isOpen ? Visibility.Visible : Visibility.Collapsed;
         SidebarColumn.Width = isOpen ? new GridLength(240) : new GridLength(0);
+        ViewModel.SidebarOpen = isOpen;
         ReapplyFitMode();
     }
 
@@ -45,6 +46,7 @@ public sealed partial class ViewerPage
     private void Rotate(double delta)
     {
         _rotation = (_rotation + delta + 360.0) % 360.0;
+        ViewModel.Rotation = _rotation;
 
         if (_pdfState == null) return;
 

@@ -81,8 +81,11 @@ public partial class App : Application
             m_window.Activate();
             Logger.Log("Window activated");
 
+#if !PACKAGED
             // Register file associations in background (non-blocking)
+            // In packaged builds this is skipped — associations come from Package.appxmanifest.
             _ = RegistrationHelper.EnsureRegisteredAsync();
+#endif
 
             // Check for file-open activation
             var activatedArgs = AppInstance.GetCurrent().GetActivatedEventArgs();

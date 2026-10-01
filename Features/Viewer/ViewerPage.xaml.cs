@@ -19,7 +19,12 @@ namespace QuickView.Features.Viewer;
 
 public sealed partial class ViewerPage : Page
 {
+    // ── ViewModel ─────────────────────────────────────────────────────────────
+    public ViewerViewModel ViewModel { get; } = new();
+
     // ── Shared state (accessed by all partial files) ──────────────────────────
+    // These fields drive PDF rendering math. After every mutation call
+    // SyncToViewModel() so XAML bindings (toolbar, title bar) stay in sync.
     internal DocumentItem?            _doc;
     internal PdfDocumentState?        _pdfState;
     internal double                   _zoom     = 1.0;
@@ -29,11 +34,6 @@ public sealed partial class ViewerPage : Page
     internal CancellationTokenSource? _cts;
     internal List<OutlineItem>        _outline  = new();
 
-    // Unified view mode: true = Recent, false = All Documents
-#pragma warning disable CS0169  // reserved for future recent/all toggle
-    private bool _showingRecent;
-#pragma warning restore CS0169
-
     public ObservableCollection<PageThumbnailItem> Thumbnails { get; } = new();
 
     // ── Construction ─────────────────────────────────────────────────────────
@@ -42,14 +42,33 @@ public sealed partial class ViewerPage : Page
         InitializeComponent();
 
         // Wire viewport-resize → reapply active fit mode.
-        // Whenever the viewport width changes (window resize, sidebar toggle)
-        // re-compute the zoom so the page still fills the available space.
         DocumentScrollViewer.SizeChanged += (_, _) => ReapplyFitMode();
 
-        // Ctrl+Wheel zoom anchored at the cursor — handled on the ScrollViewer
-        // so it intercepts the event before the ScrollViewer's own zoom logic
-        // (which would raster-scale the content instead of re-rendering crisp).
+        // Ctrl+Wheel zoom anchored at the cursor.
         DocumentScrollViewer.PointerWheelChanged += OnViewerPointerWheelChanged;
+
+        // ViewModel commands → ViewerPage actions
+        ViewModel.PageChangeRequested  += (_, page)  => GoToPage(page);
+        ViewModel.ZoomInRequested      += (_, _)     => SetZoom(_zoom * 1.25);
+        ViewModel.ZoomOutRequested     += (_, _)     => SetZoom(_zoom / 1.25);
+        ViewModel.ZoomResetRequested   += (_, _)     => SetZoom(NaturalZoom);
+    }
+
+    // ── ViewModel sync ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Pushes all internal fields into the ViewModel so XAML bindings stay current.
+    /// Call after any mutation to _page, _total, _zoom, _rotation, _doc, or sidebar state.
+    /// </summary>
+    internal void SyncToViewModel()
+    {
+        ViewModel.CurrentPage  = _page;
+        ViewModel.TotalPages   = _total;
+        ViewModel.Zoom         = _zoom;
+        ViewModel.NaturalZoom  = NaturalZoom;
+        ViewModel.Rotation     = _rotation;
+        ViewModel.Document     = _doc;
+        ViewModel.SidebarOpen  = SidebarCard?.Visibility == Visibility.Visible;
     }
 
     // ── Navigation ───────────────────────────────────────────────────────────
@@ -75,6 +94,7 @@ public sealed partial class ViewerPage : Page
         _searchCts?.Cancel();
         _pdfState?.Dispose();
         _pdfState = null;
+        ViewModel.Reset();
     }
 
     // Public entry point called by TitleBarWindow.OpenDocument
@@ -86,9 +106,10 @@ public sealed partial class ViewerPage : Page
     {
         LoadingRing.IsActive   = on;
         LoadingRing.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        ViewModel.IsLoading    = on;
     }
 
-    // ── Public API (used by legacy MainWindow and TitleBarWindow) ─────────────
+    // ── Public API (used by TitleBarWindow) ───────────────────────────────────
     public int           CurrentPage     => _page;
     public int           TotalPages      => _total;
     public double        CurrentZoom     => _zoom;

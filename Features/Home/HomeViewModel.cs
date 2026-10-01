@@ -36,9 +36,6 @@ public sealed partial class HomeViewModel : ObservableObject
     private bool _showingRecent = true;
 
     [ObservableProperty]
-    private bool _isGridView = true;
-
-    [ObservableProperty]
     private bool _sortDescending;
 
     [ObservableProperty]

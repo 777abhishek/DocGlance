@@ -50,7 +50,6 @@ public sealed partial class HomePage : Page
     private async void Page_Loaded(object sender, RoutedEventArgs e)
     {
         _loaded = true;
-        GridViewToggle.IsChecked   = true;
         RecentModeButton.IsChecked = true;
         SetSortDirectionUI(ascending: true);
         ClearButton.Visibility = Visibility.Visible;
@@ -109,20 +108,6 @@ public sealed partial class HomePage : Page
         ViewModel.ShowingRecent = ReferenceEquals(sender, RecentModeButton);
         ClearButton.Visibility = ViewModel.ShowingRecent ? Visibility.Visible : Visibility.Collapsed;
         RefreshDisplay();
-    }
-
-    private void ViewToggle_Checked(object sender, RoutedEventArgs e)
-    {
-        if (!_loaded) return;
-        ViewModel.IsGridView = ReferenceEquals(sender, GridViewToggle);
-        ApplyLayoutVisibility();
-    }
-
-    private void ApplyLayoutVisibility()
-    {
-        bool hasItems = ViewModel.FilteredDocuments.Count > 0;
-        DocumentsGridView.Visibility = (_loaded && ViewModel.IsGridView)  ? Visibility.Visible : Visibility.Collapsed;
-        DocumentsListView.Visibility = (_loaded && !ViewModel.IsGridView) ? Visibility.Visible : Visibility.Collapsed;
     }
 
 
@@ -380,12 +365,6 @@ public sealed partial class HomePage : Page
     private void DocumentsRepeater_ElementPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
         => _ = args;
 
-    private void Documents_ItemClick(object sender, ItemClickEventArgs e)
-    {
-        if (e.ClickedItem is DocumentItem doc)
-            QuickView.Shell.TitleBarWindow.Current?.OpenDocument(doc);
-    }
-
 
     // ═════════════════════════════════════════════════════════════════════════
     // UI HELPERS
@@ -407,8 +386,7 @@ public sealed partial class HomePage : Page
             (!ViewModel.ShowingRecent && hasFolders && hasIndex && !hasItems)
                 ? Visibility.Visible : Visibility.Collapsed;
 
-        DocumentsGridView.Visibility = (hasItems && ViewModel.IsGridView)  ? Visibility.Visible : Visibility.Collapsed;
-        DocumentsListView.Visibility = (hasItems && !ViewModel.IsGridView) ? Visibility.Visible : Visibility.Collapsed;
+        DocumentsGridView.Visibility = hasItems ? Visibility.Visible : Visibility.Collapsed;
 
         if (DocumentCountLabel != null)
             DocumentCountLabel.Text = ViewModel.DocumentCountText;

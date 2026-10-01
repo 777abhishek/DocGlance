@@ -1,33 +1,70 @@
 ﻿// RegistrationHelper.cs
-// Thin layer on top of AppRegistration that handles:
-//   • First-run detection (registers automatically on first launch)
-//   • Exe-path change detection (re-registers if app was moved)
-//   • Async wrappers so UI never blocks on registry I/O
+// Thin layer on top of AppRegistration that handles first-run detection and
+// async wrappers so the UI never blocks on registry I/O.
+//
+// PACKAGED (Store / MSIX):
+//   File associations are installed/removed with the MSIX package automatically.
+//   All public members return success / already-registered so the Settings page
+//   compiles and behaves sensibly without any registry I/O.
+//
+// UNPACKAGED (direct EXE / GitHub release):
+//   Original behaviour — registers on first launch, re-registers if the exe moves.
 
 using QuickView.Infrastructure.Logging;
+using System.Threading.Tasks;
+
+#if !PACKAGED
 using QuickView.Infrastructure.Storage;
 using System;
-using System.Threading.Tasks;
+#endif
 
 namespace QuickView.Infrastructure.Registration;
 
 public static class RegistrationHelper
 {
-    // Persisted setting key
-    private const string SettingKey      = "registration";
+#if PACKAGED
+
+    // ── Packaged: associations are always "active" via the manifest ───────────
+
+    /// <summary>
+    /// In a packaged app, file associations are part of the MSIX package and are
+    /// always present after installation.  Returns true.
+    /// </summary>
+    public static bool IsRegistered => true;
+
+    /// <summary>No-op in packaged builds — the manifest handles registration.</summary>
+    public static Task EnsureRegisteredAsync() => Task.CompletedTask;
+
+    /// <summary>No-op in packaged builds.  Returns true (already registered).</summary>
+    public static Task<bool> RegisterAsync()
+    {
+        Logger.Log("[Registration] Packaged build — registration managed by manifest.");
+        return Task.FromResult(true);
+    }
+
+    /// <summary>
+    /// No-op in packaged builds — associations are removed when the package is uninstalled.
+    /// Returns true to indicate the operation "succeeded" (nothing to do).
+    /// </summary>
+    public static Task<bool> UnregisterAsync()
+    {
+        Logger.Log("[Registration] Packaged build — unregistration managed by package uninstall.");
+        return Task.FromResult(true);
+    }
+
+#else
+
+    // ── Unpackaged: original HKCU registration logic ─────────────────────────
+
+    private const string SettingKey       = "registration";
     private const string SubKeyRegistered = "is_registered";
     private const string SubKeyExePath    = "registered_exe";
-
-    // ── Public state ─────────────────────────────────────────────────────────
 
     /// <summary>True when QuickView is currently registered as an "Open With" handler.</summary>
     public static bool IsRegistered => LoadBool(SubKeyRegistered);
 
-    // ── Called once from App.OnLaunched ──────────────────────────────────────
-
     /// <summary>
-    /// On first launch: registers automatically so QuickView immediately
-    /// appears in "Open With" without any user action.
+    /// On first launch: registers automatically.
     /// On subsequent launches: re-registers if the exe was moved/updated.
     /// Silent — never shows UI, never throws.
     /// </summary>
@@ -38,12 +75,10 @@ public static class RegistrationHelper
             string exePath = Environment.ProcessPath ?? "";
             if (string.IsNullOrEmpty(exePath)) return;
 
-            string? lastExe   = LoadString(SubKeyExePath);
-            bool    wasReg    = LoadBool(SubKeyRegistered);
-
-            // Register if: never registered, or exe path changed (app updated/moved)
-            bool pathChanged = !string.Equals(lastExe, exePath,
-                                   StringComparison.OrdinalIgnoreCase);
+            string? lastExe  = LoadString(SubKeyExePath);
+            bool    wasReg   = LoadBool(SubKeyRegistered);
+            bool    pathChanged = !string.Equals(lastExe, exePath,
+                                      StringComparison.OrdinalIgnoreCase);
 
             if (!wasReg || pathChanged)
             {
@@ -59,8 +94,6 @@ public static class RegistrationHelper
             Logger.Log($"[Registration] EnsureRegistered failed: {ex.Message}");
         }
     });
-
-    // ── Called from Settings page ─────────────────────────────────────────────
 
     /// <summary>Register now and persist the state. Returns true on success.</summary>
     public static Task<bool> RegisterAsync() => Task.Run(() =>
@@ -100,10 +133,12 @@ public static class RegistrationHelper
         }
     });
 
-    // ── Simple persistence via SettingsStore ──────────────────────────────────
+    // ── Persistence helpers ───────────────────────────────────────────────────
 
-    private static bool   LoadBool(string key)   => SettingsStore.Load<bool>(  $"{SettingKey}_{key}");
+    private static bool    LoadBool(string key)   => SettingsStore.Load<bool>(  $"{SettingKey}_{key}");
     private static string? LoadString(string key) => SettingsStore.Load<string>($"{SettingKey}_{key}");
-    private static void   SaveBool(string key, bool v)    => SettingsStore.Save($"{SettingKey}_{key}", v);
-    private static void   SaveString(string key, string v) => SettingsStore.Save($"{SettingKey}_{key}", v);
+    private static void    SaveBool(string key, bool v)    => SettingsStore.Save($"{SettingKey}_{key}", v);
+    private static void    SaveString(string key, string v) => SettingsStore.Save($"{SettingKey}_{key}", v);
+
+#endif
 }

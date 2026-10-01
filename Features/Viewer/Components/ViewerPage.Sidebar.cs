@@ -80,7 +80,8 @@ public sealed partial class ViewerPage
         page = Math.Clamp(page, 1, Math.Max(1, _total));
         int index = page - 1;
         _page = page;
-        Toolbar.UpdatePageInfo(_page, _total); // PageNumberBox.Text = page.ToString();
+        Toolbar.UpdatePageInfo(_page, _total);
+        SyncToViewModel();
 
         for (int i = 0; i < Thumbnails.Count; i++)
             Thumbnails[i].IsSelected = i == index;

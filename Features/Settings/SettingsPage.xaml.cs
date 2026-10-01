@@ -9,7 +9,7 @@ namespace QuickView.Features.Settings;
 
 public sealed partial class SettingsPage : Page
 {
-    private const string GitHubOwner = "your-github-username"; // TODO: Update with your GitHub username
+    private const string GitHubOwner = "777abhishek"; // TODO: Update with your GitHub username
     private const string GitHubRepo = "QuickView";
 
     public SettingsPage()
@@ -36,11 +36,34 @@ public sealed partial class SettingsPage : Page
                 .OrderBy(x => x)
                 .Select(x => x));
 
+#if PACKAGED
+        // In packaged builds, hide the manual registration UI entirely.
+        // File associations are installed with the MSIX package and the user
+        // sets defaults via Windows Settings → Default Apps.
+        // The Settings page can show a message + shortcut button instead.
+        RefreshAssocStatusForPackaged();
+#else
         RefreshAssocStatus();
+#endif
     }
 
     // ── Status display ────────────────────────────────────────────────────────
 
+#if PACKAGED
+    private void RefreshAssocStatusForPackaged()
+    {
+        // Show that associations are managed by the package/Store
+        AssocStatusIcon.Glyph      = "\uE73E"; // checkmark
+        AssocStatusIcon.Foreground = (Windows.UI.Color?)Application.Current.Resources["SystemFillColorSuccessBrush"] is null
+            ? new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Green)
+            : (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorSuccessBrush"];
+        AssocStatusText.Text       = "QuickView is a packaged app — file associations are managed automatically.";
+        
+        // Disable manual registration buttons (they're no-ops in packaged builds)
+        RegisterButton.IsEnabled   = false;
+        UnregisterButton.IsEnabled = false;
+    }
+#else
     private void RefreshAssocStatus()
     {
         bool registered = RegistrationHelper.IsRegistered;
@@ -64,6 +87,7 @@ public sealed partial class SettingsPage : Page
             UnregisterButton.IsEnabled = false;
         }
     }
+#endif
 
     // ── Register ──────────────────────────────────────────────────────────────
 
@@ -79,7 +103,11 @@ public sealed partial class SettingsPage : Page
             ok ? "QuickView is now registered with Windows." : "Registration failed — check the log.",
             ok ? InfoBarSeverity.Success : InfoBarSeverity.Error);
 
+#if PACKAGED
+        RefreshAssocStatusForPackaged();
+#else
         RefreshAssocStatus();
+#endif
     }
 
     // ── Unregister ────────────────────────────────────────────────────────────
@@ -97,7 +125,11 @@ public sealed partial class SettingsPage : Page
                : "Unregister failed — check the log.",
             ok ? InfoBarSeverity.Success : InfoBarSeverity.Error);
 
+#if PACKAGED
+        RefreshAssocStatusForPackaged();
+#else
         RefreshAssocStatus();
+#endif
     }
 
     // ── Open Default Apps ─────────────────────────────────────────────────────

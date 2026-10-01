@@ -42,7 +42,6 @@ public sealed partial class ViewerPage
         _outline.Clear();
         OutlineTree.RootNodes.Clear();
 
-        // Reset rotation and fit mode for each new document
         _rotation = 0;
         _fitMode  = FitMode.None;
         Toolbar.IsFitWidthChecked = false;
@@ -51,10 +50,12 @@ public sealed partial class ViewerPage
         _renderedThumbs.Clear();
 
         _page = 1; _total = 1;
-        // PageNumberBox synced via UpdatePageInfo;
         Toolbar.UpdatePageInfo(1, 1);
 
-        // Reset viewer visibility to PDF mode for each new load
+        // Sync reset state to ViewModel
+        ViewModel.Reset();
+        ViewModel.Document = doc;
+
         ShowPdfViewer();
 
         string ext = System.IO.Path.GetExtension(doc.FilePath ?? "").ToLowerInvariant();
@@ -113,8 +114,11 @@ public sealed partial class ViewerPage
             _total = _pdfState.PageCount;
 
             Toolbar.UpdatePageInfo(_page, _total);
-            // PageNumberBox synced via UpdatePageInfo;
             _page = 1;
+
+            // Sync pagination to ViewModel
+            ViewModel.TotalPages  = _total;
+            ViewModel.CurrentPage = _page;
 
             // 2. Load outline from the open document (same PDFium session)
             var outlineState = _pdfState;
@@ -126,12 +130,14 @@ public sealed partial class ViewerPage
                 Toolbar.SidebarIsChecked = false;
                 SidebarCard.Visibility   = Visibility.Collapsed;
                 SidebarColumn.Width      = new Microsoft.UI.Xaml.GridLength(0);
+                ViewModel.SidebarOpen    = false;
             }
             else
             {
                 Toolbar.SidebarIsChecked = true;
                 SidebarCard.Visibility   = Visibility.Visible;
                 SidebarColumn.Width      = new Microsoft.UI.Xaml.GridLength(240);
+                ViewModel.SidebarOpen    = true;
             }
 
             // 3. Create lightweight placeholder UI for ALL pages + thumbnails (instant)
@@ -174,6 +180,8 @@ public sealed partial class ViewerPage
             _zoom = NaturalZoom;
             DocumentScrollViewer.ChangeView(null, null, NaturalZoom, disableAnimation: true);
             ZoomLabel.Text = "100%";
+            ViewModel.NaturalZoom = NaturalZoom;
+            ViewModel.Zoom        = _zoom;
             WireScrollSync();
 
             // 4. PROGRESSIVE LOADING: Render first page immediately (<15ms)
@@ -531,6 +539,7 @@ public sealed partial class ViewerPage
 
     private void ShowErrorCard(string message)
     {
+        ViewModel.ErrorMessage = message;
         var card = new Border
         {
             Width           = 420,

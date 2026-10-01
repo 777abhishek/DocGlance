@@ -15,6 +15,7 @@ using WinRT.Interop;
 using QuickView.Models;
 using QuickView.Features.Home;
 using QuickView.Features.Viewer;
+using QuickView.Infrastructure.Logging;
 
 namespace QuickView.Shell;
 
@@ -321,7 +322,19 @@ public sealed partial class TitleBarWindow : Window
     {
         try
         {
-            // Absolute path — required for unpackaged apps
+#if PACKAGED
+            // In packaged apps, AppWindow.SetIcon() accepts package-relative paths.
+            // The P/Invoke WM_SETICON approach is unnecessary — the AppWindow API
+            // handles title bar, taskbar, and Alt+Tab icons automatically.
+            string icoPath = "Assets/AppIcon.ico";
+            if (System.IO.File.Exists(System.IO.Path.Combine(AppContext.BaseDirectory, icoPath)))
+            {
+                AppWindow.SetIcon(icoPath);
+                Logger.Log("[Icon] Set window icon from package assets.");
+            }
+#else
+            // Unpackaged apps require absolute paths for AppWindow.SetIcon(),
+            // plus manual WM_SETICON calls for taskbar and Alt+Tab.
             string icoPath = Path.Combine(
                 AppContext.BaseDirectory, "Assets", "AppIcon.ico");
 
@@ -345,11 +358,11 @@ public sealed partial class TitleBarWindow : Window
                 SendMessage(hwnd, WM_SETICON, (IntPtr)ICON_SMALL, hSmall);
 
             // Do NOT DestroyIcon — the OS owns these for the window's lifetime
+#endif
         }
         catch (Exception ex)
         {
-            QuickView.Infrastructure.Logging.Logger.Log(
-                $"[Icon] SetWindowIcon failed: {ex.Message}");
+            Logger.Log($"[Icon] SetWindowIcon failed: {ex.Message}");
         }
     }
 

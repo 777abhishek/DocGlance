@@ -22,10 +22,6 @@ public class HomeViewModelTests
         => new HomeViewModel().ShowingRecent.Should().BeTrue();
 
     [Fact]
-    public void Default_IsGridView_IsTrue()
-        => new HomeViewModel().IsGridView.Should().BeTrue();
-
-    [Fact]
     public void Default_SortDescending_IsFalse()
         => new HomeViewModel().SortDescending.Should().BeFalse();
 

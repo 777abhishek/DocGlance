@@ -2,12 +2,9 @@
 using Microsoft.UI.Xaml.Controls;
 using Markdig;
 using System;
-using System.IO;
-using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using WinRT;
 
 namespace QuickView.Rendering.Web;
 
@@ -37,23 +34,33 @@ public static class MarkdownRenderer
         };
 
         await webView.EnsureCoreWebView2Async();
-        
-        // SEC-02: Disable JavaScript and context menus for security
-        webView.CoreWebView2.Settings.IsScriptEnabled = false;
+
+        if (ct.IsCancellationRequested) return webView;
+
+        // SEC-02: Harden settings
+        webView.CoreWebView2.Settings.IsScriptEnabled                = false;
         webView.CoreWebView2.Settings.AreDefaultScriptDialogsEnabled = false;
-        webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
-        
-        // SEC-02: Block navigation to external URLs
-        webView.CoreWebView2.NavigationStarting += (sender, args) =>
+        webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled  = false;
+        webView.CoreWebView2.Settings.IsStatusBarEnabled             = false;
+        webView.CoreWebView2.Settings.IsWebMessageEnabled            = false;
+
+        // SEC-02: NavigateToString produces data: / about: URIs only.
+        // Block everything else (file://, http://, https://) to prevent
+        // links in the Markdown from navigating the WebView away.
+        webView.CoreWebView2.NavigationStarting += (_, args) =>
         {
-            // Only allow data: URIs (NavigateToString) and safe protocols
-            if (!args.Uri.StartsWith("data:", StringComparison.OrdinalIgnoreCase) &&
-                !args.Uri.StartsWith("about:", StringComparison.OrdinalIgnoreCase))
-            {
+            string uri = args.Uri;
+            bool isAllowed =
+                uri.StartsWith("data:",  StringComparison.OrdinalIgnoreCase) ||
+                uri.StartsWith("about:", StringComparison.OrdinalIgnoreCase);
+
+            if (!isAllowed)
                 args.Cancel = true;
-            }
         };
-        
+
+        // Block pop-up windows triggered by any remaining link clicks.
+        webView.CoreWebView2.NewWindowRequested += (_, args) => args.Handled = true;
+
         if (!ct.IsCancellationRequested)
             webView.NavigateToString(html);
 

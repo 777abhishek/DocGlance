@@ -13,7 +13,7 @@
 #define AppName      "QuickView"
 #define AppVersion   "2026.09.28"
 #define AppPublisher "QuickView Contributors"
-#define AppURL       "https://github.com/your-github-username/QuickView"
+#define AppURL       "https://github.com/777abhishek/QuickView"
 #define AppExeName   "QuickView.exe"
 #define PublishDir   "..\publish"
 

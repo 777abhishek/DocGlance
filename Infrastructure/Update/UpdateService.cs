@@ -15,46 +15,83 @@ namespace QuickView.Infrastructure.Update;
 
 /// <summary>
 /// Lightweight background update checker.
-/// Checks the GitHub Releases API once per session on startup (non-blocking).
-/// Fires <see cref="UpdateAvailable"/> when a newer version is found.
+///
+/// PACKAGED (Store / MSIX): The Store manages updates automatically.
+///   CheckInBackground() is a no-op; DownloadAndInstallAsync() opens the Store
+///   page instead of downloading an EXE installer.
+///
+/// UNPACKAGED (direct EXE): Checks GitHub Releases once per session and offers
+///   an in-app installer download.
 /// </summary>
 public static class UpdateService
 {
     // ── Configuration ────────────────────────────────────────────────────────
-    // Update this to your actual GitHub repo before publishing.
     private const string GitHubOwner = "777abhishek";
     private const string GitHubRepo  = "QuickView";
     private const string ApiUrl      = $"https://api.github.com/repos/{GitHubOwner}/{GitHubRepo}/releases/latest";
 
+    // Store product page — fill in your real Store app ID before submission.
+    // Format: ms-windows-store://pdp/?productid=<ProductId>
+    // The ProductId is shown in Partner Center under App identity.
+    private const string StoreProductId  = "PLACEHOLDER_STORE_PRODUCT_ID";
+    private const string StorePageUri    = $"ms-windows-store://pdp/?productid={StoreProductId}";
+
     // ── Events ────────────────────────────────────────────────────────────────
     /// <summary>Fired on the calling thread when a newer release is found.</summary>
+#pragma warning disable CS0067 // Event is only used in unpackaged builds
     public static event EventHandler<UpdateAvailableEventArgs>? UpdateAvailable;
+#pragma warning restore CS0067
 
     // ── State ─────────────────────────────────────────────────────────────────
+#if !PACKAGED
     private static bool _checked;
-    
-    // Reusable HttpClient to avoid resource leaks
+#endif
+
+    // Reusable HttpClient — used for both the update check (unpackaged) and
+    // for GetDisplayVersion/GetCurrentVersion calls (both builds).
     private static readonly HttpClient _httpClient = BuildHttpClient();
 
     // ── Public API ────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Start an async update check.  Call this once from OnLaunched.
-    /// Silently swallows all errors — a failed update check must never crash the app.
+    /// Start an async update check.
+    /// In packaged (Store) builds this is a no-op — the Store handles updates.
+    /// In unpackaged builds it checks GitHub Releases once per session.
     /// </summary>
     public static void CheckInBackground()
     {
+#if PACKAGED
+        // The Microsoft Store checks for updates automatically.
+        // No in-app update check needed or desired.
+        Logger.Log("[Update] Packaged build — update checks managed by Microsoft Store.");
+#else
         if (_checked) return;
         _checked = true;
         _ = CheckAsync();
+#endif
     }
 
     /// <summary>
-    /// Download the installer for <paramref name="release"/> to a temp file,
-    /// verify its SHA-256 checksum and Authenticode signature, and launch it with the /SILENT flag.
+    /// "Install" an available update.
+    /// In packaged builds: opens the Store page so the user can update from there.
+    /// In unpackaged builds: downloads and runs the EXE installer.
     /// </summary>
     public static async Task DownloadAndInstallAsync(ReleaseInfo release)
     {
+#if PACKAGED
+        // Redirect to the Microsoft Store product page.
+        // The Store will handle the actual update installation.
+        try
+        {
+            Logger.Log("[Update] Opening Microsoft Store page for update.");
+            await Windows.System.Launcher.LaunchUriAsync(new Uri(StorePageUri));
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("[Update] Failed to open Store page", ex);
+            throw;
+        }
+#else
         try
         {
             var tempPath = Path.Combine(Path.GetTempPath(), $"QuickView-Setup-{release.Version}.exe");
@@ -62,45 +99,39 @@ public static class UpdateService
             if (!File.Exists(tempPath))
             {
                 Logger.Log($"[Update] Downloading {release.InstallerUrl}");
-                using var resp  = await _httpClient.GetAsync(release.InstallerUrl,
-                                      HttpCompletionOption.ResponseHeadersRead);
+                using var resp = await _httpClient.GetAsync(release.InstallerUrl,
+                                     HttpCompletionOption.ResponseHeadersRead);
                 resp.EnsureSuccessStatusCode();
 
                 await using var fs  = File.Create(tempPath);
                 await using var src = await resp.Content.ReadAsStreamAsync();
                 await src.CopyToAsync(fs);
-                
+
                 Logger.Log($"[Update] Download complete: {tempPath}");
             }
 
             // SEC-03: Verify SHA-256 checksum before signature verification
             if (!string.IsNullOrWhiteSpace(release.Sha256))
             {
-                Logger.Log($"[Update] Verifying SHA-256 checksum...");
+                Logger.Log("[Update] Verifying SHA-256 checksum...");
                 if (!VerifySha256Checksum(tempPath, release.Sha256, out var checksumError))
                 {
                     Logger.Error($"[Update] SHA-256 verification failed: {checksumError}");
-                    
-                    // Delete the tampered installer
                     try { File.Delete(tempPath); } catch { }
-                    
                     throw new InvalidOperationException($"Installer checksum verification failed: {checksumError}");
                 }
-                Logger.Log($"[Update] SHA-256 checksum verified successfully");
+                Logger.Log("[Update] SHA-256 checksum verified successfully");
             }
             else
             {
-                Logger.Log($"[Update] WARNING: No SHA-256 checksum provided - skipping integrity check");
+                Logger.Log("[Update] WARNING: No SHA-256 checksum provided — skipping integrity check");
             }
 
             // CRITICAL: Verify Authenticode signature before executing
             if (!VerifyAuthenticodeSignature(tempPath, out var signatureError))
             {
                 Logger.Error($"[Update] Signature verification failed: {signatureError}");
-                
-                // Delete the unsigned/invalid installer
                 try { File.Delete(tempPath); } catch { }
-                
                 throw new InvalidOperationException($"Installer signature verification failed: {signatureError}");
             }
 
@@ -109,18 +140,20 @@ public static class UpdateService
             {
                 FileName        = tempPath,
                 Arguments       = "/SILENT /CLOSEAPPLICATIONS",
-                UseShellExecute = true          // needed for UAC elevation
+                UseShellExecute = true
             });
         }
         catch (Exception ex)
         {
             Logger.Error("[Update] DownloadAndInstall failed", ex);
-            throw; // Re-throw so the UI can show an error message
+            throw;
         }
+#endif
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
+#if !PACKAGED
     private static async Task CheckAsync()
     {
         // Wait 10 s after startup so we don't slow the initial load.
@@ -184,6 +217,7 @@ public static class UpdateService
             Logger.Error("[Update] Check failed (non-fatal)", ex);
         }
     }
+#endif  // !PACKAGED
 
     private static Version GetCurrentVersion()
     {
@@ -215,11 +249,13 @@ public static class UpdateService
 
     /// <summary>
     /// SEC-03: Verifies the SHA-256 checksum of a downloaded file.
+    /// Only compiled in unpackaged builds where the EXE installer download is used.
     /// </summary>
     /// <param name="filePath">Path to the file to verify</param>
     /// <param name="expectedSha256">Expected SHA-256 checksum (hex string)</param>
     /// <param name="error">Description of the verification failure</param>
     /// <returns>True if checksum matches, false otherwise</returns>
+#if !PACKAGED
     private static bool VerifySha256Checksum(string filePath, string expectedSha256, out string error)
     {
         error = string.Empty;
@@ -350,7 +386,7 @@ public static class UpdateService
         };
     }
 
-    // ── WinVerifyTrust P/Invoke ──────────────────────────────────────────────
+    // ── WinVerifyTrust P/Invoke (unpackaged builds only) ─────────────────────
 
     [DllImport("wintrust.dll", ExactSpelling = true, SetLastError = false, CharSet = CharSet.Unicode)]
     private static extern uint WinVerifyTrust(IntPtr hwnd, ref Guid pgActionID, ref WINTRUST_DATA pWVTData);
@@ -389,9 +425,11 @@ public static class UpdateService
         public uint dwProvFlags;
         public uint dwUIContext;
     }
+#endif  // !PACKAGED
 
-    // ── DTOs ─────────────────────────────────────────────────────────────────
+    // ── DTOs (used by both builds for UpdateAvailable event args) ────────────
 
+#if !PACKAGED
     private sealed class GitHubRelease
     {
         [JsonPropertyName("tag_name")]  public string?        TagName { get; init; }
@@ -405,6 +443,7 @@ public static class UpdateService
         [JsonPropertyName("name")]                  public string? Name                { get; init; }
         [JsonPropertyName("browser_download_url")] public string? BrowserDownloadUrl  { get; init; }
     }
+#endif
 }
 
 /// <summary>Information about a pending update.</summary>

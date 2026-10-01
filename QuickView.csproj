@@ -5,53 +5,49 @@
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
     <UseWinUI>true</UseWinUI>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>x64</Platforms>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
-    <!-- Unpackaged WinUI 3 -->
-    <WindowsPackageType>None</WindowsPackageType>
+    <!-- MSIX packaged app — Package.appxmanifest provides identity and file associations.
+         WindowsPackageType defaults to MSIX when not set to None, so no explicit value needed.
+         EnableMsixTooling wires up the manifest and packaging pipeline. -->
     <EnableMsixTooling>true</EnableMsixTooling>
-    <GenerateAppxPackageOnBuild>false</GenerateAppxPackageOnBuild>
-    <AppxPackage>false</AppxPackage>
-    <AppxGeneratePrisForPortableLibraries>false</AppxGeneratePrisForPortableLibraries>
-    <AppxGeneratePriEnabled>true</AppxGeneratePriEnabled>
 
-    <!-- Self-contained deployment: .NET runtime + Windows App SDK runtime -->
-    <SelfContained>true</SelfContained>
+    <!-- Define PACKAGED symbol so code can branch at compile time between
+         packaged (Store) and unpackaged (direct EXE) behaviors. -->
+    <DefineConstants>$(DefineConstants);PACKAGED</DefineConstants>
+
+    <!-- Windows App SDK self-contained: bundles the WinAppSDK runtime so users
+         don't need to install it separately. Keep this for a smoother Store install. -->
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
 
     <!-- Performance optimizations for Release builds -->
-    <PublishReadyToRun>true</PublishReadyToRun>           <!-- AOT compilation for faster startup -->
+    <PublishReadyToRun>true</PublishReadyToRun>
     <PublishReadyToRunShowWarnings>true</PublishReadyToRunShowWarnings>
-    <TieredCompilation>true</TieredCompilation>           <!-- JIT optimization tiers -->
+    <TieredCompilation>true</TieredCompilation>
     <TieredCompilationQuickJit>true</TieredCompilationQuickJit>
-    
-    <!-- Assembly trimming - reduces size by removing unused code -->
-    <PublishTrimmed>false</PublishTrimmed>                <!-- WinUI 3 doesn't support trimming yet -->
-    
-    <!-- Debug symbols for crash reports (embedded PDB) -->
-    <DebugType>embedded</DebugType>                       <!-- Single-file debugging without separate .pdb -->
+
+    <!-- Assembly trimming — WinUI 3 doesn't fully support trimming yet -->
+    <PublishTrimmed>false</PublishTrimmed>
+
+    <!-- Debug symbols for crash reports -->
+    <DebugType>embedded</DebugType>
     <DebugSymbols>true</DebugSymbols>
 
-    <!-- This is a Windows-only app — suppress the CA1416 "Windows-only API"
-         flood that the Windows App SDK injects on every WinUI call (~1600 hits). -->
+    <!-- Suppress CA1416 (Windows-only API) and MVVMTK0045 floods from WinAppSDK -->
     <NoWarn>$(NoWarn);CA1416;MVVMTK0045</NoWarn>
 
-    <!-- Suppress duplicate assembly attributes (CS0579) that occur when
-         -r win-x64 and -p:Platform=x64 are both passed to dotnet publish. -->
+    <!-- Suppress duplicate assembly attribute warnings (CS0579) when both
+         -r win-x64 and -p:Platform=x64 are passed to dotnet publish. -->
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
 
-    <!-- App icon — embeds into exe PE so Explorer shows it in Properties -->
+    <!-- App icon embedded in the PE (Explorer Properties → Details) -->
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
 
-    <!-- Version / file info visible in Explorer → Properties → Details -->
-    <!-- Semantic versioning for AssemblyVersion so the update checker can compare
-         against GitHub release tags (e.g. v1.0.0).  InformationalVersion carries
-         the human-readable build date shown in the About dialog. -->
+    <!-- Version / file info -->
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
     <FileVersion>1.0.0.0</FileVersion>
     <InformationalVersion>2026.09.28</InformationalVersion>
@@ -68,7 +64,6 @@
     <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="PDFiumCore" Version="97.0.4690" />
-    <Manifest Include="$(ApplicationManifest)" />
   </ItemGroup>
 
   <ItemGroup>
@@ -84,8 +79,5 @@
     <None Remove="QuickView.Tests\**\*" />
     <Content Remove="QuickView.Tests\**\*" />
   </ItemGroup>
-
-  <!-- Skip MRT packaging targets for unpackaged apps -->
-  <Target Name="_SkipMrtCoreTargets" BeforeTargets="_GeneratePriConfigXmlForResourcePack;_GeneratePriConfigXml;_GeneratePrisForPortableLibraries;_RemovePayloadDuplicates" />
 
 </Project>

@@ -1,0 +1,282 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Package.appxmanifest  —  QuickView MSIX package identity for Microsoft Store submission.
+
+  BEFORE SUBMITTING TO THE STORE, replace the placeholder values below:
+    Identity Name        → the Package/Identity Name from Partner Center
+    Identity Publisher   → the Publisher CN= from Partner Center (e.g. CN=XXXXXXXX-XXXX-...)
+    PhoneIdentity        → generate with: New-Guid in PowerShell (or leave Partner Center default)
+
+  Everything else (DisplayName, Description, file associations) is production-ready.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+  xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="mp uap3 uap10 rescap">
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       IDENTITY  —  fill in from Partner Center before submission
+       ═══════════════════════════════════════════════════════════════ -->
+  <Identity
+    Name="PLACEHOLDER.QuickView"
+    Publisher="CN=PLACEHOLDER"
+    Version="1.0.0.0"
+    ProcessorArchitecture="x64" />
+
+  <mp:PhoneIdentity
+    PhoneProductId="00000000-0000-0000-0000-000000000000"
+    PhonePublisherId="00000000-0000-0000-0000-000000000000" />
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       PROPERTIES
+       ═══════════════════════════════════════════════════════════════ -->
+  <Properties>
+    <DisplayName>QuickView</DisplayName>
+    <PublisherDisplayName>QuickView Contributors</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <uap10:PackageIntegrity>
+      <uap10:Content Enforcement="on" />
+    </uap10:PackageIntegrity>
+  </Properties>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       DEPENDENCIES — minimum Windows 10 2004 (build 19041)
+       ═══════════════════════════════════════════════════════════════ -->
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop"
+                        MinVersion="10.0.19041.0"
+                        MaxVersionTested="10.0.22621.0" />
+  </Dependencies>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       RESOURCES
+       ═══════════════════════════════════════════════════════════════ -->
+  <Resources>
+    <Resource Language="en-US" />
+  </Resources>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       APPLICATION
+       ═══════════════════════════════════════════════════════════════ -->
+  <Applications>
+    <Application
+      Id="App"
+      Executable="$targetnametoken$.exe"
+      EntryPoint="$targetentrypoint$">
+
+      <uap:VisualElements
+        DisplayName="QuickView"
+        Description="Fast universal file viewer for Windows"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile
+          Wide310x150Logo="Assets\Wide310x150Logo.png"
+          Square310x310Logo="Assets\Square310x310Logo.png"
+          Square71x71Logo="Assets\SmallTile.png"
+          ShortName="QuickView">
+
+        </uap:DefaultTile>
+        <uap:SplashScreen Image="Assets\SplashScreen.png" />
+        <uap:LockScreen Notification="badge" BadgeLogo="Assets\BadgeLogo.png" />
+      </uap:VisualElements>
+
+      <!-- ─────────────────────────────────────────────────────────
+           EXTENSIONS
+           ───────────────────────────────────────────────────────── -->
+      <Extensions>
+
+        <!-- FILE TYPE ASSOCIATIONS
+             Declares every extension QuickView can open so Windows
+             shows it in the "Open with" menu and can set it as default.
+             The declarative approach replaces the manual registry writes
+             in AppRegistration.cs that are not permitted for packaged apps. -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="quickview-pdf">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.pdf</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>PDF Document</uap:DisplayName>
+            <uap:Logo>Assets\FileTypeIcons\PDF.png</uap:Logo>
+            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
+        <!-- Plain text and configuration files -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="quickview-text">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.txt</uap:FileType>
+              <uap:FileType>.log</uap:FileType>
+              <uap:FileType>.ini</uap:FileType>
+              <uap:FileType>.cfg</uap:FileType>
+              <uap:FileType>.conf</uap:FileType>
+              <uap:FileType>.env</uap:FileType>
+              <uap:FileType>.toml</uap:FileType>
+              <uap:FileType>.properties</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>Text File</uap:DisplayName>
+            <uap:Logo>Assets\FileTypeIcons\Text.png</uap:Logo>
+            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
+        <!-- Data files -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="quickview-data">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.csv</uap:FileType>
+              <uap:FileType>.tsv</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>Data File</uap:DisplayName>
+            <uap:Logo>Assets\FileTypeIcons\CSV.png</uap:Logo>
+            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
+        <!-- Markup and structured data -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="quickview-markup">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.json</uap:FileType>
+              <uap:FileType>.xml</uap:FileType>
+              <uap:FileType>.yaml</uap:FileType>
+              <uap:FileType>.yml</uap:FileType>
+              <uap:FileType>.html</uap:FileType>
+              <uap:FileType>.htm</uap:FileType>
+              <uap:FileType>.xaml</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>Markup/Data File</uap:DisplayName>
+            <uap:Logo>Assets\FileTypeIcons\XML.png</uap:Logo>
+            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
+        <!-- Markdown -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="quickview-markdown">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.md</uap:FileType>
+              <uap:FileType>.markdown</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>Markdown Document</uap:DisplayName>
+            <uap:Logo>Assets\FileTypeIcons\Markdown.png</uap:Logo>
+            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
+        <!-- Source code -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="quickview-code">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.cs</uap:FileType>
+              <uap:FileType>.vb</uap:FileType>
+              <uap:FileType>.fs</uap:FileType>
+              <uap:FileType>.ts</uap:FileType>
+              <uap:FileType>.tsx</uap:FileType>
+              <uap:FileType>.jsx</uap:FileType>
+              <uap:FileType>.py</uap:FileType>
+              <uap:FileType>.java</uap:FileType>
+              <uap:FileType>.kt</uap:FileType>
+              <uap:FileType>.cpp</uap:FileType>
+              <uap:FileType>.c</uap:FileType>
+              <uap:FileType>.h</uap:FileType>
+              <uap:FileType>.go</uap:FileType>
+              <uap:FileType>.rs</uap:FileType>
+              <uap:FileType>.swift</uap:FileType>
+              <uap:FileType>.rb</uap:FileType>
+              <uap:FileType>.php</uap:FileType>
+              <uap:FileType>.css</uap:FileType>
+              <uap:FileType>.scss</uap:FileType>
+              <uap:FileType>.sql</uap:FileType>
+              <uap:FileType>.gitignore</uap:FileType>
+              <uap:FileType>.editorconfig</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>Source Code File</uap:DisplayName>
+            <uap:Logo>Assets\FileTypeIcons\Code.png</uap:Logo>
+            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
+        <!-- Office documents -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="quickview-office">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.docx</uap:FileType>
+              <uap:FileType>.doc</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>Word Document</uap:DisplayName>
+            <uap:Logo>Assets\FileTypeIcons\Word.png</uap:Logo>
+            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="quickview-excel">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.xlsx</uap:FileType>
+              <uap:FileType>.xls</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>Excel Spreadsheet</uap:DisplayName>
+            <uap:Logo>Assets\FileTypeIcons\Excel.png</uap:Logo>
+            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="quickview-pptx">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.pptx</uap:FileType>
+              <uap:FileType>.ppt</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>PowerPoint Presentation</uap:DisplayName>
+            <uap:Logo>Assets\FileTypeIcons\PowerPoint.png</uap:Logo>
+            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
+        <!-- Rich text -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="quickview-rtf">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.rtf</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>Rich Text Document</uap:DisplayName>
+            <uap:Logo>Assets\FileTypeIcons\RichText.png</uap:Logo>
+            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       CAPABILITIES
+
+       broadFileSystemAccess — required so the user can open files
+         from anywhere (Downloads, Documents, network shares, custom
+         paths typed directly). Without this, the packaged app can
+         only see files the user explicitly picked via a file picker.
+         The Store requires justification: "Users open arbitrary files
+         via Explorer context menu / drag-and-drop / command line."
+
+       internetClient — required for the update checker (GitHub API).
+
+       Note: broadFileSystemAccess is a restricted capability that
+       receives extra scrutiny during Store certification. The review
+       team will check that it is genuinely needed (it is — file
+       viewer opening arbitrary user-selected files).
+       ═══════════════════════════════════════════════════════════════ -->
+  <Capabilities>
+    <Capability Name="internetClient" />
+    <rescap:Capability Name="runFullTrust" />
+    <rescap:Capability Name="broadFileSystemAccess" />
+  </Capabilities>
+
+</Package>
+

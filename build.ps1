@@ -1,20 +1,40 @@
 ﻿# ─────────────────────────────────────────────────────────────────────────────
 #  QuickView build + launch script
-#  Usage:  .\build.ps1          (build only if changed, then launch)
-#          .\build.ps1 -Rebuild  (clean build)
-#          .\build.ps1 -NoBuild  (just kill old instance and relaunch)
+#
+#  Supports both build modes:
+#    - Packaged (MSIX): default, for Microsoft Store submission
+#    - Unpackaged (EXE): for direct distribution (GitHub releases)
+#
+#  Usage:
+#    .\build.ps1                   (incremental build + launch)
+#    .\build.ps1 -Rebuild           (clean build)
+#    .\build.ps1 -NoBuild           (kill old instance and relaunch)
+#    .\build.ps1 -Unpackaged        (build as traditional EXE, no MSIX)
+#    .\build.ps1 -Configuration Release  (Release build instead of Debug)
 # ─────────────────────────────────────────────────────────────────────────────
 param(
     [switch]$Rebuild,
-    [switch]$NoBuild
+    [switch]$NoBuild,
+    [switch]$Unpackaged,
+    [ValidateSet("Debug", "Release")]
+    [string]$Configuration = "Debug"
 )
 
 $Project  = "$PSScriptRoot\QuickView.csproj"
-$Exe      = "$PSScriptRoot\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\QuickView.exe"
 $LogFile  = "$PSScriptRoot\build.log"
 $ExeName  = "QuickView"
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+# Determine output path based on build mode
+if ($Unpackaged) {
+    $BinDir = "$PSScriptRoot\bin\x64\$Configuration\net8.0-windows10.0.19041.0\win-x64"
+    $Exe = "$BinDir\QuickView.exe"
+} else {
+    # Packaged (MSIX) output goes to a different path
+    $BinDir = "$PSScriptRoot\bin\$Configuration\net8.0-windows10.0.19041.0\win-x64"
+    $Exe = "$BinDir\QuickView.exe"
+}
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
 function Write-Step([string]$msg) {
     Write-Host ""
     Write-Host "  $msg" -ForegroundColor Cyan
@@ -24,7 +44,20 @@ function Write-OK([string]$msg)   { Write-Host "  ✓  $msg" -ForegroundColor Gr
 function Write-Fail([string]$msg) { Write-Host "  ✗  $msg" -ForegroundColor Red    }
 function Write-Info([string]$msg) { Write-Host "     $msg" -ForegroundColor Gray   }
 
-# ── 1. kill running instance ──────────────────────────────────────────────────
+# ── Display build mode ────────────────────────────────────────────────────────
+if ($Unpackaged) {
+    Write-Host ""
+    Write-Host "  ╔═══════════════════════════════════════════════════════════╗" -ForegroundColor Yellow
+    Write-Host "  ║  Building as UNPACKAGED EXE (for GitHub releases)         ║" -ForegroundColor Yellow
+    Write-Host "  ╚═══════════════════════════════════════════════════════════╝" -ForegroundColor Yellow
+} else {
+    Write-Host ""
+    Write-Host "  ╔═══════════════════════════════════════════════════════════╗" -ForegroundColor Blue
+    Write-Host "  ║  Building as PACKAGED MSIX (for Microsoft Store)          ║" -ForegroundColor Blue
+    Write-Host "  ╚═══════════════════════════════════════════════════════════╝" -ForegroundColor Blue
+}
+
+# ── 1. Kill running instance ──────────────────────────────────────────────────
 Write-Step "Stopping any running instance of $ExeName…"
 $procs = Get-Process -Name $ExeName -ErrorAction SilentlyContinue
 if ($procs) {
@@ -35,8 +68,7 @@ if ($procs) {
     Write-Info "None running"
 }
 
-# ── 1b. kill any stale XAML compiler / MSBuild processes that may lock the DLL
-#         These are left over when a previous build was interrupted mid-flight.
+# ── 1b. Kill stale build processes ────────────────────────────────────────────
 $lockProcs = @("MSBuild","dotnet") |
     ForEach-Object { Get-Process -Name $_ -ErrorAction SilentlyContinue } |
     Where-Object   { $_ -ne $null }
@@ -46,25 +78,34 @@ if ($lockProcs) {
     Start-Sleep -Milliseconds 800
 }
 
-# Delete the intermediate XAML DLL that may still be locked on disk
-$lockedDll = "$PSScriptRoot\obj\x64\Debug\net8.0-windows10.0.19041.0\intermediatexaml\QuickView.dll"
+# Delete locked intermediate XAML DLL
+$objPath = if ($Unpackaged) { "x64\$Configuration" } else { "$Configuration" }
+$lockedDll = "$PSScriptRoot\obj\$objPath\net8.0-windows10.0.19041.0\intermediatexaml\QuickView.dll"
 if (Test-Path $lockedDll) {
     try   { Remove-Item $lockedDll -Force; Write-Info "Removed locked intermediate DLL" }
-    catch { Write-Info "Could not remove $lockedDll (still locked?) — trying anyway" }
+    catch { Write-Info "Could not remove locked DLL (still locked?) — trying anyway" }
 }
 
-# ── 2. build ──────────────────────────────────────────────────────────────────
+# ── 2. Build ──────────────────────────────────────────────────────────────────
 if (-not $NoBuild) {
 
     $buildArgs = @(
         "build", $Project,
-        "-p:Platform=x64"
+        "-c", $Configuration
     )
+
+    # For unpackaged builds, we need to explicitly set Platform=x64 and remove PACKAGED symbol
+    if ($Unpackaged) {
+        $buildArgs += "-p:Platform=x64"
+        # Remove PACKAGED define to build as traditional unpackaged app
+        $buildArgs += "-p:DefineConstants=`$(DefineConstants.Replace(';PACKAGED',''))"
+    }
+
     if ($Rebuild) {
         $buildArgs += "--no-incremental"
-        Write-Step "Clean build…"
+        Write-Step "Clean build ($Configuration)…"
     } else {
-        Write-Step "Incremental build…"
+        Write-Step "Incremental build ($Configuration)…"
     }
 
     Write-Info "Log → $LogFile"
@@ -78,8 +119,10 @@ if (-not $NoBuild) {
     $elapsed   = [math]::Round(((Get-Date) - $startTime).TotalSeconds, 1)
 
     # Parse summary from log
-    $errors   = (Select-String -Path $LogFile -Pattern "^\s*\d+ Error"   | Select-Object -Last 1).Line -replace '^\s+',''
-    $warnings = (Select-String -Path $LogFile -Pattern "^\s*\d+ Warning" | Select-Object -Last 1).Line -replace '^\s+',''
+    $errorsLine   = (Select-String -Path $LogFile -Pattern "^\s*\d+ Error"   | Select-Object -Last 1).Line
+    $warningsLine = (Select-String -Path $LogFile -Pattern "^\s*\d+ Warning" | Select-Object -Last 1).Line
+    $errors   = if ($errorsLine)   { $errorsLine   -replace '^\s+','' } else { "0 Error(s)" }
+    $warnings = if ($warningsLine) { $warningsLine -replace '^\s+','' } else { "0 Warning(s)" }
 
     if ($exitCode -ne 0) {
         Write-Fail "Build FAILED in ${elapsed}s  —  $errors  |  $warnings"
@@ -98,40 +141,45 @@ if (-not $NoBuild) {
     Write-OK "Build succeeded in ${elapsed}s  —  $errors  |  $warnings"
 }
 
-# ── 3. verify exe exists ──────────────────────────────────────────────────────
+# ── 3. Verify exe exists ──────────────────────────────────────────────────────
 if (-not (Test-Path $Exe)) {
     Write-Fail "Exe not found: $Exe"
+    Write-Info "Expected at: $Exe"
     exit 1
 }
 
-# ── 3b. stamp app icon into the exe PE resources ─────────────────────────────
-# WinUI 3 unpackaged apps don't embed the ApplicationIcon from .csproj.
-# rcedit patches the PE directly so the icon appears in Explorer, taskbar,
-# and Alt+Tab without requiring a packaged build.
-$rcedit = "$PSScriptRoot\tools\rcedit.exe"
-$ico    = "$PSScriptRoot\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\Assets\AppIcon.ico"
-if ((Test-Path $rcedit) -and (Test-Path $ico)) {
-    Write-Step "Stamping icon into exe…"
-    & $rcedit $Exe --set-icon $ico 2>&1 | Out-Null
-    if ($LASTEXITCODE -eq 0) {
-        Write-OK "Icon embedded into QuickView.exe"
+# ── 3b. Stamp app icon (unpackaged builds only) ───────────────────────────────
+if ($Unpackaged) {
+    $rcedit = "$PSScriptRoot\tools\rcedit.exe"
+    $ico    = "$BinDir\Assets\AppIcon.ico"
+    if ((Test-Path $rcedit) -and (Test-Path $ico)) {
+        Write-Step "Stamping icon into exe…"
+        & $rcedit $Exe --set-icon $ico 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-OK "Icon embedded into QuickView.exe"
+        } else {
+            Write-Info "rcedit warning (non-fatal): exit $LASTEXITCODE"
+        }
     } else {
-        Write-Info "rcedit warning (non-fatal): exit $LASTEXITCODE"
+        Write-Info "Skipping icon stamp (rcedit or ico not found)"
     }
 } else {
-    Write-Info "Skipping icon stamp (rcedit or ico not found)"
+    Write-Info "Skipping icon stamp (packaged builds use manifest assets)"
 }
 
-# ── 4. launch ─────────────────────────────────────────────────────────────────
+# ── 4. Launch ─────────────────────────────────────────────────────────────────
 Write-Step "Launching $ExeName…"
 $proc = Start-Process $Exe -PassThru
 Start-Sleep -Seconds 3
 
 if ($proc.HasExited) {
     Write-Fail "App crashed immediately (exit code $($proc.ExitCode))"
-    Write-Info "Check build.log for details"
+    Write-Info "Check $LogFile for details"
     exit 1
 }
 
 Write-OK "App running  —  PID $($proc.Id)"
+Write-Host ""
+Write-Info "Build mode: $(if ($Unpackaged) { 'Unpackaged EXE' } else { 'Packaged MSIX' })"
+Write-Info "Configuration: $Configuration"
 Write-Host ""

@@ -83,11 +83,10 @@ public sealed partial class ViewerPage
                               DocumentScrollViewer.MaxZoomFactor);
         DocumentScrollViewer.ChangeView(null, null, (float)_zoom);
 
-        // Display percentage: 100% = NaturalZoom (reading size)
         double displayPct = Math.Round(_zoom / NaturalZoom * 100.0);
         ZoomLabel.Text = $"{displayPct}%";
-        
-        // Trigger re-render at new zoom level for crisp quality
+        SyncToViewModel();
+
         _ = ReRenderVisiblePagesAsync();
     }
 
@@ -122,8 +121,8 @@ public sealed partial class ViewerPage
             Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
             () => _suppressScrollSync = false);
         ZoomLabel.Text = $"{Math.Round(_zoom / NaturalZoom * 100.0)}%";
-        
-        // Re-render at new zoom for crisp quality
+        SyncToViewModel();
+
         _ = ReRenderVisiblePagesAsync();
     }
 
