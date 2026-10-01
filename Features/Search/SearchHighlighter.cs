@@ -22,7 +22,7 @@ using System;
 using System.Collections.Generic;
 using Windows.UI;
 
-namespace QuickView.Rendering.Search;
+namespace QuickView.Features.Search;
 
 // ── Hit ───────────────────────────────────────────────────────────────────────
 

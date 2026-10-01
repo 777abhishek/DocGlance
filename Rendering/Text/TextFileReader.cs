@@ -1,5 +1,6 @@
 ﻿using System.IO;
 using System.Text;
+using QuickView.Shared.Validation;
 
 namespace QuickView.Rendering.Text;
 
@@ -12,6 +13,10 @@ public static class TextFileReader
 
     public static Result ReadCapped(string filePath, int maxChars)
     {
+        // Validate path for security and file size
+        if (!FileSizeValidator.IsFileValidAndSafe(filePath, out _))
+            return new Result(string.Empty, false, 0, 0);
+
         var info = new FileInfo(filePath);
         long fileBytes = info.Exists ? info.Length : 0;
 

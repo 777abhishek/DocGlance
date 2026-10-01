@@ -27,7 +27,9 @@ public sealed class PdfDocumentState : IDisposable
         _document = doc;
         PageCount = pageCount;
         PageSizes = pageSizes;
-        _generation = Environment.TickCount;
+        // Use TickCount64 (signed 64-bit) to avoid wraparound after ~25 days uptime.
+        // Environment.TickCount (32-bit) wraps to negative which breaks generation comparison.
+        _generation = (int)(Environment.TickCount64 & 0x7FFFFFFF);
     }
 
     public (double Width, double Height) GetPageSize(int pageIndex)

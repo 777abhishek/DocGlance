@@ -11,9 +11,9 @@
 ; ─────────────────────────────────────────────────────────────────────────────
 
 #define AppName      "QuickView"
-#define AppVersion   "1.0.0"
+#define AppVersion   "2026.09.28"
 #define AppPublisher "QuickView Contributors"
-#define AppURL       "https://github.com/your-org/QuickView"
+#define AppURL       "https://github.com/your-github-username/QuickView"
 #define AppExeName   "QuickView.exe"
 #define PublishDir   "..\publish"
 
@@ -56,11 +56,11 @@ CloseApplications=yes
 ; Create uninstall entry in Add/Remove Programs
 CreateUninstallRegKey=yes
 ; Version info embedded into the installer EXE (visible in Explorer → Properties)
-VersionInfoVersion={#AppVersion}.0
+VersionInfoVersion=2026.09.28.0
 VersionInfoDescription={#AppName} Setup
 VersionInfoProductName={#AppName}
 VersionInfoCompany={#AppPublisher}
-VersionInfoCopyright=Copyright © 2025 {#AppPublisher}
+VersionInfoCopyright=Copyright © 2026 {#AppPublisher}
 
 ; ── Languages ────────────────────────────────────────────────────────────────
 [Languages]
@@ -71,7 +71,6 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon";     Description: "Create a &desktop shortcut";           GroupDescription: "Additional icons:"; Flags: unchecked
 Name: "startupicon";     Description: "Launch QuickView at &Windows startup"; GroupDescription: "Additional icons:"; Flags: unchecked
 Name: "setdefaultpdf";   Description: "Set as default viewer for &PDF files";  GroupDescription: "File associations:"; Flags: unchecked
-Name: "setdefaultimage"; Description: "Set as default viewer for common &image formats (PNG, JPG, etc.)"; GroupDescription: "File associations:"; Flags: unchecked
 
 ; ── Files to install ─────────────────────────────────────────────────────────
 [Files]
@@ -155,11 +154,8 @@ Root: HKA; Subkey: "Software\Classes\QuickView.CSV";                       Value
 Root: HKA; Subkey: "Software\Classes\QuickView.CSV\DefaultIcon";           ValueType: string; ValueName: "";                    ValueData: "{app}\Assets\FileTypeIcons\CSV.ico,0"
 Root: HKA; Subkey: "Software\Classes\QuickView.CSV\shell\open\command";    ValueType: string; ValueName: "";                    ValueData: """{app}\{#AppExeName}"" ""%1"""
 
-; Optional: Set as default for PDF and images (if tasks selected)
+; Optional: Set as default for PDF (if task selected)
 Root: HKA; Subkey: "Software\Classes\.pdf"; ValueType: string; ValueName: ""; ValueData: "QuickView.PDF"; Tasks: setdefaultpdf
-Root: HKA; Subkey: "Software\Classes\.png"; ValueType: string; ValueName: ""; ValueData: "QuickView.Image"; Tasks: setdefaultimage
-Root: HKA; Subkey: "Software\Classes\.jpg"; ValueType: string; ValueName: ""; ValueData: "QuickView.Image"; Tasks: setdefaultimage
-Root: HKA; Subkey: "Software\Classes\.jpeg"; ValueType: string; ValueName: ""; ValueData: "QuickView.Image"; Tasks: setdefaultimage
 
 ; ── Run: VC++ Redistributable + Windows App SDK + launch ──────────────────────
 [Run]

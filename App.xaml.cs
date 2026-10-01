@@ -3,13 +3,15 @@
 
 using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
+using QuickView.Infrastructure.Logging;
+using QuickView.Infrastructure.Registration;
+using QuickView.Models;
+using QuickView.Shared.Validation;
 using QuickView.Shell;
 using System;
 using System.IO;
 using System.Linq;
-using QuickView.Infrastructure.Logging;
-using QuickView.Infrastructure.Registration;
-using QuickView.Models;
+using System.Threading.Tasks;
 
 namespace QuickView;
 
@@ -39,8 +41,13 @@ public partial class App : Application
         {
             try
             {
+                // Write crash log to the same place as the regular log for consistency.
+                var logDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "QuickView", "Logs");
+                Directory.CreateDirectory(logDir);
                 File.WriteAllText(
-                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "crash.txt"),
+                    Path.Combine(logDir, "crash.txt"),
                     $"App constructor crashed:\n{ex.Message}\n{ex.StackTrace}");
             }
             catch { }
@@ -110,15 +117,11 @@ public partial class App : Application
     /// </summary>
     private static void RegisterRenderers()
     {
-        QuickView.Rendering.RendererRegistry.Register(new QuickView.Rendering.Images.ImageRenderer());
-        
-        // F7: Office, Media, and HTML renderers enabled
-        // Note: Office renderers (DOCX, XLSX, PPTX) currently show info cards only.
+        // Office renderers (DOCX, XLSX, PPTX) currently show info cards only.
         // Full Office rendering would require COM interop or third-party libraries.
         QuickView.Rendering.RendererRegistry.Register(new QuickView.Rendering.Office.DocxRenderer());
         QuickView.Rendering.RendererRegistry.Register(new QuickView.Rendering.Office.XlsxRenderer());
         QuickView.Rendering.RendererRegistry.Register(new QuickView.Rendering.Office.PptxRenderer());
-        QuickView.Rendering.RendererRegistry.Register(new QuickView.Rendering.Media.MediaRenderer());
         QuickView.Rendering.RendererRegistry.Register(new QuickView.Rendering.Web.HtmlRenderer());
     }
 
@@ -202,6 +205,14 @@ public partial class App : Application
                 return;
             }
 
+            // Validate path for security and file size for DoS prevention
+            if (!FileSizeValidator.IsFileValidAndSafe(filePath, out var validationError))
+            {
+                Logger.Error($"File validation failed for: {filePath} - {validationError}");
+                // TODO: Show error dialog to user
+                return;
+            }
+
             Logger.Log($"[ACTIVATION] Opening: {filePath}");
             var fi  = new FileInfo(filePath);
             var doc = DocumentItem.FromFileInfo(fi);
@@ -216,7 +227,20 @@ public partial class App : Application
     public void SetTheme(ElementTheme theme)
     {
         if (m_window?.Content is FrameworkElement rootElement)
+        {
             rootElement.RequestedTheme = theme;
+            
+            // Update title bar button colors after theme changes.
+            // Subscribe to ActualThemeChanged instead of using a timing hack.
+            if (m_window is TitleBarWindow titleBarWindow)
+            {
+                // Trigger immediately, then the event will handle future changes.
+                titleBarWindow.DispatcherQueue.TryEnqueue(() =>
+                {
+                    titleBarWindow.ConfigureTitleBarTheme();
+                });
+            }
+        }
     }
 
     private Window? m_window;

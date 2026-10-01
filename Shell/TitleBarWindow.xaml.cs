@@ -25,6 +25,9 @@ public sealed partial class TitleBarWindow : Window
 
     // ── Per-tab state: tab item → (ViewerPage, DocumentItem) ─────────────────
     private readonly Dictionary<TabViewItem, (ViewerPage viewer, DocumentItem doc)> _tabData = new();
+    
+    // Special tabs (Settings, etc.) that don't show documents
+    private readonly Dictionary<TabViewItem, UIElement> _specialTabs = new();
 
     // The permanent "home" tab
     private TabViewItem? _homeTab;
@@ -43,6 +46,9 @@ public sealed partial class TitleBarWindow : Window
 
         // Set the window icon
         SetWindowIcon();
+        
+        // Configure title bar button colors for theme support
+        ConfigureTitleBarTheme();
 
         // Drag & drop files onto window
         RootGrid.AllowDrop = true;
@@ -53,6 +59,12 @@ public sealed partial class TitleBarWindow : Window
         // Navigate to HomePage and start update checker
         HomeFrame.Navigate(typeof(HomePage));
         UpdateBannerControl.Attach();
+        
+        // Listen for theme changes to update title bar
+        if (Content is FrameworkElement root)
+        {
+            root.ActualThemeChanged += (s, e) => ConfigureTitleBarTheme();
+        }
     }
 
     // ── Home tab ──────────────────────────────────────────────────────────────
@@ -119,7 +131,51 @@ public sealed partial class TitleBarWindow : Window
             OpenDocument(doc);
             return;
         }
+        
+        // For Settings or other pages, open in a new tab instead of HomeFrame
+        if (pageType == typeof(Features.Settings.SettingsPage))
+        {
+            OpenSettingsTab();
+            return;
+        }
+        
+        // Fallback: navigate in HomeFrame and switch to Home tab
         HomeFrame.Navigate(pageType, parameter);
+        Tabs.SelectedItem = _homeTab;
+    }
+    
+    private void OpenSettingsTab()
+    {
+        // Check if Settings tab already exists
+        foreach (var item in Tabs.TabItems)
+        {
+            if (item is TabViewItem tab && _specialTabs.ContainsKey(tab) && tab.Header as string == "Settings")
+            {
+                Tabs.SelectedItem = tab;
+                return;
+            }
+        }
+        
+        // Create new Settings tab with a Frame to host the settings page
+        var frame = new Frame();
+        frame.Navigate(typeof(Features.Settings.SettingsPage));
+        
+        var settingsTab = new TabViewItem
+        {
+            Header     = "Settings",
+            IsClosable = true,
+            IconSource = new SymbolIconSource { Symbol = Symbol.Setting },
+        };
+        
+        // Store in special tabs dictionary
+        _specialTabs[settingsTab] = frame;
+        
+        Tabs.TabItems.Add(settingsTab);
+        Tabs.SelectedItem = settingsTab;
+        
+        // Show the settings frame in DocHost
+        DocHost.Content = frame;
+        DocHost.Visibility = Visibility.Visible;
     }
 
     public void GoBack()
@@ -139,12 +195,19 @@ public sealed partial class TitleBarWindow : Window
         // Home tab
         HomeFrame.Visibility = isHome ? Visibility.Visible : Visibility.Collapsed;
 
-        // Document tab
+        // Document tab (in _tabData)
         if (!isHome && _tabData.TryGetValue(selected, out var data))
         {
             DocHost.Content    = data.viewer;
             DocHost.Visibility = Visibility.Visible;
         }
+        // Special tabs (Settings, etc.) - stored in _specialTabs
+        else if (!isHome && _specialTabs.TryGetValue(selected, out var content))
+        {
+            DocHost.Content    = content;
+            DocHost.Visibility = Visibility.Visible;
+        }
+        // Home tab selected
         else if (isHome)
         {
             DocHost.Visibility = Visibility.Collapsed;
@@ -182,8 +245,8 @@ public sealed partial class TitleBarWindow : Window
         foreach (var ext in new[]
         {
             ".pdf",".docx",".doc",".xlsx",".xls",".pptx",".ppt",
-            ".txt",".md",".png",".jpg",".jpeg",".gif",".bmp",
-            ".webp",".mp4",".mkv",".mov",".avi",".mp3",".wav",".flac"
+            ".txt",".md",".json",".xml",".html",".css",".js",".ts",
+            ".cs",".py",".log",".csv",".rtf"
         }) picker.FileTypeFilter.Add(ext);
 
         InitializeWithWindow.Initialize(picker, Hwnd);
@@ -287,6 +350,50 @@ public sealed partial class TitleBarWindow : Window
         {
             QuickView.Infrastructure.Logging.Logger.Log(
                 $"[Icon] SetWindowIcon failed: {ex.Message}");
+        }
+    }
+
+    // ── Title bar theme configuration ─────────────────────────────────────────
+    
+    public void ConfigureTitleBarTheme()
+    {
+        try
+        {
+            var titleBar = AppWindow.TitleBar;
+            if (titleBar == null) return;
+
+            // Determine current theme
+            var theme = ElementTheme.Default;
+            if (Content is FrameworkElement root)
+                theme = root.ActualTheme;
+
+            bool isDark = theme == ElementTheme.Dark ||
+                         (theme == ElementTheme.Default &&
+                          Application.Current.RequestedTheme == ApplicationTheme.Dark);
+
+            if (isDark)
+            {
+                // Dark theme - light buttons
+                titleBar.ButtonForegroundColor = Windows.UI.Color.FromArgb(255, 255, 255, 255);
+                titleBar.ButtonHoverForegroundColor = Windows.UI.Color.FromArgb(255, 255, 255, 255);
+                titleBar.ButtonHoverBackgroundColor = Windows.UI.Color.FromArgb(25, 255, 255, 255);
+                titleBar.ButtonPressedForegroundColor = Windows.UI.Color.FromArgb(200, 255, 255, 255);
+                titleBar.ButtonPressedBackgroundColor = Windows.UI.Color.FromArgb(40, 255, 255, 255);
+            }
+            else
+            {
+                // Light theme - dark buttons
+                titleBar.ButtonForegroundColor = Windows.UI.Color.FromArgb(255, 0, 0, 0);
+                titleBar.ButtonHoverForegroundColor = Windows.UI.Color.FromArgb(255, 0, 0, 0);
+                titleBar.ButtonHoverBackgroundColor = Windows.UI.Color.FromArgb(25, 0, 0, 0);
+                titleBar.ButtonPressedForegroundColor = Windows.UI.Color.FromArgb(200, 0, 0, 0);
+                titleBar.ButtonPressedBackgroundColor = Windows.UI.Color.FromArgb(40, 0, 0, 0);
+            }
+        }
+        catch (Exception ex)
+        {
+            QuickView.Infrastructure.Logging.Logger.Log(
+                $"[Theme] ConfigureTitleBarTheme failed: {ex.Message}");
         }
     }
 

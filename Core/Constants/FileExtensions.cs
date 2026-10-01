@@ -1,6 +1,6 @@
 ﻿namespace QuickView.Core.Constants;
 
-/// <summary>Canonical file extension strings used across the app.</summary>
+/// <summary>Canonical file extension strings used across the app - documents only.</summary>
 public static class FileExtensions
 {
     // Documents
@@ -11,25 +11,6 @@ public static class FileExtensions
     public const string Txt  = ".txt";
     public const string Md   = ".md";
     public const string Rtf  = ".rtf";
-
-    // Images
-    public const string Png  = ".png";
-    public const string Jpg  = ".jpg";
-    public const string Jpeg = ".jpeg";
-    public const string Gif  = ".gif";
-    public const string Bmp  = ".bmp";
-    public const string Webp = ".webp";
-
-    // Video
-    public const string Mp4  = ".mp4";
-    public const string Mkv  = ".mkv";
-    public const string Avi  = ".avi";
-    public const string Mov  = ".mov";
-
-    // Audio
-    public const string Mp3  = ".mp3";
-    public const string Wav  = ".wav";
-    public const string Flac = ".flac";
 
     // Code
     public const string Cs   = ".cs";

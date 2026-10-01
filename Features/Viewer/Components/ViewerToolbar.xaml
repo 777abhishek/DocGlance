@@ -1,19 +1,161 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<!--
-    ViewerToolbar.xaml
-    Extracted toolbar UserControl for the ViewerPage.
-    Currently the toolbar is built directly in ViewerPage.xaml for simplicity.
-    This file is the future home once it is promoted to a standalone control.
--->
 <UserControl
     x:Class="QuickView.Features.Viewer.Components.ViewerToolbar"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <Grid Height="48"
-          Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
-          BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-          BorderThickness="0,0,0,1">
-        <!-- Toolbar buttons defined here when extracted from ViewerPage.xaml -->
+    <UserControl.Resources>
+        <!-- Toolbar icon button -->
+        <Style x:Key="IB" TargetType="Button">
+            <Setter Property="Width"           Value="32"/>
+            <Setter Property="Height"          Value="32"/>
+            <Setter Property="Padding"         Value="0"/>
+            <Setter Property="Background"      Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="CornerRadius"    Value="6"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment"   Value="Center"/>
+        </Style>
+
+        <!-- Toolbar toggle button -->
+        <Style x:Key="ITB" TargetType="ToggleButton">
+            <Setter Property="Width"           Value="32"/>
+            <Setter Property="Height"          Value="32"/>
+            <Setter Property="Padding"         Value="0"/>
+            <Setter Property="Background"      Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="CornerRadius"    Value="6"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment"   Value="Center"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Height="44" Padding="8,0" ColumnSpacing="2" Background="Transparent">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>  <!-- sidebar toggle -->
+            <ColumnDefinition Width="Auto"/>  <!-- page nav -->
+            <ColumnDefinition Width="Auto"/>  <!-- fit buttons -->
+            <ColumnDefinition Width="Auto"/>  <!-- rotate buttons -->
+            <ColumnDefinition Width="*"/>     <!-- spacer & annotations -->
+            <ColumnDefinition Width="Auto"/>  <!-- right actions -->
+        </Grid.ColumnDefinitions>
+
+        <!-- Sidebar toggle -->
+        <ToggleButton Grid.Column="0"
+            x:Name="SidebarButton"
+            Style="{StaticResource ITB}"
+            IsChecked="True"
+            Click="SidebarButton_Click"
+            Margin="0,0,4,0"
+            ToolTipService.ToolTip="Sidebar (F9)">
+            <FontIcon Glyph="&#xE8A0;" FontSize="14"/>
+        </ToggleButton>
+
+        <!-- Page number -->
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="8,0">
+            <TextBlock x:Name="PageNumberBox" Text="1" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Tapped="PageNumber_Tapped" ToolTipService.ToolTip="Click to go to page"/>
+            <TextBlock x:Name="TotalPagesText" Text="/ 1" VerticalAlignment="Center" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+        </StackPanel>
+
+        <!-- Fit buttons -->
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" Margin="8,0,0,0">
+            <ToggleButton x:Name="FitWidthButton" Style="{StaticResource ITB}" Click="FitWidthButton_Click" ToolTipService.ToolTip="Fit width (Ctrl+2)">
+                <FontIcon Glyph="&#xE9A6;" FontSize="14"/>
+            </ToggleButton>
+            <ToggleButton x:Name="FitPageButton" Style="{StaticResource ITB}" Click="FitPageButton_Click" ToolTipService.ToolTip="Fit page (Ctrl+0)">
+                <FontIcon Glyph="&#xE9A6;" FontSize="14" RenderTransformOrigin="0.5,0.5">
+                    <FontIcon.RenderTransform><RotateTransform Angle="90"/></FontIcon.RenderTransform>
+                </FontIcon>
+            </ToggleButton>
+        </StackPanel>
+
+        <!-- Rotate buttons -->
+        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="2" Margin="4,0,0,0">
+            <Button Style="{StaticResource IB}" Click="RotateLeftButton_Click" ToolTipService.ToolTip="Rotate left">
+                <FontIcon Glyph="&#xE7AD;" FontSize="14" RenderTransformOrigin="0.5,0.5">
+                    <FontIcon.RenderTransform><ScaleTransform ScaleX="-1"/></FontIcon.RenderTransform>
+                </FontIcon>
+            </Button>
+            <Button Style="{StaticResource IB}" Click="RotateRightButton_Click" ToolTipService.ToolTip="Rotate right (Ctrl+R)">
+                <FontIcon Glyph="&#xE7AD;" FontSize="14"/>
+            </Button>
+        </StackPanel>
+
+        <!-- Annotation Tools -->
+        <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <ToggleButton x:Name="PenToolButton" Style="{StaticResource ITB}" Click="PenToolButton_Click" ToolTipService.ToolTip="Pen — draw freehand (Ctrl+E)">
+                <FontIcon Glyph="&#xE70F;" FontSize="14" />
+            </ToggleButton>
+            <ToggleButton x:Name="HighlighterToolButton" Style="{StaticResource ITB}" Click="HighlighterToolButton_Click" ToolTipService.ToolTip="Highlighter — drag over text (Ctrl+H)">
+                <FontIcon Glyph="&#xE891;" FontSize="14" />
+            </ToggleButton>
+            <ToggleButton x:Name="NoteToolButton" Style="{StaticResource ITB}" Click="NoteToolButton_Click" ToolTipService.ToolTip="Note — click to add a sticky note">
+                <FontIcon Glyph="&#xE70B;" FontSize="14" />
+            </ToggleButton>
+            <ToggleButton x:Name="TextToolButton" Style="{StaticResource ITB}" Click="TextToolButton_Click" ToolTipService.ToolTip="Text — click anywhere on the page and type (Ctrl+T)">
+                <FontIcon Glyph="&#xE8D2;" FontSize="14" />
+            </ToggleButton>
+            <ToggleButton x:Name="EraserToolButton" Style="{StaticResource ITB}" Click="EraserToolButton_Click" ToolTipService.ToolTip="Eraser — click an annotation to remove it">
+                <FontIcon Glyph="&#xE75C;" FontSize="14" />
+            </ToggleButton>
+        </StackPanel>
+
+        <!-- Right actions -->
+        <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="2">
+            <ToggleButton x:Name="WordWrapButton" Style="{StaticResource ITB}" Visibility="Collapsed" Click="WordWrapButton_Click" ToolTipService.ToolTip="Word wrap (Alt+Z)">
+                <FontIcon Glyph="&#xE8C1;" FontSize="14"/>
+            </ToggleButton>
+            <Button x:Name="FindButton" Style="{StaticResource IB}" Click="FindButton_Click" ToolTipService.ToolTip="Find (Ctrl+F)">
+                <FontIcon Glyph="&#xE721;" FontSize="14"/>
+            </Button>
+            <Button Style="{StaticResource IB}" Click="OpenExternalButton_Click" ToolTipService.ToolTip="Open with default app">
+                <FontIcon Glyph="&#xE8A7;" FontSize="14"/>
+            </Button>
+            <Button Style="{StaticResource IB}" Click="ShowInExplorerButton_Click" ToolTipService.ToolTip="Show in File Explorer">
+                <FontIcon Glyph="&#xE8DA;" FontSize="14"/>
+            </Button>
+            <Button x:Name="DocInfoButton" Style="{StaticResource IB}" Click="DocInfoButton_Click" ToolTipService.ToolTip="Document info (Ctrl+I)">
+                <FontIcon Glyph="&#xE946;" FontSize="14"/>
+            </Button>
+            <Button Style="{StaticResource IB}" ToolTipService.ToolTip="More options">
+                <FontIcon Glyph="&#xE712;" FontSize="14"/>
+                <Button.Flyout>
+                    <MenuFlyout Placement="BottomEdgeAlignedRight">
+                        <MenuFlyoutItem Text="Document info" Click="DocInfoButton_Click">
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE946;"/></MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutSeparator/>
+                        <MenuFlyoutItem Text="Presentation mode" Click="PresentationModeMenuItem_Click">
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE740;"/></MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutSeparator/>
+                        <MenuFlyoutItem Text="Print" Click="PrintMenuItem_Click">
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE749;"/></MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem Text="Copy page text" Click="CopyPageTextMenuItem_Click">
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8C8;"/></MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem Text="Copy file path" Click="CopyPathMenuItem_Click">
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8C8;"/></MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutSeparator/>
+                        <MenuFlyoutItem Text="Open with default app" Click="OpenExternalButton_Click">
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8A7;"/></MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem Text="Show in File Explorer" Click="ShowInExplorerButton_Click">
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8DA;"/></MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutSeparator/>
+                        <MenuFlyoutItem Text="Bookmark this page" Click="BookmarkMenuItem_Click">
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE718;"/></MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutSeparator/>
+                        <MenuFlyoutItem Text="Settings" Click="SettingsMenuItem_Click">
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE713;"/></MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                    </MenuFlyout>
+                </Button.Flyout>
+            </Button>
+        </StackPanel>
     </Grid>
 </UserControl>

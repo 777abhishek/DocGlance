@@ -1,6 +1,7 @@
 ﻿using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using QuickView.Infrastructure.Storage;
 using System;
@@ -12,109 +13,47 @@ namespace QuickView.Features.Viewer;
 
 public sealed partial class ViewerPage
 {
-    // ── Sidebar toggle ────────────────────────────────────────────────────────
-
-    private void SidebarButton_Click(object sender, RoutedEventArgs e)
+    private void Toolbar_SidebarToggled(object? sender, EventArgs e)
     {
-        bool isOpen = SidebarButton.IsChecked ?? false;
-
-        // Hide/show the sidebar content
+        bool isOpen = Toolbar.IsSidebarOpen;
         SidebarCard.Visibility = isOpen ? Visibility.Visible : Visibility.Collapsed;
-
-        // Collapse/expand the column — instant, no animation needed
         SidebarColumn.Width = isOpen ? new GridLength(240) : new GridLength(0);
-
-        // Force a synchronous measure/arrange pass so ViewportWidth reflects
-        // the new column width before we compute the fit zoom.  Using a
-        // deferred enqueue (old approach) was racy: it sometimes read the stale
-        // width and produced a wrong zoom, especially on fast toggles.
-        // Calling UpdateLayout() here is the same pattern Rune uses in its
-        // Scroller_SizeChanged handler — read the authoritative new size,
-        // then rebuild the layout against it.
         ReapplyFitMode();
     }
 
-    // ── Page number tap → flyout input ───────────────────────────────────────
-
-    private void PageNumber_Tapped(object sender, TappedRoutedEventArgs e)
+    private void Toolbar_GoToPageRequested(object? sender, int page)
     {
-        var box = new NumberBox
-        {
-            Value              = _page,
-            Minimum            = 1,
-            Maximum            = _total,
-            SmallChange        = 1,
-            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline,
-            Width              = 120,
-        };
-        var flyout = new Flyout { Content = box };
-        box.KeyDown += (_, ke) =>
-        {
-            if (ke.Key == Windows.System.VirtualKey.Enter)
-            {
-                GoToPage((int)box.Value);
-                flyout.Hide();
-            }
-            if (ke.Key == Windows.System.VirtualKey.Escape)
-                flyout.Hide();
-        };
-        flyout.ShowAt(PageNumberBox);
+        GoToPage(page);
     }
 
-    // ── Fit / Rotate ──────────────────────────────────────────────────────────
-
-    private void FitWidthButton_Click(object sender, RoutedEventArgs e)
+    private void Toolbar_FitWidthRequested(object? sender, EventArgs e)
     {
         _fitMode = FitMode.FitWidth;
-        FitWidthButton.IsChecked = true;
-        FitPageButton.IsChecked  = false;
+        // fit mode set via IsFit*Checked;
         ApplyFitWidth();
     }
 
-    private void FitPageButton_Click(object sender, RoutedEventArgs e)
+    private void Toolbar_FitPageRequested(object? sender, EventArgs e)
     {
         _fitMode = FitMode.FitPage;
-        FitPageButton.IsChecked  = true;
-        FitWidthButton.IsChecked = false;
+        // fit mode set via IsFit*Checked;
         ApplyFitPage();
     }
 
-    private void RotateRightButton_Click(object sender, RoutedEventArgs e) => Rotate(+90);
-    private void RotateLeftButton_Click(object sender,  RoutedEventArgs e) => Rotate(-90);
+    private void Toolbar_RotateRequested(object? sender, double delta) => Rotate(delta);
 
-    /// <summary>
-    /// Rotates the document view by <paramref name="delta"/> degrees (multiple of 90).
-    ///
-    /// Windows.Data.Pdf.PdfPageRenderOptions has no rotation parameter, so we
-    /// apply a RenderTransform to the Border + swap Width/Height on the
-    /// surrounding StackPanel item so the layout engine allocates the correct
-    /// space (portrait ↔ landscape).
-    ///
-    /// Concretely:
-    ///   • At 0°/180°: Border.Width = physW, Border.Height = physH  (portrait)
-    ///   • At 90°/270°: Border.Width = physH, Border.Height = physW (landscape)
-    ///     with a RotateTransform on Border centred at (physH/2, physW/2).
-    ///
-    /// This approach preserves the existing BitmapImages (no re-render needed)
-    /// and gives the StackPanel the correct bounding box, so fit-width reads
-    /// the right dimension after rotation.  Thumbnails get the same treatment.
-    ///
-    /// After updating all children, ReapplyFitMode() re-computes the zoom.
-    /// </summary>
     private void Rotate(double delta)
     {
         _rotation = (_rotation + delta + 360.0) % 360.0;
 
         if (_pdfState == null) return;
 
-        bool swap = (int)(_rotation / 90.0) % 2 == 1; // true at 90° and 270°
+        bool swap = (int)(_rotation / 90.0) % 2 == 1; 
 
         for (int i = 0; i < PagesPanel.Children.Count; i++)
         {
             if (PagesPanel.Children[i] is not Border border) continue;
 
-            // Primary source: Tag tuple stores original (unrotated) physical pixel
-            // dimensions and is set at placeholder-creation time — always reliable.
             double physW = 0, physH = 0;
             if (border.Tag is (double ow, double oh))
             {
@@ -122,30 +61,23 @@ public sealed partial class ViewerPage
             }
             else
             {
-                // Fallback: read from the Image inside the Grid (rendered page)
-                // or from a plain Image (should not occur in practice).
                 var img = FindPageImage(border);
                 if (img != null && img.Width > 0)
                 {
                     physW = img.Width; physH = img.Height;
-                    border.Tag = (physW, physH); // cache for next time
+                    border.Tag = (physW, physH); 
                 }
             }
 
             if (physW <= 0 || physH <= 0) continue;
 
-            // M3: Use the same physical pixel units consistently as placeholder creation.
-            // Placeholders set Grid.Width/Height = physW/physH (physical pixels).
-            // Rotation swaps dimensions but stays in the same unit space.
             if (swap)
             {
-                // 90° or 270°: layout slot is landscape (physH wide × physW tall)
                 border.Width  = physH;
                 border.Height = physW;
             }
             else
             {
-                // 0° or 180°: layout slot is portrait
                 border.Width  = physW;
                 border.Height = physH;
             }
@@ -153,25 +85,18 @@ public sealed partial class ViewerPage
             border.RenderTransform = new Microsoft.UI.Xaml.Media.RotateTransform { Angle = _rotation };
         }
 
-        // Update thumbnail BoxHeight to match new aspect ratio
         for (int i = 0; i < Thumbnails.Count && i < PagesPanel.Children.Count; i++)
         {
             if (PagesPanel.Children[i] is Border b && b.Tag is (double ow, double oh))
             {
-                // Thumbnail width is always 200 logical px; aspect changes with rotation.
                 double aspect = swap ? (ow / oh) : (oh / ow);
                 Thumbnails[i].BoxHeight = 200.0 * aspect;
             }
         }
 
-        // Re-compute zoom for the new page orientation.
         ReapplyFitMode();
     }
 
-    /// <summary>
-    /// Finds the Image element inside a page Border, regardless of whether the
-    /// Border contains a plain Image (not yet used) or a Grid+Image+Canvas (rendered).
-    /// </summary>
     private static Image? FindPageImage(Border border)
     {
         if (border.Child is Image img) return img;
@@ -181,9 +106,7 @@ public sealed partial class ViewerPage
         return null;
     }
 
-    // ── Find bar ──────────────────────────────────────────────────────────────
-
-    private void FindButton_Click(object sender, RoutedEventArgs e)
+    private void Toolbar_FindRequested(object? sender, EventArgs e)
     {
         bool show = FindBar.Visibility != Visibility.Visible;
         FindBar.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
@@ -202,7 +125,6 @@ public sealed partial class ViewerPage
         {
             case Windows.System.VirtualKey.Enter:
             {
-                // Shift+Enter → previous hit; Enter → next hit
                 bool shift = Microsoft.UI.Input.InputKeyboardSource
                     .GetKeyStateForCurrentThread(Windows.System.VirtualKey.Shift)
                     .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
@@ -229,18 +151,14 @@ public sealed partial class ViewerPage
         ClearSearchHighlights();
     }
 
-    // ── Bookmark ──────────────────────────────────────────────────────────────
-
-    internal void BookmarkMenuItem_Click(object sender, RoutedEventArgs e)
+    internal void BookmarkMenuItem_Click(object? sender, EventArgs e)
     {
         if (_doc?.FilePath == null) return;
         BookmarkStore.Toggle(_doc.FilePath, _page, $"Page {_page}");
         if (BookmarksTab.IsChecked == true) RefreshBookmarkList();
     }
 
-    // ── Copy path ─────────────────────────────────────────────────────────────
-
-    private void CopyPathMenuItem_Click(object sender, RoutedEventArgs e)
+    private void CopyPathMenuItem_Click(object? sender, EventArgs e)
     {
         if (_doc?.FilePath == null) return;
         var pkg = new DataPackage();
@@ -248,7 +166,7 @@ public sealed partial class ViewerPage
         Clipboard.SetContent(pkg);
     }
 
-    private async void CopyPageTextMenuItem_Click(object sender, RoutedEventArgs e)
+    private async void CopyPageTextMenuItem_Click(object? sender, EventArgs e)
     {
         if (_pdfState == null) return;
         string text = await Rendering.Pdf.PdfTextService.ExtractTextAsync(_pdfState, _page - 1);
@@ -258,9 +176,7 @@ public sealed partial class ViewerPage
         Clipboard.SetContent(package);
     }
 
-    // ── Presentation mode (full-screen) ──────────────────────────────────────
-
-    private void PresentationModeMenuItem_Click(object sender, RoutedEventArgs e)
+    private void PresentationModeMenuItem_Click(object? sender, EventArgs e)
     {
         var app = Microsoft.UI.Xaml.Application.Current as QuickView.App;
         var window = app?.MainWindow;
@@ -276,9 +192,7 @@ public sealed partial class ViewerPage
             appWindow.SetPresenter(Microsoft.UI.Windowing.AppWindowPresenterKind.FullScreen);
     }
 
-    // ── Print ─────────────────────────────────────────────────────────────────
-
-    private async void PrintMenuItem_Click(object sender, RoutedEventArgs e)
+    private async void PrintMenuItem_Click(object? sender, EventArgs e)
     {
         if (_doc?.FilePath == null) return;
         try
@@ -290,9 +204,7 @@ public sealed partial class ViewerPage
         catch { }
     }
 
-    // ── Open external / Explorer ──────────────────────────────────────────────
-
-    internal async void OpenExternalButton_Click(object sender, RoutedEventArgs e)
+    internal async void OpenExternalButton_Click(object? sender, EventArgs e)
     {
         if (_doc?.FilePath == null) return;
         try
@@ -303,7 +215,7 @@ public sealed partial class ViewerPage
         catch { }
     }
 
-    private async void ShowInExplorerButton_Click(object sender, RoutedEventArgs e)
+    private async void ShowInExplorerButton_Click(object? sender, EventArgs e)
     {
         if (_doc?.FilePath == null) return;
         try
@@ -318,18 +230,14 @@ public sealed partial class ViewerPage
         catch { }
     }
 
-    // ── Document info ─────────────────────────────────────────────────────────
-
-    private async void DocInfoButton_Click(object sender, RoutedEventArgs e)
+    private async void DocInfoButton_Click(object? sender, EventArgs e)
     {
         if (_doc == null || XamlRoot == null) return;
         var dialog = Components.DocumentInfoDialog.Build(_doc, _total, XamlRoot);
         await dialog.ShowAsync();
     }
 
-    // ── Settings navigation ───────────────────────────────────────────────────
-
-    private void SettingsMenuItem_Click(object sender, RoutedEventArgs e)
+    private void SettingsMenuItem_Click(object? sender, EventArgs e)
     {
         Shell.TitleBarWindow.Current?.NavigateTo(typeof(Features.Settings.SettingsPage));
     }

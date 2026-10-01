@@ -3,6 +3,7 @@
 
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
+using QuickView.Shared.Formatters;
 using System;
 using System.ComponentModel;
 using System.IO;
@@ -67,11 +68,14 @@ public class DocumentItem : INotifyPropertyChanged
         _                                               => "\uE8A5",
     };
 
-    // Colour brush per category — no UI-thread dependency (Windows.UI.Color)
+    // Colour brush per category — cached to avoid reallocating on every binding pass
+    private SolidColorBrush? _typeColor;
     public SolidColorBrush TypeColor
     {
         get
         {
+            if (_typeColor != null) return _typeColor;
+            
             var c = FileType switch
             {
                 "PDF"                                       => Color.FromArgb(255, 220,  53,  69),
@@ -85,7 +89,9 @@ public class DocumentItem : INotifyPropertyChanged
                 "CS"   or "PY"  or "JS"   or "TS"  or "CPP" => Color.FromArgb(255,  20, 140, 200),
                 _                                           => Color.FromArgb(255, 100, 100, 110),
             };
-            return new SolidColorBrush(c);
+            
+            _typeColor = new SolidColorBrush(c);
+            return _typeColor;
         }
     }
 
@@ -99,17 +105,9 @@ public class DocumentItem : INotifyPropertyChanged
             FolderPath    = fi.DirectoryName ?? string.Empty,
             FileType      = ext,
             FileSizeBytes = fi.Length,
-            FileSize      = FormatSize(fi.Length),
+            FileSize      = FileSizeFormatter.Format(fi.Length),
             LastWriteTime = fi.LastWriteTime,
             LastModified  = fi.LastWriteTime.ToString("MMM dd, yyyy"),
         };
-    }
-
-    private static string FormatSize(long b)
-    {
-        if (b < 1024L)              return $"{b} B";
-        if (b < 1024L * 1024)       return $"{b / 1024.0:F1} KB";
-        if (b < 1024L * 1024 * 1024) return $"{b / (1024.0 * 1024):F1} MB";
-        return $"{b / (1024.0 * 1024 * 1024):F1} GB";
     }
 }

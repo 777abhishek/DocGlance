@@ -1,4 +1,4 @@
-﻿using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using QuickView.Infrastructure.Storage;
 using QuickView.Models;
@@ -80,7 +80,7 @@ public sealed partial class ViewerPage
         page = Math.Clamp(page, 1, Math.Max(1, _total));
         int index = page - 1;
         _page = page;
-        PageNumberBox.Text = page.ToString();
+        Toolbar.UpdatePageInfo(_page, _total); // PageNumberBox.Text = page.ToString();
 
         for (int i = 0; i < Thumbnails.Count; i++)
             Thumbnails[i].IsSelected = i == index;
@@ -172,7 +172,7 @@ public sealed partial class ViewerPage
         }
 
         int newPage = best + 1;
-        if (newPage != _page || PageNumberBox.Text != newPage.ToString())
+        if (newPage != _page || _page.ToString() != newPage.ToString())
         {
             UpdateCurrentPage(newPage);
             PrefetchPagesAround(best);

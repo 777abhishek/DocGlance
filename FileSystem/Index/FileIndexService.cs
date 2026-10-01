@@ -33,14 +33,35 @@ public static class FileIndexService
     public static async Task SaveFilesToIndexAsync(IEnumerable<DocumentItem> documents)
     {
         using var db  = new FileIndexContext();
-        var now = DateTime.UtcNow;
+        var now  = DateTime.UtcNow;
+        var docs = documents.ToList();
+        if (docs.Count == 0) return;
+
+        // Load all existing rows for the incoming paths in ONE query instead of
+        // issuing a separate SELECT per document (fixes the N+1 bug).
+        var incomingPaths = docs.Select(d => d.FilePath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var existingRows  = await db.IndexedFiles
+            .Where(f => incomingPaths.Contains(f.FilePath))
+            .ToListAsync();
+
+        var existingByPath = existingRows.ToDictionary(
+            f => f.FilePath, StringComparer.OrdinalIgnoreCase);
+
         var toAdd = new List<IndexedFile>();
 
-        foreach (var doc in documents)
+        foreach (var doc in docs)
         {
-            var existing = await db.IndexedFiles
-                .FirstOrDefaultAsync(f => f.FilePath == doc.FilePath);
-            if (existing == null)
+            if (existingByPath.TryGetValue(doc.FilePath, out var existing))
+            {
+                // Only dirty-track rows that actually changed.
+                if (existing.LastModified != doc.LastWriteTime)
+                {
+                    existing.LastModified  = doc.LastWriteTime;
+                    existing.FileSizeBytes = doc.FileSizeBytes;
+                    existing.IndexedAt     = now;
+                }
+            }
+            else
             {
                 toAdd.Add(new IndexedFile
                 {
@@ -53,13 +74,8 @@ public static class FileIndexService
                     IndexedAt     = now,
                 });
             }
-            else if (existing.LastModified != doc.LastWriteTime)
-            {
-                existing.LastModified  = doc.LastWriteTime;
-                existing.FileSizeBytes = doc.FileSizeBytes;
-                existing.IndexedAt     = now;
-            }
         }
+
         if (toAdd.Count > 0) await db.IndexedFiles.AddRangeAsync(toAdd);
         await db.SaveChangesAsync();
     }

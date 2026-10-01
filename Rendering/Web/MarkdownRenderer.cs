@@ -53,6 +53,7 @@ public static class MarkdownRenderer
         var lines = md.Split('\n');
         bool inCode = false;
         bool inList = false;
+        bool isOrderedList = false;  // Track whether current list is <ol> vs <ul>
         bool inTable = false;
         string? codeLanguage = null;
 
@@ -93,8 +94,9 @@ public static class MarkdownRenderer
                           !line.StartsWith("+ ", StringComparison.Ordinal) &&
                           !Regex.IsMatch(line, @"^\d+\.\s"))
             {
-                html.AppendLine("</ul>");
+                html.AppendLine(isOrderedList ? "</ol>" : "</ul>");
                 inList = false;
+                isOrderedList = false;
             }
 
             // Close table before non-table line
@@ -154,7 +156,7 @@ public static class MarkdownRenderer
                 line.StartsWith("* ", StringComparison.Ordinal) ||
                 line.StartsWith("+ ", StringComparison.Ordinal))
             {
-                if (!inList) { html.AppendLine("<ul style='padding-left:24px;margin:12px 0'>"); inList = true; }
+                if (!inList) { html.AppendLine("<ul style='padding-left:24px;margin:12px 0'>"); inList = true; isOrderedList = false; }
                 html.AppendLine($"<li style='margin:6px 0'>{InlineFormat(line[2..], dark)}</li>");
                 continue;
             }
@@ -162,7 +164,7 @@ public static class MarkdownRenderer
             // Ordered list
             if (Regex.IsMatch(line, @"^\d+\.\s"))
             {
-                if (!inList) { html.AppendLine("<ol style='padding-left:24px;margin:12px 0'>"); inList = true; }
+                if (!inList) { html.AppendLine("<ol style='padding-left:24px;margin:12px 0'>"); inList = true; isOrderedList = true; }
                 string content = Regex.Replace(line, @"^\d+\.\s", "");
                 html.AppendLine($"<li style='margin:6px 0'>{InlineFormat(content, dark)}</li>");
                 continue;
@@ -181,7 +183,7 @@ public static class MarkdownRenderer
                 bool checked_ = line.Contains("[x]", StringComparison.OrdinalIgnoreCase);
                 string content = Regex.Replace(line, @"^[-*+]\s+\[([ xX])\]\s", "");
                 string checkbox = checked_ ? "☑" : "☐";
-                if (!inList) { html.AppendLine("<ul style='list-style:none;padding-left:0;margin:12px 0'>"); inList = true; }
+                if (!inList) { html.AppendLine("<ul style='list-style:none;padding-left:0;margin:12px 0'>"); inList = true; isOrderedList = false; }
                 html.AppendLine($"<li style='margin:6px 0'>{checkbox} {InlineFormat(content, dark)}</li>");
                 continue;
             }
@@ -197,7 +199,7 @@ public static class MarkdownRenderer
             html.AppendLine($"<p style='margin:8px 0;line-height:1.6'>{InlineFormat(line, dark)}</p>");
         }
 
-        if (inList) html.AppendLine(inTable ? "</ol>" : "</ul>");
+        if (inList) html.AppendLine(isOrderedList ? "</ol>" : "</ul>");
         if (inTable) html.AppendLine("</tbody></table>");
         if (inCode) html.AppendLine("</code></pre>");
 

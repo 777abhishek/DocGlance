@@ -18,10 +18,6 @@ public static class FolderScanner
             ".pdf",  ".docx", ".doc",  ".pptx", ".ppt",
             ".xlsx", ".xls",  ".csv",  ".txt",  ".md",
             ".log",  ".rtf",
-            ".png",  ".jpg",  ".jpeg", ".bmp",  ".gif",  ".webp", ".tiff",
-            ".mp4",  ".mkv",  ".avi",  ".mov",  ".wmv",
-            ".mp3",  ".wav",  ".flac", ".aac",  ".ogg",
-            ".zip",  ".rar",  ".7z",   ".tar",  ".gz",
             ".cs",   ".cpp",  ".py",   ".js",   ".ts",
             ".json", ".xml",  ".html", ".css",
         };

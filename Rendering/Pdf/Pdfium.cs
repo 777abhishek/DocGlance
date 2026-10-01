@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Runtime.InteropServices;
 using System.Threading;
 
@@ -161,4 +161,166 @@ internal static class Pdfium
 
     [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
     public static extern int FPDFDest_GetDestPageIndex(IntPtr document, IntPtr dest);
+
+    // ── Text Selection APIs ───────────────────────────────────────────────────
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int FPDFText_GetCharIndexAtPos(
+        IntPtr textPage, double x, double y, double xTolerance, double yTolerance);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int FPDFText_GetCharBox(
+        IntPtr textPage, int index,
+        out double left, out double right, out double bottom, out double top);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int FPDF_DeviceToPage(
+        IntPtr page, int startX, int startY, int sizeX, int sizeY, int rotate,
+        int deviceX, int deviceY, out double pageX, out double pageY);
+
+    // ── Link Detection APIs ───────────────────────────────────────────────────
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern IntPtr FPDFLink_LoadWebLinks(IntPtr textPage);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern void FPDFLink_CloseWebLinks(IntPtr linkPage);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int FPDFLink_CountWebLinks(IntPtr linkPage);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int FPDFLink_GetURL(
+        IntPtr linkPage, int linkIndex, [Out] ushort[]? buffer, int buflen);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int FPDFLink_CountRects(IntPtr linkPage, int linkIndex);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int FPDFLink_GetRect(
+        IntPtr linkPage, int linkIndex, int rectIndex,
+        out double left, out double top, out double right, out double bottom);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int FPDFPage_GetAnnotCount(IntPtr page);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern IntPtr FPDFPage_GetAnnot(IntPtr page, int index);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern void FPDFPage_CloseAnnot(IntPtr annot);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int FPDFAnnot_GetSubtype(IntPtr annot);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern IntPtr FPDFAnnot_GetLink(IntPtr annot);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int FPDFAnnot_GetRect(IntPtr annot, out FS_RECTF rect);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern IntPtr FPDFLink_GetAction(IntPtr link);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern uint FPDFAction_GetType(IntPtr action);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern uint FPDFAction_GetURIPath(
+        IntPtr document, IntPtr action, IntPtr buffer, uint buflen);
+
+    // ── Additional Structures ─────────────────────────────────────────────────
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct FS_RECTF
+    {
+        public float Left;
+        public float Bottom;
+        public float Right;
+        public float Top;
+    }
+
+    // ── Annotation Subtypes ───────────────────────────────────────────────────
+
+    public const int FPDF_ANNOT_LINK = 2;
+    public const int FPDF_ACTION_GOTO = 1;
+    public const int FPDF_ACTION_REMOTEGOTO = 2;
+    public const int FPDF_ACTION_URI = 3;
+
+    // ── Annotations (fpdf_annot.h) ────────────────────────────────────────────
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern IntPtr FPDFPage_CreateAnnot(IntPtr page, int subtype);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int FPDFPage_RemoveAnnot(IntPtr page, int index);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int FPDFAnnot_SetRect(IntPtr annot, ref FS_RECTF rect);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct FS_QUADPOINTSF
+    {
+        public float X1, Y1;   // upper-left
+        public float X2, Y2;   // upper-right
+        public float X3, Y3;   // lower-left
+        public float X4, Y4;   // lower-right
+    }
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int FPDFAnnot_AppendAttachmentPoints(IntPtr annot, ref FS_QUADPOINTSF quadPoints);
+
+    /// <summary>colorType: 0 = fill/stroke color, 1 = interior color.</summary>
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int FPDFAnnot_SetColor(IntPtr annot, int colorType, uint r, uint g, uint b, uint a);
+
+    /// <summary>key is a narrow FPDF_BYTESTRING; value is UTF-16LE (FPDF_WIDESTRING).</summary>
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int FPDFAnnot_SetStringValue(
+        IntPtr annot,
+        [MarshalAs(UnmanagedType.LPStr)] string key,
+        [MarshalAs(UnmanagedType.LPWStr)] string value);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int FPDFAnnot_SetFlags(IntPtr annot, int flags);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct FS_POINTF
+    {
+        public float X;
+        public float Y;
+    }
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int FPDFAnnot_AddInkStroke(IntPtr annot, [In] FS_POINTF[] points, UIntPtr pointCount);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int FPDFAnnot_SetBorder(IntPtr annot, float horizontalRadius, float verticalRadius, float borderWidth);
+
+    // Read-back APIs
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int FPDFAnnot_GetColor(IntPtr annot, int colorType, out uint r, out uint g, out uint b, out uint a);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern UIntPtr FPDFAnnot_CountAttachmentPoints(IntPtr annot);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int FPDFAnnot_GetAttachmentPoints(IntPtr annot, UIntPtr quadIndex, out FS_QUADPOINTSF quadPoints);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern uint FPDFAnnot_GetInkListCount(IntPtr annot);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern uint FPDFAnnot_GetInkListPath(IntPtr annot, uint pathIndex, [Out] FS_POINTF[]? buffer, uint length);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int FPDFAnnot_GetBorder(IntPtr annot, out float horizontalRadius, out float verticalRadius, out float borderWidth);
+
+    public const int FPDF_ANNOT_SUBTYPE_TEXT = 1;
+    public const int FPDF_ANNOT_SUBTYPE_HIGHLIGHT = 9;
+    public const int FPDF_ANNOT_SUBTYPE_INK = 15;
+    public const int FPDF_ANNOT_SUBTYPE_UNDERLINE = 10;
+    public const int FPDF_ANNOT_SUBTYPE_STRIKEOUT = 12;
+    public const int FPDF_ANNOT_SUBTYPE_STAMP = 14;
 }

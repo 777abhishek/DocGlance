@@ -25,17 +25,31 @@ public sealed partial class ViewerPage
 
     // ── Zoom buttons ──────────────────────────────────────────────────────────
 
+    private void ZoomFitWidth_Click(object sender, RoutedEventArgs e)
+    {
+        Toolbar.IsFitWidthChecked = true;
+        Toolbar.IsFitPageChecked  = false;
+        Toolbar_FitWidthRequested(sender, EventArgs.Empty);
+    }
+
+    private void ZoomFitPage_Click(object sender, RoutedEventArgs e)
+    {
+        Toolbar.IsFitPageChecked  = true;
+        Toolbar.IsFitWidthChecked = false;
+        Toolbar_FitPageRequested(sender, EventArgs.Empty);
+    }
+
     private void ZoomOutButton_Click(object sender, RoutedEventArgs e)
     {
         _fitMode = FitMode.None;
-        FitWidthButton.IsChecked = FitPageButton.IsChecked = false;
+        Toolbar.IsFitWidthChecked = Toolbar.IsFitPageChecked = false;
         SetZoomAnchored(_zoom / 1.25, GetViewportCenter());
     }
 
     private void ZoomInButton_Click(object sender, RoutedEventArgs e)
     {
         _fitMode = FitMode.None;
-        FitWidthButton.IsChecked = FitPageButton.IsChecked = false;
+        Toolbar.IsFitWidthChecked = Toolbar.IsFitPageChecked = false;
         SetZoomAnchored(_zoom * 1.25, GetViewportCenter());
     }
 
@@ -47,7 +61,7 @@ public sealed partial class ViewerPage
                 System.Globalization.CultureInfo.InvariantCulture, out double pct))
         {
             _fitMode = FitMode.None;
-            FitWidthButton.IsChecked = FitPageButton.IsChecked = false;
+            Toolbar.IsFitWidthChecked = Toolbar.IsFitPageChecked = false;
             // pct is the user-facing percentage (0.5 = 50%, 1.0 = 100%)
             // Convert to ScrollViewer zoom: 100% reading size = NaturalZoom
             SetZoomAnchored(NaturalZoom * pct, GetViewportCenter());
@@ -278,7 +292,7 @@ public sealed partial class ViewerPage
         if (!ctrl || point.Properties.MouseWheelDelta == 0) return;
 
         _fitMode = FitMode.None;
-        FitWidthButton.IsChecked = FitPageButton.IsChecked = false;
+        Toolbar.IsFitWidthChecked = Toolbar.IsFitPageChecked = false;
 
         // One notch = 120; multiplicative so each step feels the same at any zoom.
         double steps  = point.Properties.MouseWheelDelta / 120.0;
@@ -383,6 +397,15 @@ public sealed partial class ViewerPage
                         Height  = ph,
                     });
                     grid.Children.Add(CreateHighlightCanvas(idx, pw, ph));
+                    var overlay = new QuickView.Controls.PdfTextSelectionOverlay
+                    {
+                        Width  = pw,
+                        Height = ph,
+                        HorizontalAlignment = HorizontalAlignment.Stretch,
+                        VerticalAlignment   = VerticalAlignment.Stretch,
+                    };
+                    overlay.SetPage(_pdfState, idx, pw, ph);
+                    grid.Children.Add(overlay);
                 }
                 DrawHighlights(idx);
             });

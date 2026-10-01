@@ -1,4 +1,4 @@
-﻿// ViewerPage.xaml.cs — shell, state, lifecycle, public API
+// ViewerPage.xaml.cs — shell, state, lifecycle, public API
 // Split into partial files:
 //   ViewerPage.Pdf.cs     — PDF loading + rendering
 //   ViewerPage.Toolbar.cs — toolbar button handlers
@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 using QuickView.Models;
 using QuickView.Rendering.Pdf;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Threading;
@@ -96,7 +97,7 @@ public sealed partial class ViewerPage : Page
     public void NavigateToPage(int n)  => GoToPage(n);
     public void ZoomIn()               => SetZoom(_zoom * 1.25);
     public void ZoomOut()              => SetZoom(_zoom / 1.25);
-    public void FitWidth()             => FitWidthButton_Click(this, new RoutedEventArgs());
+    public void FitWidth()             => Toolbar_FitWidthRequested(this, EventArgs.Empty);
     public void RotateClockwise()      => Rotate(+90);
-    public void ShowSearch()           => FindButton_Click(this, new RoutedEventArgs());
+    public void ShowSearch()           => Toolbar_FindRequested(this, EventArgs.Empty);
 }

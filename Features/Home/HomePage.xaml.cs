@@ -475,7 +475,7 @@ public sealed partial class HomePage : Page
             if (!ThumbnailService.SupportsThumbnail($".{doc.FileType}")) continue;
             try
             {
-                var thumb = await ThumbnailService.GetThumbnailAsync(doc.FilePath);
+                var thumb = await ThumbnailService.GetThumbnailAsync(doc.FilePath, ct);
                 if (thumb != null) _dispatcherQueue.TryEnqueue(() => doc.Thumbnail = thumb);
             }
             catch (Exception ex) { Logger.Log($"[THUMB] {doc.Title}: {ex.Message}"); }

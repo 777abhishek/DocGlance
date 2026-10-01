@@ -45,14 +45,14 @@ public sealed partial class ViewerPage
         // Reset rotation and fit mode for each new document
         _rotation = 0;
         _fitMode  = FitMode.None;
-        FitWidthButton.IsChecked = false;
-        FitPageButton.IsChecked  = false;
+        Toolbar.IsFitWidthChecked = false;
+        Toolbar.IsFitPageChecked = false;
         _renderedPages.Clear();
         _renderedThumbs.Clear();
 
         _page = 1; _total = 1;
-        PageNumberBox.Text  = "1";
-        TotalPagesText.Text = "/ 1";
+        // PageNumberBox synced via UpdatePageInfo;
+        Toolbar.UpdatePageInfo(1, 1);
 
         // Reset viewer visibility to PDF mode for each new load
         ShowPdfViewer();
@@ -112,8 +112,8 @@ public sealed partial class ViewerPage
             _pdfState = opened.Document;
             _total = _pdfState.PageCount;
 
-            TotalPagesText.Text = $"/ {_total}";
-            PageNumberBox.Text  = "1";
+            Toolbar.UpdatePageInfo(_page, _total);
+            // PageNumberBox synced via UpdatePageInfo;
             _page = 1;
 
             // 2. Load outline from the open document (same PDFium session)
@@ -123,13 +123,13 @@ public sealed partial class ViewerPage
             // Auto-hide the sidebar for single-page documents
             if (_total == 1)
             {
-                SidebarButton.IsChecked  = false;
+                Toolbar.SidebarIsChecked = false;
                 SidebarCard.Visibility   = Visibility.Collapsed;
                 SidebarColumn.Width      = new Microsoft.UI.Xaml.GridLength(0);
             }
             else
             {
-                SidebarButton.IsChecked  = true;
+                Toolbar.SidebarIsChecked = true;
                 SidebarCard.Visibility   = Visibility.Visible;
                 SidebarColumn.Width      = new Microsoft.UI.Xaml.GridLength(240);
             }
@@ -358,24 +358,7 @@ public sealed partial class ViewerPage
                 DispatcherQueue.TryEnqueue(() =>
                 {
                     if (!ReferenceEquals(_pdfState, pdfState)) return;
-                    if (pageIdx >= PagesPanel.Children.Count) return;
-                    if (PagesPanel.Children[pageIdx] is not Border border) return;
-
-                    var pageGrid = new Grid
-                    {
-                        Width               = physW,
-                        Height              = physH,
-                        HorizontalAlignment = HorizontalAlignment.Center,
-                    };
-                    pageGrid.Children.Add(new Image
-                    {
-                        Source  = previewBmp,
-                        Stretch = Stretch.Fill, // Fill to match layout size
-                        Width   = physW,
-                        Height  = physH,
-                    });
-                    pageGrid.Children.Add(CreateHighlightCanvas(pageIdx, physW, physH));
-                    border.Child = pageGrid;
+                    ApplyPageVisual(pageIdx, pdfState, previewBmp, physW, physH, Stretch.Fill);
                 });
             }
 
@@ -397,24 +380,7 @@ public sealed partial class ViewerPage
             DispatcherQueue.TryEnqueue(() =>
             {
                 if (!ReferenceEquals(_pdfState, pdfState)) return;
-                if (pageIdx >= PagesPanel.Children.Count) return;
-                if (PagesPanel.Children[pageIdx] is not Border border) return;
-
-                var pageGrid = new Grid
-                {
-                    Width               = physW,
-                    Height              = physH,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                };
-                pageGrid.Children.Add(new Image
-                {
-                    Source  = fullBmp,
-                    Stretch = Stretch.None,
-                    Width   = physW,
-                    Height  = physH,
-                });
-                pageGrid.Children.Add(CreateHighlightCanvas(pageIdx, physW, physH));
-                border.Child = pageGrid;
+                ApplyPageVisual(pageIdx, pdfState, fullBmp, physW, physH, Stretch.None);
                 DrawHighlights(pageIdx);
             });
         }
@@ -423,6 +389,53 @@ public sealed partial class ViewerPage
             _renderedPages.Remove(pageIdx);
             Logger.Log($"[PDF ERROR] Page {pageIdx}: {ex.Message}");
         }
+    }
+
+    private void ApplyPageVisual(
+        int pageIdx, PdfDocumentState pdfState,
+        Microsoft.UI.Xaml.Media.ImageSource bmp,
+        double physW, double physH, Stretch stretch)
+    {
+        if (pageIdx >= PagesPanel.Children.Count) return;
+        if (PagesPanel.Children[pageIdx] is not Border border) return;
+
+        if (border.Child is Grid existing &&
+            existing.Children.Count > 0 &&
+            existing.Children[0] is Image img)
+        {
+            img.Source  = bmp;
+            img.Width   = physW;
+            img.Height  = physH;
+            img.Stretch = stretch;
+            existing.Width  = physW;
+            existing.Height = physH;
+            return;
+        }
+
+        var pageGrid = new Grid
+        {
+            Width               = physW,
+            Height              = physH,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        pageGrid.Children.Add(new Image
+        {
+            Source  = bmp,
+            Stretch = stretch,
+            Width   = physW,
+            Height  = physH,
+        });
+        pageGrid.Children.Add(CreateHighlightCanvas(pageIdx, physW, physH));
+        var textOverlay = new PdfTextSelectionOverlay
+        {
+            Width               = physW,
+            Height              = physH,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment   = VerticalAlignment.Stretch,
+        };
+        textOverlay.SetPage(pdfState, pageIdx, physW, physH);
+        pageGrid.Children.Add(textOverlay);
+        border.Child = pageGrid;
     }
 
     /// <summary>Renders a single thumbnail using PDFium</summary>
@@ -456,8 +469,8 @@ public sealed partial class ViewerPage
     private void ShowInfoCard(DocumentItem doc)
     {
         _total = 1;
-        TotalPagesText.Text = "/ 1";
-        PageNumberBox.Text  = "1";
+        Toolbar.UpdatePageInfo(1, 1);
+        // PageNumberBox synced via UpdatePageInfo;
 
         Thumbnails.Add(new PageThumbnailItem
         {
@@ -466,7 +479,7 @@ public sealed partial class ViewerPage
         ThumbnailList.ItemsSource = Thumbnails;
 
         var card = new ViewerInfoCard(doc);
-        card.OpenRequested += (_, _) => OpenExternalButton_Click(card, new RoutedEventArgs());
+        card.OpenRequested += (_, _) => OpenExternalButton_Click(card, EventArgs.Empty);
         PagesPanel.Children.Add(card);
     }
 
@@ -484,28 +497,29 @@ public sealed partial class ViewerPage
             if (ct.IsCancellationRequested || element == null)
                 return;
 
-            // Hide all standard viewers and show the custom renderer's element
+            // Hide all non-PDF viewers but KEEP DocumentScrollViewer visible —
+            // PagesPanel lives inside it, so collapsing it would hide the content.
             PlainTextViewerGrid.Visibility  = Visibility.Collapsed;
             TextViewerScroll.Visibility     = Visibility.Collapsed;
-            DocumentScrollViewer.Visibility = Visibility.Collapsed;
             MarkdownViewerHost.Visibility   = Visibility.Collapsed;
+            DocumentScrollViewer.Visibility = Visibility.Visible;
             
-            // Clear PagesPanel and place the rendered element
+            // Place the rendered element directly into PagesPanel
             PagesPanel.Children.Clear();
             PagesPanel.Children.Add(element);
             
             // Hide toolbar buttons not applicable to generic renderer view
             ZoomPill.Visibility        = Visibility.Collapsed;
-            WordWrapButton.Visibility  = Visibility.Collapsed;
-            SidebarButton.Visibility   = Visibility.Collapsed;
+            Toolbar.WordWrapVisibility = Visibility.Collapsed;
+            Toolbar.SidebarButtonVisibility = Visibility.Collapsed;
             SidebarCard.Visibility     = Visibility.Collapsed;
             SidebarColumn.Width        = new GridLength(0);
-            FitWidthButton.Visibility  = Visibility.Collapsed;
-            FitPageButton.Visibility   = Visibility.Collapsed;
+            Toolbar.FitWidthButtonVisibility = Visibility.Collapsed;
+            Toolbar.FitPageButtonVisibility = Visibility.Collapsed;
             
             _total = 1;
-            TotalPagesText.Text = "/ 1";
-            PageNumberBox.Text  = "1";
+            Toolbar.UpdatePageInfo(1, 1);
+            // PageNumberBox synced via UpdatePageInfo;
         }
         catch (System.Exception ex)
         {

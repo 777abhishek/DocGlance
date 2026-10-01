@@ -1,6 +1,6 @@
 ﻿using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using QuickView.Core.Helpers;
+using QuickView.Shared.Formatters;
 using QuickView.Models;
 using System;
 using System.IO;
@@ -22,7 +22,7 @@ internal static class DocumentInfoDialog
 
         AddRow(grid, 0, "\uE8A5", "File name",     Path.GetFileName(doc.FilePath) ?? "—");
         AddRow(grid, 1, "\uE8EC", "Type",           (doc.FileType ?? "—").TrimStart('.').ToUpperInvariant());
-        AddRow(grid, 2, "\uE2B2", "Size",           fi != null ? FileSizeHelper.Format(fi.Length) : "—");
+        AddRow(grid, 2, "\uE2B2", "Size",           fi != null ? FileSizeFormatter.Format(fi.Length) : "—");
         AddRow(grid, 3, "\uE9D5", "Pages",          totalPages > 1 ? $"{totalPages} pages" : "—");
         AddRow(grid, 4, "\uE8DA", "Location",       doc.FolderPath ?? "—", wrap: true);
         AddRow(grid, 5, "\uE787", "Modified",       fi?.LastWriteTime.ToString("MMM d, yyyy  h:mm tt") ?? "—");

@@ -1,4 +1,5 @@
 ﻿using Microsoft.UI.Xaml.Media.Imaging;
+using QuickView.Shared.Validation;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
@@ -31,8 +32,9 @@ public static class PdfRenderer
 
     public static async Task<PdfOpenResult> OpenDocumentAsync(string filePath, CancellationToken ct = default, string? password = null)
     {
-        if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
-            return new PdfOpenResult(null, "File not found.");
+        // Validate path for security and file size
+        if (!FileSizeValidator.IsFileValidAndSafe(filePath, out var validationError))
+            return new PdfOpenResult(null, $"Validation failed: {validationError}");
 
         return await Task.Run(() =>
         {

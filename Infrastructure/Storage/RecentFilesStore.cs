@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace QuickView.Infrastructure.Storage;
 
@@ -14,7 +15,9 @@ public static class RecentFilesStore
     public static void Push(string filePath)
     {
         var list = Load();
-        list.Remove(filePath);
+        // Remove any existing entry for the same path regardless of case
+        // so that C:\Foo\bar.txt and c:\foo\bar.txt don't create two entries.
+        list.RemoveAll(p => p.Equals(filePath, StringComparison.OrdinalIgnoreCase));
         list.Insert(0, filePath);
         if (list.Count > MaxSize) list.RemoveRange(MaxSize, list.Count - MaxSize);
         SettingsStore.Save(Key, list);
@@ -23,7 +26,7 @@ public static class RecentFilesStore
     public static void Remove(string filePath)
     {
         var list = Load();
-        list.Remove(filePath);
+        list.RemoveAll(p => p.Equals(filePath, StringComparison.OrdinalIgnoreCase));
         SettingsStore.Save(Key, list);
     }
 }

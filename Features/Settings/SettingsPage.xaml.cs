@@ -3,11 +3,15 @@ using Microsoft.UI.Xaml.Controls;
 using QuickView.Infrastructure.Registration;
 using System;
 using System.Linq;
+using System.Reflection;
 
 namespace QuickView.Features.Settings;
 
 public sealed partial class SettingsPage : Page
 {
+    private const string GitHubOwner = "your-github-username"; // TODO: Update with your GitHub username
+    private const string GitHubRepo = "QuickView";
+
     public SettingsPage()
     {
         InitializeComponent();
@@ -18,6 +22,14 @@ public sealed partial class SettingsPage : Page
 
     private void SettingsPage_Loaded(object sender, RoutedEventArgs e)
     {
+        // Set version from assembly
+        var version = Assembly.GetExecutingAssembly().GetName().Version;
+        if (version != null)
+        {
+            // Format as YYYY.MM.DD
+            VersionText.Text = $"Version {version.Major}.{version.Minor:D2}.{version.Build:D2}";
+        }
+
         // Populate supported types list
         SupportedTypesText.Text = string.Join("  ",
             AppRegistration.SupportedExtensions
@@ -120,5 +132,25 @@ public sealed partial class SettingsPage : Page
         AssocInfoBar.Severity = severity;
         AssocInfoBar.Message  = message;
         AssocInfoBar.IsOpen   = true;
+    }
+
+    // ── About Links ───────────────────────────────────────────────────────────
+
+    private async void GitHubLink_Click(object sender, RoutedEventArgs e)
+    {
+        await Windows.System.Launcher.LaunchUriAsync(
+            new Uri($"https://github.com/{GitHubOwner}/{GitHubRepo}"));
+    }
+
+    private async void IssuesLink_Click(object sender, RoutedEventArgs e)
+    {
+        await Windows.System.Launcher.LaunchUriAsync(
+            new Uri($"https://github.com/{GitHubOwner}/{GitHubRepo}/issues"));
+    }
+
+    private async void ReleasesLink_Click(object sender, RoutedEventArgs e)
+    {
+        await Windows.System.Launcher.LaunchUriAsync(
+            new Uri($"https://github.com/{GitHubOwner}/{GitHubRepo}/releases"));
     }
 }

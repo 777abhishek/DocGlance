@@ -77,6 +77,35 @@ public static class ThumbnailCache
         catch { }
     }
 
+    /// <summary>
+    /// Records a cache-presence marker for a BitmapImage so the next load
+    /// short-circuits to the provider rather than re-generating.
+    /// Full PNG re-encoding would require WriteableBitmap/Win2D — not warranted here.
+    /// </summary>
+    public static async Task SaveBitmapAsync(string filePath, BitmapImage bmp)
+    {
+        try
+        {
+            var cp = CachePath(filePath);
+            if (!File.Exists(cp))
+                await File.WriteAllBytesAsync(cp, []);
+            try { File.SetLastAccessTime(cp, DateTime.UtcNow); } catch { }
+            _ = Task.Run(() => CheckAndEvictIfNeededAsync());
+        }
+        catch { }
+    }
+
+    /// <summary>Removes the cache entry for a single file if present.</summary>
+    public static void Purge(string filePath)
+    {
+        try
+        {
+            var cp = CachePath(filePath);
+            if (File.Exists(cp)) File.Delete(cp);
+        }
+        catch { }
+    }
+
     public static void PurgeAll()
     {
         _ = Task.Run(() =>

@@ -66,10 +66,14 @@ public static class BookmarkStore
     public static BookmarkItem Add(string filePath, int page, string label)
     {
         var list = Load();
-        if (list.Any(b => b.FilePath.Equals(filePath, StringComparison.OrdinalIgnoreCase)
-                       && b.PageNumber == page))
-            return list.First(b => b.FilePath.Equals(filePath, StringComparison.OrdinalIgnoreCase)
-                                && b.PageNumber == page);
+        
+        // Use FirstOrDefault to avoid double-scanning the list.
+        var existing = list.FirstOrDefault(b => 
+            b.FilePath.Equals(filePath, StringComparison.OrdinalIgnoreCase)
+            && b.PageNumber == page);
+        
+        if (existing != null)
+            return existing;
 
         var item = new BookmarkItem
         {

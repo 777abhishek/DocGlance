@@ -60,7 +60,10 @@
             <Viewbox Stretch="Uniform" HorizontalAlignment="Stretch" VerticalAlignment="Top">
                 <Grid Width="280" Height="200">
 
-                    <Border CornerRadius="16" BorderThickness="1" BorderBrush="#18FFFFFF">
+                    <Border x:Name="CardBorder" 
+                            CornerRadius="16" 
+                            BorderThickness="1"
+                            UseLayoutRounding="False">
                         <Grid>
 
                             <!-- Gradient background -->
@@ -108,7 +111,6 @@
                             <!-- Dark curved info panel -->
                             <Grid Height="100" VerticalAlignment="Bottom">
                                 <Path x:Name="InfoPanelShape"
-                                      Fill="#E6202020"
                                       Stretch="Fill"
                                       HorizontalAlignment="Stretch"
                                       VerticalAlignment="Stretch">
@@ -140,7 +142,6 @@
                                 </Grid.RowDefinitions>
                                 <TextBlock x:Name="FileNameText" Grid.Row="0"
                                            FontSize="17" FontWeight="SemiBold"
-                                           Foreground="White"
                                            TextTrimming="CharacterEllipsis"
                                            MaxLines="1" VerticalAlignment="Center"/>
                                 <Grid Grid.Row="1" Margin="0,5,0,0">
@@ -149,22 +150,22 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBlock x:Name="FileTypeDesc" Grid.Column="0"
-                                               FontSize="13" Foreground="#CCF0F0F0"
+                                               FontSize="13"
                                                TextTrimming="CharacterEllipsis"
                                                MaxLines="1" VerticalAlignment="Center"/>
                                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
-                                        <FontIcon Glyph="&#xE787;"
+                                        <FontIcon x:Name="ModifiedIcon"
+                                                  Glyph="&#xE787;"
                                                   FontFamily="Segoe Fluent Icons"
-                                                  FontSize="12" Foreground="#99FFFFFF"
+                                                  FontSize="12"
                                                   VerticalAlignment="Center"/>
                                         <TextBlock x:Name="ModifiedText"
-                                                   FontSize="13" Foreground="#99FFFFFF"
+                                                   FontSize="13"
                                                    VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Grid>
                                 <TextBlock x:Name="FileSizeText" Grid.Row="3"
                                            FontSize="14" FontWeight="SemiBold"
-                                           Foreground="#E6FFFFFF"
                                            HorizontalAlignment="Right"
                                            VerticalAlignment="Bottom"/>
                             </Grid>

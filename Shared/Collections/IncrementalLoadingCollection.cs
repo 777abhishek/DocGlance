@@ -14,7 +14,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Windows.Foundation;
 
-namespace QuickView.Collections;
+namespace QuickView.Shared.Collections;
 
 /// <summary>
 /// Incremental loading collection that loads items in batches.

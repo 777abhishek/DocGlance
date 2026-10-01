@@ -158,26 +158,95 @@
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1"
                 CornerRadius="8">
-                <StackPanel Spacing="6">
+                <StackPanel Spacing="12">
                     <TextBlock FontSize="18" FontWeight="SemiBold" Text="About" />
+                    
+                    <!-- App Info with Icon -->
                     <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                        <Image Source="/Assets/AppIcon.png" Width="36" Height="36"/>
+                        <Border Width="48" Height="48" CornerRadius="8" 
+                                Background="{ThemeResource AccentFillColorDefaultBrush}">
+                            <FontIcon Glyph="&#xE8B7;" FontSize="28" 
+                                     Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"/>
+                        </Border>
                         <StackPanel Spacing="2" VerticalAlignment="Center">
-                            <TextBlock
-                                FontSize="16" FontWeight="SemiBold"
-                                Text="QuickView"/>
-                            <TextBlock
+                            <TextBlock FontSize="20" FontWeight="SemiBold" Text="QuickView"/>
+                            <TextBlock x:Name="VersionText"
                                 Style="{StaticResource CaptionTextBlockStyle}"
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="Version 1.0.0"/>
+                                Text="Version 2026.09.28"/>
                         </StackPanel>
                     </StackPanel>
+                    
+                    <!-- Description -->
                     <TextBlock
                         Style="{StaticResource BodyTextBlockStyle}"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Text="QuickView every file, fast. A lightweight universal file viewer for Windows."
+                        Text="A fast, lightweight document viewer for Windows. Preview PDFs, Office files, code, and text without opening heavy applications."
                         TextWrapping="Wrap"/>
-                    <HyperlinkButton Content="View on GitHub" NavigateUri="https://github.com" />
+                    
+                    <!-- Features List -->
+                    <StackPanel Spacing="6">
+                        <TextBlock FontWeight="SemiBold" Text="Supported Formats" Margin="0,4,0,0"/>
+                        <StackPanel Spacing="4">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE73E;" FontSize="14" 
+                                         Foreground="{ThemeResource SystemFillColorSuccessBrush}"/>
+                                <TextBlock Text="PDF with search, thumbnails, and bookmarks" 
+                                          Style="{StaticResource CaptionTextBlockStyle}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE73E;" FontSize="14" 
+                                         Foreground="{ThemeResource SystemFillColorSuccessBrush}"/>
+                                <TextBlock Text="Office documents (DOCX, XLSX, PPTX)" 
+                                          Style="{StaticResource CaptionTextBlockStyle}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE73E;" FontSize="14" 
+                                         Foreground="{ThemeResource SystemFillColorSuccessBrush}"/>
+                                <TextBlock Text="Code with syntax highlighting (C#, JS, Python, etc.)" 
+                                          Style="{StaticResource CaptionTextBlockStyle}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE73E;" FontSize="14" 
+                                         Foreground="{ThemeResource SystemFillColorSuccessBrush}"/>
+                                <TextBlock Text="Markdown, HTML, CSV, JSON, XML, plain text" 
+                                          Style="{StaticResource CaptionTextBlockStyle}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                    
+                    <!-- Links -->
+                    <StackPanel Spacing="8" Margin="0,6,0,0">
+                        <HyperlinkButton x:Name="GitHubLink" 
+                                        Click="GitHubLink_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE774;" FontSize="16"/>
+                                <TextBlock Text="View on GitHub"/>
+                            </StackPanel>
+                        </HyperlinkButton>
+                        <HyperlinkButton x:Name="IssuesLink"
+                                        Click="IssuesLink_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE8C9;" FontSize="16"/>
+                                <TextBlock Text="Report an issue"/>
+                            </StackPanel>
+                        </HyperlinkButton>
+                        <HyperlinkButton x:Name="ReleasesLink"
+                                        Click="ReleasesLink_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE895;" FontSize="16"/>
+                                <TextBlock Text="Check for updates"/>
+                            </StackPanel>
+                        </HyperlinkButton>
+                    </StackPanel>
+                    
+                    <!-- Copyright -->
+                    <TextBlock
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        Text="© 2026 QuickView Contributors. Licensed under the MIT License."
+                        TextWrapping="Wrap"
+                        Margin="0,8,0,0"/>
                 </StackPanel>
             </Border>
             </StackPanel>

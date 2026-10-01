@@ -5,7 +5,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Media;
 using QuickView.Infrastructure.Logging;
-using QuickView.Rendering.Search;
+using QuickView.Features.Search;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -93,7 +93,7 @@ public sealed partial class ViewerPage
                     GeneratePlainLineNumbers(lineCount);
 
                     _currentTextFilePath = filePath;
-                    WordWrapButton.IsChecked = false;
+                    Toolbar.IsWordWrapChecked = false;
                     ClearTextHighlights();
 
                     ShowPlainViewer();
@@ -144,7 +144,7 @@ public sealed partial class ViewerPage
                     GenerateCodeLineNumbers(result.Paragraphs.Count);
 
                     _currentTextFilePath = filePath;
-                    WordWrapButton.IsChecked = result.TextWrapping == TextWrapping.Wrap;
+                    Toolbar.IsWordWrapChecked = result.TextWrapping == TextWrapping.Wrap;
                     ClearTextHighlights();
 
                     ShowCodeViewer();
@@ -199,12 +199,12 @@ public sealed partial class ViewerPage
         MarkdownViewerHost.Visibility   = Visibility.Collapsed;
         ZoomPill.Visibility             = Visibility.Collapsed;
 
-        WordWrapButton.Visibility  = Visibility.Visible;
-        SidebarButton.Visibility   = Visibility.Collapsed;
+        Toolbar.WordWrapVisibility  = Visibility.Visible;
+        Toolbar.SidebarButtonVisibility = Visibility.Collapsed;
         SidebarCard.Visibility     = Visibility.Collapsed;
         SidebarColumn.Width        = new GridLength(0);
-        FitWidthButton.Visibility  = Visibility.Collapsed;
-        FitPageButton.Visibility   = Visibility.Collapsed;
+        Toolbar.FitWidthButtonVisibility = Visibility.Collapsed;
+        Toolbar.FitPageButtonVisibility = Visibility.Collapsed;
     }
 
     private void ShowCodeViewer()
@@ -215,12 +215,12 @@ public sealed partial class ViewerPage
         MarkdownViewerHost.Visibility   = Visibility.Collapsed;
         ZoomPill.Visibility             = Visibility.Collapsed;
 
-        WordWrapButton.Visibility  = Visibility.Visible;
-        SidebarButton.Visibility   = Visibility.Collapsed;
+        Toolbar.WordWrapVisibility  = Visibility.Visible;
+        Toolbar.SidebarButtonVisibility = Visibility.Collapsed;
         SidebarCard.Visibility     = Visibility.Collapsed;
         SidebarColumn.Width        = new GridLength(0);
-        FitWidthButton.Visibility  = Visibility.Collapsed;
-        FitPageButton.Visibility   = Visibility.Collapsed;
+        Toolbar.FitWidthButtonVisibility = Visibility.Collapsed;
+        Toolbar.FitPageButtonVisibility = Visibility.Collapsed;
     }
 
     private void ShowMarkdownViewer()
@@ -231,12 +231,12 @@ public sealed partial class ViewerPage
         MarkdownViewerHost.Visibility   = Visibility.Visible;
         ZoomPill.Visibility             = Visibility.Collapsed;
 
-        WordWrapButton.Visibility  = Visibility.Collapsed;
-        SidebarButton.Visibility   = Visibility.Collapsed;
+        Toolbar.WordWrapVisibility  = Visibility.Collapsed;
+        Toolbar.SidebarButtonVisibility = Visibility.Collapsed;
         SidebarCard.Visibility     = Visibility.Collapsed;
         SidebarColumn.Width        = new GridLength(0);
-        FitWidthButton.Visibility  = Visibility.Collapsed;
-        FitPageButton.Visibility   = Visibility.Collapsed;
+        Toolbar.FitWidthButtonVisibility = Visibility.Collapsed;
+        Toolbar.FitPageButtonVisibility = Visibility.Collapsed;
     }
 
     internal void ShowPdfViewer()
@@ -247,10 +247,10 @@ public sealed partial class ViewerPage
         MarkdownViewerHost.Visibility   = Visibility.Collapsed;
         ZoomPill.Visibility             = Visibility.Visible;
 
-        WordWrapButton.Visibility  = Visibility.Collapsed;
-        SidebarButton.Visibility   = Visibility.Visible;
-        FitWidthButton.Visibility  = Visibility.Visible;
-        FitPageButton.Visibility   = Visibility.Visible;
+        Toolbar.WordWrapVisibility  = Visibility.Collapsed;
+        Toolbar.SidebarButtonVisibility = Visibility.Visible;
+        Toolbar.FitWidthButtonVisibility = Visibility.Visible;
+        Toolbar.FitPageButtonVisibility = Visibility.Visible;
     }
 
     private bool IsDarkTheme() =>
@@ -279,9 +279,9 @@ public sealed partial class ViewerPage
 
     // ── Word wrap ─────────────────────────────────────────────────────────────
 
-    private void WordWrapButton_Click(object sender, RoutedEventArgs e)
+    private void WordWrapButton_Click(object? sender, EventArgs e)
     {
-        bool wrap = WordWrapButton.IsChecked ?? false;
+        bool wrap = Toolbar.IsWordWrapChecked;
         if (PlainTextViewerGrid.Visibility == Visibility.Visible)
             PlainTextBlock.TextWrapping = wrap ? TextWrapping.Wrap : TextWrapping.NoWrap;
         else

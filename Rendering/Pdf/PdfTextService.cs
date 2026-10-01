@@ -10,6 +10,7 @@ namespace QuickView.Rendering.Pdf;
 /// <summary>
 /// Text extraction and search against the already-open PDFium document.
 /// All native work runs under <see cref="Pdfium.Gate"/>.
+/// Refactored to use PdfOperationBase for cleaner resource management.
 /// </summary>
 public static class PdfTextService
 {
@@ -35,6 +36,72 @@ public static class PdfTextService
         return await Task.Run(
             () => ExtractTextCore(state, pageIndex, cancellationToken),
             cancellationToken);
+    }
+
+    /// <summary>
+    /// Gets the character index at the given (x, y) device coordinates on a page.
+    /// Returns -1 if no character is at that position.
+    /// Used for text selection: map mouse click to character index.
+    /// </summary>
+    public static async Task<int> GetCharIndexAtPositionAsync(
+        PdfDocumentState state, int pageIndex, double deviceX, double deviceY,
+        CancellationToken cancellationToken = default)
+    {
+        if (state == null || pageIndex < 0 || pageIndex >= state.PageCount)
+            return -1;
+
+        return await PdfOperationBase.ExecuteTextPageOperationAsync(state, pageIndex, (doc, page, textPage) =>
+        {
+            var (pageW, pageH) = PdfOperationBase.GetPageDimensions(page, PdfRenderer.RenderDpi);
+            
+            // Convert device coordinates to PDF page coordinates
+            var (pageX, pageY) = PdfOperationBase.DeviceToPageCoordinates(page, pageW, pageH, 0, deviceX, deviceY);
+
+            // Tolerance in PDF points (1pt = 1/72 inch)
+            // Use ~15pt tolerance for easier clicking (about 5mm on screen)
+            double tolerance = 15.0;
+            int charIndex = Pdfium.FPDFText_GetCharIndexAtPos(textPage, pageX, pageY, tolerance, tolerance);
+            
+            // Log for debugging
+            if (charIndex >= 0)
+            {
+                Infrastructure.Logging.Logger.Log($"[PDF Text] Found char {charIndex} at device({deviceX:F0},{deviceY:F0}) → page({pageX:F2},{pageY:F2})");
+            }
+            
+            return charIndex;
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Extracts text between two character indices on a page.
+    /// Used for copying selected text.
+    /// </summary>
+    public static async Task<string> ExtractTextRangeAsync(
+        PdfDocumentState state, int pageIndex, int startCharIndex, int endCharIndex,
+        CancellationToken cancellationToken = default)
+    {
+        if (state == null || pageIndex < 0 || pageIndex >= state.PageCount)
+            return string.Empty;
+
+        if (startCharIndex < 0 || endCharIndex < startCharIndex)
+            return string.Empty;
+
+        return await PdfOperationBase.ExecuteTextPageOperationAsync(state, pageIndex, (doc, page, textPage) =>
+        {
+            int charCount = endCharIndex - startCharIndex + 1;
+            if (charCount <= 0) return string.Empty;
+
+            var chars = new ushort[charCount + 1];
+            int retrieved = Pdfium.FPDFText_GetText(textPage, startCharIndex, charCount, chars);
+            
+            if (retrieved <= 0) return string.Empty;
+
+            int len = retrieved - 1; // Exclude null terminator
+            while (len > 0 && chars[len - 1] == 0) len--;
+
+            return System.Text.Encoding.Unicode.GetString(
+                MemoryMarshalAsBytes(chars, len));
+        }, cancellationToken);
     }
 
     private static IReadOnlyList<PdfSearchResult> SearchCore(
