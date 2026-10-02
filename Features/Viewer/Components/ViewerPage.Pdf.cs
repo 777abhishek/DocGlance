@@ -2,6 +2,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using QuickView.Services;
 using QuickView.Controls;
 using QuickView.Infrastructure.Logging;
 using QuickView.Models;
@@ -23,6 +24,9 @@ public sealed partial class ViewerPage
     private readonly HashSet<int> _renderedThumbs = new();
     private CancellationTokenSource? _prefetchCts;
     private int _prefetchGeneration;
+
+    // ── PdfViewerService (Phase 1 foundation) ─────────────────────────────
+    private IPdfViewerService _pdfService = new PdfViewerService();
 
     private async Task LoadDocumentAsync(DocumentItem doc)
     {
