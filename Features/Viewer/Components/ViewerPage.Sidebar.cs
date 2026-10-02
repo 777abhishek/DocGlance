@@ -1,7 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using QuickView.Infrastructure.Storage;
-using QuickView.Models;
+using QuickView.Services.Storage;
+using QuickView.Core.Models;
 using QuickView.Rendering.Pdf;
 using System;
 using System.Collections.Generic;

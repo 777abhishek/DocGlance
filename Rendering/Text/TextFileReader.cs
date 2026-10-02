@@ -1,6 +1,6 @@
-﻿using System.IO;
+using System.IO;
 using System.Text;
-using QuickView.Shared.Validation;
+using QuickView.Core.Extensions;
 
 namespace QuickView.Rendering.Text;
 

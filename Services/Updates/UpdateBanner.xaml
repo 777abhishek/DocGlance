@@ -1,0 +1,24 @@
+﻿<UserControl
+    x:Class="QuickView.Services.Updates.UpdateBanner"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        Shown at the top of the main window when an update is available.
+        Styled as a WinUI InfoBar — unobtrusive, dismissible.
+    -->
+    <InfoBar x:Name="InfoBar"
+             Severity="Informational"
+             IsOpen="False"
+             IsClosable="True"
+             CornerRadius="0"
+             BorderThickness="0,0,0,1">
+        <InfoBar.ActionButton>
+            <Button x:Name="InstallButton"
+                    Content="Install Update"
+                    Style="{StaticResource AccentButtonStyle}"
+                    Click="OnInstallClick" />
+        </InfoBar.ActionButton>
+    </InfoBar>
+
+</UserControl>

@@ -44,6 +44,10 @@
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
 
+    <!-- Use our custom Program.cs main so we can set PerMonitorV2 DPI awareness
+         before any WinUI / Windows App SDK code runs (fixes blurry 4K rendering) -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+
     <!-- App icon embedded in the PE (Explorer Properties → Details) -->
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
 

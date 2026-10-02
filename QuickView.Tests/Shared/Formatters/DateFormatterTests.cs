@@ -1,4 +1,4 @@
-using QuickView.Shared.Formatters;
+using QuickView.Core.Extensions;
 
 namespace QuickView.Tests.Shared.Formatters;
 

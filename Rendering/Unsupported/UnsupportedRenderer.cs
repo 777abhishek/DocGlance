@@ -1,8 +1,8 @@
-﻿using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using QuickView.Controls;
+using QuickView.UI.Controls;
 using QuickView.Core.Interfaces;
-using QuickView.Models;
+using QuickView.Core.Models;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;

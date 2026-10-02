@@ -1,5 +1,5 @@
-﻿using Microsoft.UI.Xaml;
-using QuickView.Models;
+using Microsoft.UI.Xaml;
+using QuickView.Core.Models;
 using System.Threading;
 using System.Threading.Tasks;
 

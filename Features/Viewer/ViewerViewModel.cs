@@ -1,9 +1,9 @@
-﻿// ViewerViewModel.cs — Observable state for ViewerPage.
+// ViewerViewModel.cs — Observable state for ViewerPage.
 // Phase 2 refactoring: activated to own all viewer state for data-binding and testability.
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using QuickView.Models;
+using QuickView.Core.Models;
 using System;
 
 namespace QuickView.Features.Viewer;

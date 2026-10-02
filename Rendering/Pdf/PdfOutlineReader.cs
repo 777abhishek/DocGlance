@@ -1,4 +1,4 @@
-﻿using QuickView.Models;
+using QuickView.Core.Models;
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;

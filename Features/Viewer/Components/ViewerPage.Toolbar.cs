@@ -3,7 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
-using QuickView.Infrastructure.Storage;
+using QuickView.Services.Storage;
 using System;
 using System.IO;
 using Windows.ApplicationModel.DataTransfer;
@@ -241,6 +241,6 @@ public sealed partial class ViewerPage
 
     private void SettingsMenuItem_Click(object? sender, EventArgs e)
     {
-        Shell.TitleBarWindow.Current?.NavigateTo(typeof(Features.Settings.SettingsPage));
+        UI.Shell.TitleBarWindow.Current?.NavigateTo(typeof(Features.Settings.SettingsPage));
     }
 }

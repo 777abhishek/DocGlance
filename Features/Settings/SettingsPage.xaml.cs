@@ -1,6 +1,6 @@
 ﻿using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using QuickView.Infrastructure.Registration;
+using QuickView.Services.Registration;
 using System;
 using System.Linq;
 using System.Reflection;

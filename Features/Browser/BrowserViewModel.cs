@@ -1,5 +1,5 @@
-﻿using QuickView.FileSystem.Scanner;
-using QuickView.Models;
+using QuickView.FileSystem.Scanner;
+using QuickView.Core.Models;
 using System;
 using System.Collections.ObjectModel;
 using System.Threading;

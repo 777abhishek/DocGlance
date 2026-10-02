@@ -1,5 +1,5 @@
 using QuickView.Features.Home;
-using QuickView.Models;
+using QuickView.Core.Models;
 
 namespace QuickView.Tests.Features.Home;
 

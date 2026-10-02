@@ -1,4 +1,4 @@
-using QuickView.Shared.Validation;
+using QuickView.Core.Extensions;
 using System.IO;
 
 namespace QuickView.Tests.Shared.Validation;

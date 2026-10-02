@@ -1,6 +1,6 @@
-﻿using QuickView.Infrastructure.Logging;
-using QuickView.Models;
-using QuickView.Shared.Validation;
+using QuickView.Infrastructure.Logging;
+using QuickView.Core.Models;
+using QuickView.Core.Extensions;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;

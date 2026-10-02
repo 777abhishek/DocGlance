@@ -1,4 +1,4 @@
-﻿// HomePage.xaml.cs — Unified Recent / All Documents view with segmented toggle.
+// HomePage.xaml.cs — Unified Recent / All Documents view with segmented toggle.
 
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -9,12 +9,12 @@ using System.Linq;
 using System.Threading.Tasks;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
-using QuickView.Models;
+using QuickView.Core.Models;
 using QuickView.FileSystem.Index;
 using QuickView.FileSystem.Scanner;
-using QuickView.Thumbnails;
+using QuickView.Services.Thumbnails;
 using QuickView.Infrastructure.Logging;
-using QuickView.Infrastructure.Storage;
+using QuickView.Services.Storage;
 
 namespace QuickView.Features.Home;
 
@@ -232,7 +232,7 @@ public sealed partial class HomePage : Page
             foreach (var ext in new[]{ ".pdf",".docx",".doc",".xlsx",".xls",".pptx",".ppt",
                                         ".txt",".md",".png",".jpg",".jpeg",".mp4",".mkv",".mp3" })
                 picker.FileTypeFilter.Add(ext);
-            InitializeWithWindow.Initialize(picker, QuickView.Shell.TitleBarWindow.Current?.Hwnd ?? IntPtr.Zero);
+            InitializeWithWindow.Initialize(picker, QuickView.UI.Shell.TitleBarWindow.Current?.Hwnd ?? IntPtr.Zero);
 
             var file = await picker.PickSingleFileAsync();
             if (file == null) return;
@@ -246,7 +246,7 @@ public sealed partial class HomePage : Page
                 FileSize      = FormatSize((long)props.Size),
                 LastWriteTime = props.DateModified.DateTime,
             };
-            QuickView.Shell.TitleBarWindow.Current?.OpenDocument(doc);
+            QuickView.UI.Shell.TitleBarWindow.Current?.OpenDocument(doc);
         }
         catch (Exception ex) { Logger.Error("OpenFile_Click", ex); }
     }
@@ -263,7 +263,7 @@ public sealed partial class HomePage : Page
             var picker = new FolderPicker();
             picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
             picker.FileTypeFilter.Add("*");
-            InitializeWithWindow.Initialize(picker, QuickView.Shell.TitleBarWindow.Current?.Hwnd ?? IntPtr.Zero);
+            InitializeWithWindow.Initialize(picker, QuickView.UI.Shell.TitleBarWindow.Current?.Hwnd ?? IntPtr.Zero);
 
             var folder = await picker.PickSingleFolderAsync();
             if (folder == null) return;
@@ -411,5 +411,5 @@ public sealed partial class HomePage : Page
     }
 
     private static string FormatSize(long bytes)
-        => QuickView.Shared.Formatters.FileSizeFormatter.Format(bytes);
+        => QuickView.Core.Extensions.FileSizeFormatter.Format(bytes);
 }

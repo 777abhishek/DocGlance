@@ -1,7 +1,7 @@
-﻿using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using QuickView.Shared.Formatters;
-using QuickView.Models;
+using QuickView.Core.Extensions;
+using QuickView.Core.Models;
 using System;
 using System.IO;
 

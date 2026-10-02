@@ -1,4 +1,4 @@
-﻿using QuickView.Infrastructure.Storage;
+﻿using QuickView.Services.Storage;
 
 namespace QuickView.Infrastructure.Configuration;
 

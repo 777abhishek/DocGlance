@@ -1,13 +1,13 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
 using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
 using QuickView.Infrastructure.Logging;
-using QuickView.Infrastructure.Registration;
-using QuickView.Models;
-using QuickView.Shared.Validation;
-using QuickView.Shell;
+using QuickView.Services.Registration;
+using QuickView.Core.Models;
+using QuickView.Core.Extensions;
+using QuickView.UI.Shell;
 using System;
 using System.IO;
 using System.Linq;

@@ -12,8 +12,8 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:QuickView.Features.Home"
-    xmlns:models="using:QuickView.Models"
-    xmlns:controls="using:QuickView.Controls"
+    xmlns:models="using:QuickView.Core.Models"
+    xmlns:controls="using:QuickView.UI.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
     Loaded="Page_Loaded">

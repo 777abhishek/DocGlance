@@ -1,4 +1,4 @@
-﻿using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using QuickView.Rendering.Pdf;
@@ -396,7 +396,7 @@ public sealed partial class ViewerPage
                         Height  = ph,
                     });
                     grid.Children.Add(CreateHighlightCanvas(idx, pw, ph));
-                    var overlay = new QuickView.Controls.PdfTextSelectionOverlay
+                    var overlay = new QuickView.UI.Controls.PdfTextSelectionOverlay
                     {
                         Width  = pw,
                         Height = ph,

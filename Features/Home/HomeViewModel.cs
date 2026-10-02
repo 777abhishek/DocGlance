@@ -1,7 +1,7 @@
 // HomeViewModel.cs — Observable state for HomePage (scan, filter, sort, search).
 
 using CommunityToolkit.Mvvm.ComponentModel;
-using QuickView.Models;
+using QuickView.Core.Models;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -70,7 +70,7 @@ public sealed partial class HomeViewModel : ObservableObject
     }
 
     public string TotalFilesText  => BackgroundIndex.Count.ToString("N0");
-    public string TotalSizeText   => Shared.Formatters.FileSizeFormatter.Format(
+    public string TotalSizeText   => Core.Extensions.FileSizeFormatter.Format(
         BackgroundIndex.Sum(d => d.FileSizeBytes));
 
     // ── Filter + Sort Logic ───────────────────────────────────────────────────

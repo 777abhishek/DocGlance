@@ -1,4 +1,4 @@
-﻿using QuickView.Models;
+using QuickView.Core.Models;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;

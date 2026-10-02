@@ -4,25 +4,64 @@
 
   <application xmlns="urn:schemas-microsoft-com:asm.v3">
     <windowsSettings>
-      <!-- Per-Monitor DPI Awareness V2 for crisp rendering on high-DPI displays -->
+
+      <!--
+        DPI AWARENESS — belt-and-braces with Program.cs API call.
+        ─────────────────────────────────────────────────────────
+        The manifest is the OS-level declaration read before any code runs.
+        Program.cs reinforces it programmatically before the WinUI bootstrap,
+        because unpackaged WinUI 3 apps can have their DPI context reset by
+        the Windows App SDK bootstrapper before the manifest takes effect.
+
+        Both declarations use PerMonitorV2 — the highest-fidelity mode:
+        • Re-renders at the physical pixel density of each monitor.
+        • Handles moving the window between monitors with different scale factors.
+        • Supported on Windows 10 1703+ (Build 15063) and later.
+
+        The <dpiAware> element is the legacy Win 8.1 form; <dpiAwareness>
+        is the modern Win 10 form. Both are declared for maximum compatibility.
+      -->
       <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/PM</dpiAware>
       <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2, PerMonitor</dpiAwareness>
-      
-      <!-- Long path awareness (paths > 260 chars) -->
+
+      <!--
+        GDI SCALING — improves rendering of legacy GDI content inside the app
+        (e.g. context menus, common dialogs) on high-DPI monitors.
+        Supported on Windows 10 Creators Update (Build 15063)+.
+      -->
+      <gdiScaling xmlns="http://schemas.microsoft.com/SMI/2017/WindowsSettings">true</gdiScaling>
+
+      <!-- Long path support (paths > 260 chars) — Win 10 1607+ -->
       <longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>
-      
-      <!-- Printer driver isolation for better stability -->
-      <printerDriverIsolation xmlns="http://schemas.microsoft.com/SMI/2011/WindowsSettings">true</printerDriverIsolation>
-      
-      <!-- High resolution scrolling for smooth trackpad/mouse wheel -->
+
+      <!-- High-resolution mouse wheel scrolling — smoother trackpad/wheel -->
       <highResolutionScrollingAware xmlns="http://schemas.microsoft.com/SMI/2013/WindowsSettings">true</highResolutionScrollingAware>
+
+      <!-- Printer driver isolation for stability -->
+      <printerDriverIsolation xmlns="http://schemas.microsoft.com/SMI/2011/WindowsSettings">true</printerDriverIsolation>
+
     </windowsSettings>
   </application>
 
+  <!-- Windows compatibility declarations -->
   <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
     <application>
-      <!-- Windows 10 -->
-      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}" />
+      <!-- Windows 10 / 11 -->
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/>
     </application>
   </compatibility>
+
+  <!--
+    TRUST INFO — required for UAC.
+    requestedExecutionLevel = asInvoker: runs without elevation (correct for a viewer).
+    uiAccess = false: does not need to drive other app UIs (e.g. screen readers).
+  -->
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
+    <security>
+      <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
+        <requestedExecutionLevel level="asInvoker" uiAccess="false"/>
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+
 </assembly>
