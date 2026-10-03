@@ -114,7 +114,7 @@ public sealed partial class ViewerPage
         // bottom passes the reading point (offset + 40% of viewport height).
         double zoom         = Math.Max(0.001, DocumentScrollViewer.ZoomFactor);
         double readingPoint = DocumentScrollViewer.VerticalOffset
-                            + DocumentScrollViewer.ViewportHeight * 0.4;
+                            + DocumentScrollViewer.ViewportHeight * 0.1;
 
         double cumulative = PagesPanel.Margin.Top * zoom;
         int best = 0;
