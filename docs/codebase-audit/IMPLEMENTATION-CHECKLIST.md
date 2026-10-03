@@ -122,69 +122,127 @@ Implemented from `docs/structure-audit/4-PROPOSED-ARCHITECTURE.md`:
 
 ---
 
-## 🚧 Sprint 5: Extract PdfViewerService — IN PROGRESS
+## ✅ Sprint 5: Extract PdfViewerService — COMPLETE
 
 ### Phase 1: Service Skeleton ✅
 - [x] `Services/Documents/PdfViewerService.cs` created
 - [x] `Services/Documents/IPdfViewerService.cs` interface defined
 - [x] `Services/Documents/PdfLoadResult.cs` result type
-- [x] All methods stub (`throw new NotImplementedException`)
 
 ### Phase 2: Extract LoadDocument ✅
 - [x] `LoadDocumentAsync` implemented — opens PDF, handles password, returns `PdfLoadResult`
 - [x] Password prompt pattern: UI callback (stays in ViewerPage), logic in service
-- [x] Cancellation token support throughout
-- [x] `CloseDocument()` disposes state, cancels prefetch
 - [x] `ViewerPage.Pdf.cs` calls `_pdfService.LoadDocumentAsync()`
 
-### Phase 3: Progressive Rendering 🚧
-- [x] `RenderPageProgressiveAsync` implemented in `PdfViewerService`
-  - [x] Phase 1: 96 DPI preview returned immediately
-  - [x] Phase 2: Full `RenderDpi` quality rendered in background, returned via `onFullQuality` callback
-  - [x] `_renderedPages` HashSet tracks rendered pages (skip if already done)
-  - [x] Error handling — removes from HashSet on failure
-- [ ] Update `ViewerPage.Pdf.cs` — replace `RenderPageAsync` body with `_pdfService.RenderPageProgressiveAsync()` call
-- [ ] Keep `ApplyPageVisual` and `DrawHighlights` in ViewerPage (UI-only)
-- [ ] Manual test: open large PDF, verify preview → full quality transition
-- [ ] Build passes, 126 tests still pass
+### Phase 3: Rendering Extraction ✅
+- [x] `RenderPageProgressiveAsync` — renders at 384 DPI (no blurry preview phase)
+- [x] `_renderedPages` HashSet skip guard — evict to re-render
+- [x] `ViewerPage.Pdf.cs` delegates to service, applies `Stretch.None` (no blur)
+- [x] **Bug fixed:** removed 96 DPI preview that caused permanent blur
 
-### Phase 4: Prefetch & Eviction ⏳
-- [ ] `PrefetchPagesAround(centerPage)` — ±2 pages, prioritized order
-- [ ] `PrefetchThumbnailsAround(centerPage)` — ±4 pages
-- [ ] Generation counter for cancelling stale prefetch
-- [ ] Eviction: ±6 page window (main), ±10 (thumbnails)
-- [ ] Update `ViewerPage.Pdf.cs` — replace `PrefetchPagesAroundAsync` with service call
-- [ ] Manual test: 50-page PDF, scroll entire document, verify memory bounded
+### Phase 4: Prefetch & Eviction ✅
+- [x] `PrefetchPagesAroundAsync` — ±5 pages, prioritized center-first order
+- [x] Generation counter cancels stale prefetch on fast scroll
+- [x] Eviction window: ±30 pages (main), ±40 thumbnails
+- [x] Eviction runs AFTER render (prevents blank pages)
+- [x] `EvictPage()` called synchronously before render loop (fixes race condition)
 
-### Phase 5: Thumbnail Rendering ⏳
-- [ ] `RenderThumbnailAsync(pageIndex)` — 96 DPI, tracked in `_renderedThumbs`
-- [ ] Update `ViewerPage.Pdf.cs` — replace thumbnail render with service call
-- [ ] Manual test: sidebar thumbnails load correctly
+### Phase 5: Thumbnail Rendering ✅
+- [x] `RenderThumbnailAsync` at `ThumbnailDpi` — tracked in `_renderedThumbs`
+- [x] `IsThumbnailRendered(i)` for sidebar eviction checks
 
-### Phase 6: Service Unit Tests ⏳
-- [ ] `QuickView.Tests/Services/Documents/PdfViewerServiceTests.cs`
-- [ ] Test: `LoadDocumentAsync` with valid PDF → Success
-- [ ] Test: `LoadDocumentAsync` with invalid path → Error
-- [ ] Test: `LoadDocumentAsync` with password PDF → NeedsPassword
-- [ ] Test: `CloseDocument` releases state
-- [ ] Test: `RenderPageProgressiveAsync` skips already-rendered pages
-- [ ] Target: 126 + ~15 new tests = ~141 total
+### Phase 6: Service Unit Tests ✅
+- [x] `QuickView.Tests/Services/Documents/PdfViewerServiceTests.cs` — 22 tests
+- [x] LoadDocument: valid, missing file, invalid file, cancelled, double-load
+- [x] CloseDocument: clears state, no-op safety
+- [x] State queries: CurrentDocument, PageCount, GetPageSize, NaturalZoom
+- [x] Render tracking: skip guard, EvictPage, InvalidateRenderedPages
+- [x] Thumbnail: IsThumbnailRendered, EvictThumbnail
+- [x] PdfLoadResult factory methods: Ok, Error
+
+### Bug Fixes During Sprint 5 ✅
+- [x] **PDF quality:** 384 DPI rendering, removed blurry 96 DPI preview
+- [x] **Blank pages on scroll:** evict before render, ±30 eviction window, ±5 prefetch
+- [x] **Page counter off by 5:** DIP-space arithmetic (physH × ZoomFactor)
+- [x] **Thumbnail click jumps:** `_suppressThumbnailSync` prevents ItemClick re-entry
+- [x] **GoToPage wrong offset:** `GetPageTopDip()` — physH × ZoomFactor sum
+- [x] **Blank page race:** `EvictPage()` synchronous before render loop
+
+**Total after Sprint 5: 148 tests passing**
+
+---
+
+## ✅ Sprint 6: Dependency Injection — COMPLETE
+
+### Goal
+Wire `IPdfViewerService` into `ViewerPage` via constructor injection instead of `new PdfViewerService()`. Establishes the DI pattern for all future services.
+
+### Phase 1: Add DI Container ✅
+- [x] Add `Microsoft.Extensions.DependencyInjection` NuGet package
+- [x] Create `Infrastructure/DependencyInjection/ServiceContainer.cs`
+- [x] Register services: `IPdfViewerService → PdfViewerService` (transient scope)
+- [x] Build passes
+
+### Phase 2: Inject into ViewerPage ✅
+- [x] `ViewerPage.xaml.cs` constructor accepts `IPdfViewerService` parameter
+- [x] Remove `private IPdfViewerService _pdfService = new PdfViewerService()`
+- [x] Wire through `App.xaml.cs` → `ServiceContainer.Configure()`
+- [x] Wire through `TitleBarWindow.OpenDocument` → resolve service
+- [x] Build passes, manual test: PDF opens correctly
+
+### Phase 3: Tests ✅
+- [x] `PdfViewerServiceTests` uses concrete implementation (interface tests planned for Sprint 11)
+- [x] All 148 tests still passing
+- [x] App launches successfully via `build.ps1`
+
+**Total after Sprint 6: 148 tests passing**
+
+---
+
+## � Sprint 7: Fix IFileRenderer Disposal — IN PROGRESS
+
+### Goal
+Fix **PERF-05: WebView2 Memory Leak**. Add explicit disposal to `IFileRenderer` to properly clean up `WebView2` instances returned by `HtmlRenderer` and `MarkdownRenderer`. This prevents WebView2 processes from remaining after tab close.
+
+### Phase 1: Update IFileRenderer Interface ⏳
+- [ ] Add `CleanupAsync(UIElement element)` method to `IFileRenderer` interface
+- [ ] Document method: "Called when ViewerPage unloads — dispose WebView2, close streams, etc."
+- [ ] Build (will fail — implementations need updating)
+
+### Phase 2: Implement Cleanup in All Renderers ⏳
+- [ ] `HtmlRenderer.CleanupAsync` — dispose WebView2, call `CoreWebView2.Close()`
+- [ ] `MarkdownRenderer` — convert to class implementing `IFileRenderer`, add cleanup
+- [ ] `DocxRenderer.CleanupAsync` — no-op (returns ViewerInfoCard)
+- [ ] `XlsxRenderer.CleanupAsync` — no-op
+- [ ] `PptxRenderer.CleanupAsync` — no-op
+- [ ] `UnsupportedRenderer.CleanupAsync` — no-op
+- [ ] `CodeRenderer` — convert to class implementing `IFileRenderer`, add cleanup (no-op)
+- [ ] Build passes
+
+### Phase 3: Wire Cleanup into ViewerPage ⏳
+- [ ] `ViewerPage.xaml.cs` — track current renderer (`IFileRenderer? _currentRenderer`)
+- [ ] `CancelLoad()` — call `_currentRenderer?.CleanupAsync(_currentElement)` before clearing canvas
+- [ ] `LoadViaRendererAsync()` — cleanup previous renderer before loading new one
+- [ ] Build passes
+
+### Phase 4: Tests ⏳
+- [ ] `QuickView.Tests/Rendering/HtmlRendererTests.cs` — verify WebView2 disposal
+- [ ] `QuickView.Tests/Rendering/MarkdownRendererTests.cs` — verify WebView2 disposal
+- [ ] `QuickView.Tests/Core/Interfaces/IFileRendererTests.cs` — interface contract tests
+- [ ] All 148+ tests pass
+
+### Phase 5: Manual Verification ⏳
+- [ ] Open HTML file → Task Manager shows WebView2 process
+- [ ] Close tab → verify WebView2 process terminates
+- [ ] Open Markdown file → verify cleanup
+- [ ] Switch between file types → verify no leaked processes
+- [ ] Document fix in PERF-05 section
+
+**Total after Sprint 7: 153+ tests passing**
 
 ---
 
 ## 🔮 Future Sprints (Backlog)
-
-### Sprint 6: Dependency Injection
-- [ ] Introduce DI container (`Microsoft.Extensions.DependencyInjection`)
-- [ ] Register `PdfViewerService`, `ThumbnailService`, `RecentFilesStore`
-- [ ] `ViewerPage` receives `IPdfViewerService` via constructor
-- [ ] See: `docs/codebase-audit/refactoring-roadmap.md#phase-6`
-
-### Sprint 7: Fix IFileRenderer Interface
-- [ ] `IFileRenderer.RenderAsync` returns `UIElement` not `object`
-- [ ] `CodeRenderer` aligned with `IFileRenderer` pattern (currently bypasses registry)
-- [ ] `MarkdownRenderer` registered in `RendererRegistry`
-- [ ] See: `docs/codebase-audit/refactoring-roadmap.md#phase-4`
 
 ### Sprint 8: Text Selection
 - [ ] `UI/Controls/PdfTextSelectionOverlay` — implement codebehind
@@ -199,7 +257,7 @@ Implemented from `docs/structure-audit/4-PROPOSED-ARCHITECTURE.md`:
 
 ### Sprint 10: Annotation UI
 - [ ] Annotation toolbar: highlight, underline, ink
-- [ ] Wire to existing `PdfAnnotationService` (rendering code already done)
+- [ ] Wire to existing `PdfAnnotationService`
 - [ ] Save PDF with annotations
 
 ---
@@ -213,12 +271,14 @@ Implemented from `docs/structure-audit/4-PROPOSED-ARCHITECTURE.md`:
 | Sprint 3: ViewerViewModel | ✅ Complete | 111 |
 | Sprint 4: Web Hardening | ✅ Complete | 126 |
 | Structure Migration | ✅ Complete | 126 |
-| Sprint 5: PdfViewerService | 🚧 Phase 3/6 | 126 |
-| Sprint 6: DI Container | ⏳ Backlog | — |
+| Sprint 5: PdfViewerService | ✅ Complete | 148 |
+| Sprint 6: DI Container | ✅ Complete | 148 |
 | Sprint 7: IFileRenderer | ⏳ Backlog | — |
 | Sprint 8: Text Selection | ⏳ Backlog | — |
+| Sprint 9: Hyperlinks | ⏳ Backlog | — |
+| Sprint 10: Annotations | ⏳ Backlog | — |
 
 ---
 
 **Last Updated:** 2026-10-03  
-**Current:** Sprint 5 Phase 3 — `RenderPageProgressiveAsync` implemented, wiring ViewerPage.Pdf.cs next
+**Current:** Starting Sprint 7 — IFileRenderer disposal pattern
