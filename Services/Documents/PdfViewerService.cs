@@ -19,7 +19,7 @@ public sealed class PdfViewerService : IPdfViewerService, IDisposable
     private readonly HashSet<int> _renderedPages = new();
     private readonly HashSet<int> _renderedThumbs = new();
     private CancellationTokenSource? _prefetchCts;
-    private int _prefetchGeneration;
+    // _prefetchGeneration removed — was unused (CS0169). Will be added back in Phase 4 if needed for stale operation detection.
 
     // ── Document Lifecycle ────────────────────────────────────────────────
 

@@ -2,6 +2,7 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using QuickView.Core.Models;
+using QuickView.Common.Formatters;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -70,7 +71,7 @@ public sealed partial class HomeViewModel : ObservableObject
     }
 
     public string TotalFilesText  => BackgroundIndex.Count.ToString("N0");
-    public string TotalSizeText   => Core.Extensions.FileSizeFormatter.Format(
+    public string TotalSizeText   => FileSizeFormatter.Format(
         BackgroundIndex.Sum(d => d.FileSizeBytes));
 
     // ── Filter + Sort Logic ───────────────────────────────────────────────────

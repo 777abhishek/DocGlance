@@ -6,7 +6,7 @@ using Microsoft.Windows.AppLifecycle;
 using QuickView.Infrastructure.Logging;
 using QuickView.Services.Registration;
 using QuickView.Core.Models;
-using QuickView.Core.Extensions;
+using QuickView.Common.Validators;
 using QuickView.UI.Shell;
 using System;
 using System.IO;

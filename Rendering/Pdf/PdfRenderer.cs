@@ -1,5 +1,5 @@
 using Microsoft.UI.Xaml.Media.Imaging;
-using QuickView.Core.Extensions;
+using QuickView.Common.Validators;
 using System;
 using System.Buffers;
 using System.Collections.Generic;

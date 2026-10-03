@@ -10,8 +10,9 @@ using System.Threading.Tasks;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
 using QuickView.Core.Models;
-using QuickView.FileSystem.Index;
-using QuickView.FileSystem.Scanner;
+using QuickView.Common.Formatters;
+using QuickView.Services.FileSystem.Index;
+using QuickView.Services.FileSystem.Scanner;
 using QuickView.Services.Thumbnails;
 using QuickView.Infrastructure.Logging;
 using QuickView.Services.Storage;
@@ -411,5 +412,5 @@ public sealed partial class HomePage : Page
     }
 
     private static string FormatSize(long bytes)
-        => QuickView.Core.Extensions.FileSizeFormatter.Format(bytes);
+        => FileSizeFormatter.Format(bytes);
 }

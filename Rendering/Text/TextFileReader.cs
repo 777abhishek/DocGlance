@@ -1,6 +1,6 @@
 using System.IO;
 using System.Text;
-using QuickView.Core.Extensions;
+using QuickView.Common.Validators;
 
 namespace QuickView.Rendering.Text;
 

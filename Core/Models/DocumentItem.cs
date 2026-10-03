@@ -3,7 +3,7 @@
 
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
-using QuickView.Core.Extensions;
+using QuickView.Common.Formatters;
 using System;
 using System.ComponentModel;
 using System.IO;

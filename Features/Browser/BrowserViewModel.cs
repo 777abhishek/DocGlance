@@ -1,4 +1,4 @@
-using QuickView.FileSystem.Scanner;
+using QuickView.Services.FileSystem.Scanner;
 using QuickView.Core.Models;
 using System;
 using System.Collections.ObjectModel;
