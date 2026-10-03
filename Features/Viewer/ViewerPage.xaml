@@ -297,7 +297,8 @@
                 <!-- ── TEXT viewer (plain) — TextBox IS the scroll host ── -->
                 <!-- ── PLAIN TEXT viewer — TextBox is the scroll host ── -->
                 <Grid x:Name="PlainTextViewerGrid"
-                    Visibility="Collapsed">
+                    Visibility="Collapsed"
+                    Background="{ThemeResource LayerFillColorDefaultBrush}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>

@@ -22,7 +22,7 @@ namespace QuickView.Rendering.Code;
 public static class CodeRenderer
 {
     private const int MaxChars = 500_000; // 500 KB display limit
-    private const int MaxLines = 10_000;  // Max lines to render
+    private const int MaxLines = 2_000;   // above this, caller falls back to plain TextBlock
 
     public class CodeRenderResult
     {
@@ -32,6 +32,8 @@ public static class CodeRenderer
         public double LineHeight { get; set; } = 22;
         public TextWrapping TextWrapping { get; set; } = TextWrapping.NoWrap;
         public Thickness Padding { get; set; } = new Thickness(16, 12, 16, 12);
+        /// <summary>True when the file exceeded MaxLines — caller should offer plain-text fallback.</summary>
+        public bool ExceededLineLimit { get; set; }
     }
 
     public static async Task<CodeRenderResult> RenderAsync(string filePath, bool isDarkTheme, CancellationToken ct = default)
@@ -59,6 +61,8 @@ public static class CodeRenderer
         bool truncatedByLines = lines.Length > MaxLines;
         int lineCount = Math.Min(lines.Length, MaxLines);
 
+        result.ExceededLineLimit = truncatedByLines;
+
         for (int lineNum = 0; lineNum < lineCount; lineNum++)
         {
             string line = lines[lineNum];
@@ -76,14 +80,12 @@ public static class CodeRenderer
             result.Paragraphs.Add(para);
         }
 
-        // Truncation warning
-        if (truncatedBySize || truncatedByLines)
+        // Only show truncation warning for size limit — line limit triggers
+        // a plain-text fallback in the caller before this result is displayed.
+        if (truncatedBySize)
         {
             var warningPara = new Paragraph { LineHeight = 22, Margin = new Thickness(0, 16, 0, 0) };
-            string msg = truncatedBySize 
-                ? $"File truncated — showing first {MaxChars / 1000} KB of {loaded.FileBytes / 1000} KB"
-                : $"File truncated — showing first {MaxLines:N0} lines of {lines.Length:N0} lines";
-            
+            string msg = $"File truncated — showing first {MaxChars / 1000} KB of {loaded.FileBytes / 1000} KB";
             warningPara.Inlines.Add(new Run
             {
                 Text       = msg,

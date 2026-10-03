@@ -16,18 +16,19 @@ namespace QuickView.Features.Viewer;
 public sealed partial class ViewerPage
 {
     // ── Extension sets ────────────────────────────────────────────────────────
-    // All text-based files go through the code renderer — dark background,
-    // Cascadia Code font, proper line height, Unicode box-drawing support.
+    // Plain text → single TextBlock (~2MB RAM for 50k lines, full Unicode)
+    // Code files → RichTextBlock with syntax colours (capped at 2000 lines)
 
-    private static readonly HashSet<string> _codeExts = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> _plainTextExts = new(StringComparer.OrdinalIgnoreCase)
     {
-        // Plain text / config
         ".txt", ".log", ".csv", ".tsv", ".ini", ".cfg", ".conf",
         ".env", ".toml", ".yaml", ".yml", ".properties", ".gitignore",
         ".editorconfig", ".htaccess",
-        // Markdown
-        ".md", ".markdown", ".mdx",
-        // C-family
+        ".md", ".markdown", ".mdx",   // no syntax to colour — plain is fine
+    };
+
+    private static readonly HashSet<string> _codeExts = new(StringComparer.OrdinalIgnoreCase)
+    {
         ".cs", ".vb", ".fs", ".csx",
         ".js", ".mjs", ".cjs", ".jsx",
         ".ts", ".tsx",
@@ -36,20 +37,17 @@ public sealed partial class ViewerPage
         ".cpp", ".c", ".h", ".hpp", ".cc",
         ".go", ".rs", ".swift",
         ".rb", ".php", ".pl",
-        // Shell / scripts
         ".sh", ".bash", ".zsh", ".ps1", ".psm1", ".bat", ".cmd",
-        // Web / markup
         ".html", ".htm", ".cshtml", ".razor",
         ".css", ".scss", ".less",
-        // Data
         ".json", ".jsonc", ".json5",
         ".xml", ".xaml", ".svg", ".csproj", ".sln", ".props", ".targets",
         ".sql", ".graphql", ".gql",
-        // Misc
         ".dockerfile", ".makefile",
         ".r", ".lua", ".dart", ".ex", ".exs",
     };
 
+    internal static bool IsTextFile(string ext) => _plainTextExts.Contains(ext);
     internal static bool IsCodeFile(string ext) => _codeExts.Contains(ext);
 
     // ── State ─────────────────────────────────────────────────────────────────
@@ -60,8 +58,66 @@ public sealed partial class ViewerPage
     private SearchState? _textSearchState;
 
     // ── Plain text viewer ─────────────────────────────────────────────────────
+    // Uses a single TextBlock.Text — no per-line XAML objects.
+    // RAM cost: ~2 bytes/char → ~2MB for a 1MB file regardless of line count.
 
-    // ── Code viewer ───────────────────────────────────────────────────────────
+    private async Task LoadTextFileAsync(string filePath, CancellationToken ct)
+    {
+        ShowLoading(true);
+        try
+        {
+            var loaded = await Task.Run(
+                () => Rendering.Text.TextFileReader.ReadCapped(filePath, 1_000_000), ct);
+
+            if (ct.IsCancellationRequested) return;
+
+            string raw = loaded.Text;
+            int lineCount = loaded.LineCount;
+            if (loaded.Truncated)
+            {
+                raw += $"\n\n--- Truncated: showing first 1 MB of {loaded.FileBytes / 1_000_000} MB ---";
+                lineCount += 2;
+            }
+
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                try
+                {
+                    // Single string assignment — no per-line objects, minimal RAM
+                    PlainTextBlock.FontFamily   = new FontFamily("Cascadia Code, Cascadia Mono, Consolas, Courier New");
+                    PlainTextBlock.FontSize     = 13;
+                    PlainTextBlock.TextWrapping = TextWrapping.NoWrap;
+                    PlainTextBlock.Text         = raw;
+
+                    LineNumberBlock.FontFamily  = new FontFamily("Cascadia Code, Cascadia Mono, Consolas, Courier New");
+                    LineNumberBlock.FontSize    = 13;
+                    LineNumberBlock.LineHeight  = 22;
+                    GeneratePlainLineNumbers(lineCount);
+
+                    _currentTextFilePath = filePath;
+                    Toolbar.IsWordWrapChecked = false;
+                    ClearTextHighlights();
+
+                    ShowPlainViewer();
+                    Logger.Log($"[TextViewer] {lineCount} lines, {loaded.FileBytes / 1024} KB");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"[TextViewer] UI error: {ex.Message}");
+                    ShowErrorCard($"Cannot display file\n{ex.Message}");
+                }
+                finally { ShowLoading(false); }
+            });
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            Logger.Log($"[TextViewer] Error: {ex.Message}");
+            ShowErrorCard($"Cannot open file\n{ex.Message}");
+            ShowLoading(false);
+        }
+    }
+
+
 
     private async Task LoadCodeFileAsync(string filePath, CancellationToken ct)
     {
@@ -71,6 +127,15 @@ public sealed partial class ViewerPage
             bool isDark = IsDarkTheme();
             var result  = await Rendering.Code.CodeRenderer.RenderAsync(filePath, isDark, ct);
             if (ct.IsCancellationRequested) return;
+
+            // If file exceeds 2000 lines the per-line XAML tree gets heavy.
+            // Fall back to the lean single-TextBlock path instead.
+            if (result.ExceededLineLimit)
+            {
+                Logger.Log($"[CodeViewer] Over line limit — switching to plain text viewer");
+                await LoadTextFileAsync(filePath, ct);
+                return;
+            }
 
             DispatcherQueue.TryEnqueue(() =>
             {

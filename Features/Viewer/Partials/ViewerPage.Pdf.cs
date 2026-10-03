@@ -62,6 +62,8 @@ public sealed partial class ViewerPage
             await LoadPdfAsync(doc.FilePath ?? string.Empty, ct);
         else if (IsCodeFile(ext))
             await LoadCodeFileAsync(doc.FilePath ?? string.Empty, ct);
+        else if (IsTextFile(ext))
+            await LoadTextFileAsync(doc.FilePath ?? string.Empty, ct);
         else
         {
             // Try RendererRegistry (Office etc.) before falling back to info card
