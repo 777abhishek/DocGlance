@@ -29,9 +29,9 @@ public sealed partial class ViewerPage
 
         if (idx >= 0 && idx < PagesPanel.Children.Count)
         {
-            // VerticalOffset is in content coordinates (physical px, pre-zoom).
-            // GetPageContentTop sums Tag.physH values in the same space — exact match.
-            double targetY = GetPageContentTop(idx);
+            // ChangeView VerticalOffset is in DIP space.
+            // physH is physical px; DIP = physH * ZoomFactor.
+            double targetY = GetPageTopDip(idx);
             _suppressScrollSync = true;
             DocumentScrollViewer.ChangeView(null, targetY, null, disableAnimation: true);
             _ = DispatcherQueue.TryEnqueue(
@@ -40,8 +40,23 @@ public sealed partial class ViewerPage
         }
     }
 
-    // Returns the Y position of a page in content coordinates (physical px).
-    // This matches DocumentScrollViewer.VerticalOffset directly.
+    // Returns the top Y of a page in DIP space — same space as VerticalOffset.
+    // physH (stored in Tag) is physical pixels; multiply by ZoomFactor to get DIPs.
+    private double GetPageTopDip(int pageIndex)
+    {
+        double zoom = Math.Max(0.001, DocumentScrollViewer.ZoomFactor);
+        double top  = PagesPanel.Margin.Top * zoom;
+        for (int i = 0; i < pageIndex && i < PagesPanel.Children.Count; i++)
+        {
+            if (PagesPanel.Children[i] is Border b && b.Tag is (double _, double ph))
+                top += ph * zoom + PagesPanel.Spacing * zoom;
+            else if (PagesPanel.Children[i] is FrameworkElement el && el.ActualHeight > 0)
+                top += el.ActualHeight * zoom + PagesPanel.Spacing * zoom;
+        }
+        return top;
+    }
+
+    // Physical-px content top — kept for GetPageContentTop callers in Zoom.cs.
     private double GetPageContentTop(int pageIndex)
     {
         double top = PagesPanel.Margin.Top;
@@ -90,13 +105,18 @@ public sealed partial class ViewerPage
         if (_suppressScrollSync) return;
         if (PagesPanel.Children.Count == 0) return;
 
-        // VerticalOffset and GetPageContentTop are both in content coordinates
-        // (physical px, unscaled). Compare them directly — no zoom math needed.
-        // "Current" page = first page whose bottom is below (scrollTop + 1px),
-        // meaning its top has entered the viewport from above.
-        double scrollTop = DocumentScrollViewer.VerticalOffset;
+        // Rune formula (PdfViewer.xaml.cs UpdateCurrentPage):
+        //   page = layout.PageAt(VerticalOffset + ViewportHeight * 0.4)
+        //
+        // VerticalOffset is in DIP space. physH (Tag) is physical px.
+        // DIP height of a page = physH * ZoomFactor.
+        // We walk the stack summing DIP heights and find the first page whose
+        // bottom passes the reading point (offset + 40% of viewport height).
+        double zoom         = Math.Max(0.001, DocumentScrollViewer.ZoomFactor);
+        double readingPoint = DocumentScrollViewer.VerticalOffset
+                            + DocumentScrollViewer.ViewportHeight * 0.4;
 
-        double cumulative = PagesPanel.Margin.Top;
+        double cumulative = PagesPanel.Margin.Top * zoom;
         int best = 0;
 
         for (int i = 0; i < PagesPanel.Children.Count; i++)
@@ -104,21 +124,19 @@ public sealed partial class ViewerPage
             if (PagesPanel.Children[i] is not Border border) continue;
 
             double pageH = 0;
-            if (border.Tag is (double _, double ph)) pageH = ph;
-            else if (border.ActualHeight > 0)         pageH = border.ActualHeight;
+            if (border.Tag is (double _, double ph)) pageH = ph * zoom;
+            else if (border.ActualHeight > 0)         pageH = border.ActualHeight * zoom;
             if (pageH <= 0) continue;
 
             double pageBottom = cumulative + pageH;
 
-            // Once we find a page whose bottom is past the scroll position,
-            // that page is at least partially visible at the top — it's current.
-            if (pageBottom > scrollTop)
+            if (pageBottom > readingPoint)
             {
                 best = i;
                 break;
             }
 
-            cumulative = pageBottom + PagesPanel.Spacing;
+            cumulative = pageBottom + PagesPanel.Spacing * zoom;
             best = i;
         }
 

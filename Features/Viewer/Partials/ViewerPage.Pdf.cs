@@ -262,18 +262,24 @@ public sealed partial class ViewerPage
         int evictFirst = Math.Max(0, centerPage - 30);
         int evictLast  = Math.Min(pdfState.PageCount - 1, centerPage + 30);
 
+        // Build render queue outside try so it's accessible throughout
+        var queue = new List<int> { centerPage };
+        for (int offset = 1; offset <= 5; offset++)
+        {
+            if (centerPage + offset <= last) queue.Add(centerPage + offset);
+            if (centerPage - offset >= first) queue.Add(centerPage - offset);
+        }
+
         try
         {
-            // STEP 1 — Render the ±5 window first, THEN evict.
-            // This order prevents the visible pages from going blank between
-            // the eviction dispatch and the render completing.
-            var queue = new List<int> { centerPage };
-            for (int offset = 1; offset <= 5; offset++)
-            {
-                if (centerPage + offset <= last) queue.Add(centerPage + offset);
-                if (centerPage - offset >= first) queue.Add(centerPage - offset);
-            }
+            // STEP 1 — Evict the XAML placeholders synchronously for pages about
+            // to be rendered, so the HashSet check in the service passes cleanly.
+            // Only evict pages actually in our render window.
+            foreach (int pageIndex in queue)
+                _pdfService.EvictPage(pageIndex);
 
+            // STEP 2 — Render the ±5 window. Eviction already cleared the HashSet
+            // so every page in the queue will actually render.
             foreach (int pageIndex in queue)
             {
                 ct.ThrowIfCancellationRequested();
@@ -281,9 +287,8 @@ public sealed partial class ViewerPage
                 await RenderPageAsync(pdfState, pageIndex, ct);
             }
 
-            // STEP 2 — Only evict AFTER rendering is done for this generation.
-            // If a newer prefetch started while we were rendering, skip eviction
-            // entirely — the newer call will do its own eviction with a fresh center.
+            // STEP 3 — Evict distant pages from XAML and service cache AFTER
+            // rendering is done. Skip if a newer prefetch already started.
             if (generation != _prefetchGeneration) return;
 
             DispatcherQueue.TryEnqueue(() =>
