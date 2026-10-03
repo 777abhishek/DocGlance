@@ -91,8 +91,8 @@ public sealed class PdfViewerService : IPdfViewerService, IDisposable
     // ── Rendering ─────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Renders a page with progressive strategy: fast 96 DPI preview immediately,
-    /// then full 192 DPI quality in background via callback.
+    /// Renders a page at full quality (RenderDpi). No preview phase — avoids
+    /// the blurry-preview-stuck problem. Skips if already rendered.
     /// </summary>
     public async Task<WriteableBitmap?> RenderPageProgressiveAsync(
         int pageIndex,
@@ -108,47 +108,24 @@ public sealed class PdfViewerService : IPdfViewerService, IDisposable
 
         try
         {
-            // Phase 1: Render 96 DPI preview for instant feedback
-            var previewBmp = await PdfRenderer.RenderPageAsync(_document, pageIndex, 96f, ct);
-            
-            if (previewBmp == null || ct.IsCancellationRequested)
+            // Render directly at full quality — no blurry 96 DPI preview
+            var bmp = await PdfRenderer.RenderPageAsync(_document, pageIndex, PdfRenderer.RenderDpi, ct);
+
+            if (bmp == null || ct.IsCancellationRequested)
             {
                 _renderedPages.Remove(pageIndex);
                 return null;
             }
 
-            // Phase 2: Render full quality (192 DPI) in background
-            if (onFullQuality != null)
-            {
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        var fullBmp = await PdfRenderer.RenderPageAsync(_document, pageIndex, PdfRenderer.RenderDpi, ct);
-                        if (fullBmp != null && !ct.IsCancellationRequested)
-                        {
-                            onFullQuality(fullBmp);
-                        }
-                        else
-                        {
-                            _renderedPages.Remove(pageIndex);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _renderedPages.Remove(pageIndex);
-                        // Log error but don't throw (background task)
-                        System.Diagnostics.Debug.WriteLine($"[PdfViewerService] Full quality render failed for page {pageIndex}: {ex.Message}");
-                    }
-                }, ct);
-            }
+            // Fire the onFullQuality callback (same bitmap, used by search highlight path)
+            onFullQuality?.Invoke(bmp);
 
-            return previewBmp;
+            return bmp;
         }
         catch (Exception ex)
         {
             _renderedPages.Remove(pageIndex);
-            System.Diagnostics.Debug.WriteLine($"[PdfViewerService] Progressive render failed for page {pageIndex}: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[PdfViewerService] Render failed for page {pageIndex}: {ex.Message}");
             return null;
         }
     }

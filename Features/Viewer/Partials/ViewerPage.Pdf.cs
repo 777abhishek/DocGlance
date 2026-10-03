@@ -339,37 +339,24 @@ public sealed partial class ViewerPage
         }
     }
 
-    /// <summary>Renders a single page using the service (progressive: preview then full quality)</summary>
+    /// <summary>Renders a single page at full quality and applies it to the UI.</summary>
     private async Task RenderPageAsync(PdfDocumentState pdfState, int pageIdx, CancellationToken ct)
     {
         var (ptW, ptH) = pdfState.GetPageSize(pageIdx);
         double physW = Math.Round(ptW * PdfRenderer.RenderDpi / 96.0);
         double physH = Math.Round(ptH * PdfRenderer.RenderDpi / 96.0);
 
-        // Delegate rendering logic to service — it tracks _renderedPages and handles both phases
-        var previewBmp = await _pdfService.RenderPageProgressiveAsync(
-            pageIdx,
-            onFullQuality: fullBmp =>
-            {
-                // UI callback: apply full quality bitmap and draw search highlights
-                DispatcherQueue.TryEnqueue(() =>
-                {
-                    if (!ReferenceEquals(_pdfState, pdfState)) return;
-                    ApplyPageVisual(pageIdx, pdfState, fullBmp, physW, physH, Stretch.None);
-                    DrawHighlights(pageIdx);
-                });
-            },
-            ct);
+        var bmp = await _pdfService.RenderPageProgressiveAsync(pageIdx, ct: ct);
+        if (bmp == null || ct.IsCancellationRequested) return;
 
-        // Apply preview bitmap immediately (UI thread)
-        if (previewBmp != null && !ct.IsCancellationRequested)
+        DispatcherQueue.TryEnqueue(() =>
         {
-            DispatcherQueue.TryEnqueue(() =>
-            {
-                if (!ReferenceEquals(_pdfState, pdfState)) return;
-                ApplyPageVisual(pageIdx, pdfState, previewBmp, physW, physH, Stretch.Fill);
-            });
-        }
+            if (!ReferenceEquals(_pdfState, pdfState)) return;
+            // Stretch.Uniform preserves aspect ratio; Stretch.None is 1:1 pixel.
+            // We want exactly physW×physH at 1:1 — no stretching whatsoever.
+            ApplyPageVisual(pageIdx, pdfState, bmp, physW, physH, Stretch.None);
+            DrawHighlights(pageIdx);
+        });
     }
 
     private void ApplyPageVisual(
