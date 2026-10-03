@@ -167,26 +167,13 @@ public sealed partial class ViewerPage
     }
 
     // ── Markdown viewer ───────────────────────────────────────────────────────
+    // NOTE: Markdown now renders as plain text. WebView2 renderer removed due to
+    // 800MB+ memory usage. Future: consider lightweight Markdown → RichTextBlock.
 
     private async Task LoadMarkdownFileAsync(string filePath, CancellationToken ct)
     {
-        ShowLoading(true);
-        try
-        {
-            var renderer = new Rendering.Web.MarkdownRenderer();
-            var webView = await renderer.RenderAsync(filePath, ct) as Microsoft.UI.Xaml.Controls.WebView2;
-            if (ct.IsCancellationRequested) return;
-
-            MarkdownViewerHost.Children.Clear();
-            MarkdownViewerHost.Children.Add(webView);
-            ShowMarkdownViewer();
-        }
-        catch (Exception ex) when (!ct.IsCancellationRequested)
-        {
-            Logger.Log($"[Markdown] Fallback to text: {ex.Message}");
-            await LoadTextFileAsync(filePath, ct);
-        }
-        finally { ShowLoading(false); }
+        // Render Markdown as plain text (WebView2 removed - too heavy)
+        await LoadTextFileAsync(filePath, ct);
     }
 
     // ── Visibility helpers ────────────────────────────────────────────────────

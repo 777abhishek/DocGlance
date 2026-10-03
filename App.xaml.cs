@@ -125,8 +125,9 @@ public partial class App : Application
         QuickView.Rendering.RendererRegistry.Register(new QuickView.Rendering.Office.DocxRenderer());
         QuickView.Rendering.RendererRegistry.Register(new QuickView.Rendering.Office.XlsxRenderer());
         QuickView.Rendering.RendererRegistry.Register(new QuickView.Rendering.Office.PptxRenderer());
-        QuickView.Rendering.RendererRegistry.Register(new QuickView.Rendering.Web.HtmlRenderer());
-        QuickView.Rendering.RendererRegistry.Register(new QuickView.Rendering.Web.MarkdownRenderer());
+        
+        // NOTE: HTML and Markdown removed - WebView2 uses 800MB+ memory
+        // These file types now render as plain text via TextFileReader
     }
 
     /// <summary>
