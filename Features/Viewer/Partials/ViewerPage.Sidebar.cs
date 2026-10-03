@@ -17,6 +17,9 @@ public sealed partial class ViewerPage
     // which would cause the page number to flicker back to the previous value.
     private bool _suppressScrollSync;
 
+    // Guard: prevents ThumbnailList.SelectedIndex assignment from re-firing ItemClick
+    private bool _suppressThumbnailSync;
+
     internal void GoToPage(int n)
     {
         n = Math.Clamp(n, 1, _total);
@@ -24,55 +27,32 @@ public sealed partial class ViewerPage
         UpdateCurrentPage(n);
         PrefetchPagesAround(idx);
 
-        // ── Scroll the main canvas to the target page ─────────────────────────
-        // Compute the page's vertical offset in content coordinates (physical px)
-        // by summing up heights of preceding pages using the Tag tuple.
-        // Then suppress scroll-sync so the event doesn't flicker the page number
-        // back to the previous value while ChangeView animates.
         if (idx >= 0 && idx < PagesPanel.Children.Count)
         {
-            double targetY = GetPageScrollOffset(idx);
-
+            // VerticalOffset is in content coordinates (physical px, pre-zoom).
+            // GetPageContentTop sums Tag.physH values in the same space — exact match.
+            double targetY = GetPageContentTop(idx);
             _suppressScrollSync = true;
             DocumentScrollViewer.ChangeView(null, targetY, null, disableAnimation: true);
             _ = DispatcherQueue.TryEnqueue(
                 Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
                 () => _suppressScrollSync = false);
         }
-
     }
 
+    // Returns the Y position of a page in content coordinates (physical px).
+    // This matches DocumentScrollViewer.VerticalOffset directly.
     private double GetPageContentTop(int pageIndex)
     {
         double top = PagesPanel.Margin.Top;
         for (int i = 0; i < pageIndex && i < PagesPanel.Children.Count; i++)
         {
-            if (PagesPanel.Children[i] is Border page && page.Tag is (double _, double height))
-                top += height + PagesPanel.Spacing;
-            else if (PagesPanel.Children[i] is FrameworkElement element)
-                top += element.ActualHeight + PagesPanel.Spacing;
+            if (PagesPanel.Children[i] is Border b && b.Tag is (double _, double ph))
+                top += ph + PagesPanel.Spacing;
+            else if (PagesPanel.Children[i] is FrameworkElement el && el.ActualHeight > 0)
+                top += el.ActualHeight + PagesPanel.Spacing;
         }
         return top;
-    }
-
-    private double GetPageScrollOffset(int pageIndex)
-    {
-        double zoom = Math.Max(0.01, DocumentScrollViewer.ZoomFactor);
-        try
-        {
-            var page = PagesPanel.Children[pageIndex] as FrameworkElement;
-            if (page != null && page.ActualHeight > 0)
-            {
-                double pageTop = page.TransformToVisual(DocumentScrollViewer)
-                    .TransformPoint(new Windows.Foundation.Point(0, 0)).Y;
-                double targetViewportTop = PagesPanel.Margin.Top;
-                return Math.Max(0, DocumentScrollViewer.VerticalOffset
-                    + (pageTop - targetViewportTop) / zoom);
-            }
-        }
-        catch (Exception) { }
-
-        return GetPageContentTop(pageIndex);
     }
 
     private void UpdateCurrentPage(int page)
@@ -86,12 +66,15 @@ public sealed partial class ViewerPage
         for (int i = 0; i < Thumbnails.Count; i++)
             Thumbnails[i].IsSelected = i == index;
 
+        // Guard prevents SelectedIndex → ItemClick → GoToPage re-entry
+        _suppressThumbnailSync = true;
         if (index >= 0 && index < ThumbnailList.Items.Count)
         {
             ThumbnailList.SelectedIndex = index;
             if (ThumbnailList.SelectedItem != null)
                 ThumbnailList.ScrollIntoView(ThumbnailList.SelectedItem);
         }
+        _suppressThumbnailSync = false;
     }
 
     // ── Scroll → page number + thumbnail sync ────────────────────────────────
@@ -107,73 +90,40 @@ public sealed partial class ViewerPage
         if (_suppressScrollSync) return;
         if (PagesPanel.Children.Count == 0) return;
 
-        // Rune's PageAt() uses page rectangles in one document coordinate
-        // system. Here the ScrollViewer is allowed to zoom a physical-pixel
-        // canvas, so reading VerticalOffset against the stored page sizes can
-        // drift. Transform each page into the viewport instead; this remains
-        // correct at every zoom and display scale.
-        double readingPoint = DocumentScrollViewer.ViewportHeight * 0.35;
-        int best = Math.Clamp(_page - 1, 0, PagesPanel.Children.Count - 1);
-        bool found = false;
+        // VerticalOffset and GetPageContentTop are both in content coordinates
+        // (physical px, unscaled). Compare them directly — no zoom math needed.
+        // "Current" page = first page whose bottom is below (scrollTop + 1px),
+        // meaning its top has entered the viewport from above.
+        double scrollTop = DocumentScrollViewer.VerticalOffset;
 
-        // Fast path: check near the current page first (O(1) in typical scrolling)
-        int searchStart = Math.Max(0, best - 2);
-        int searchEnd   = Math.Min(PagesPanel.Children.Count - 1, best + 2);
+        double cumulative = PagesPanel.Margin.Top;
+        int best = 0;
 
-        for (int i = searchStart; i <= searchEnd; i++)
+        for (int i = 0; i < PagesPanel.Children.Count; i++)
         {
-            if (PagesPanel.Children[i] is not Border border || border.ActualHeight <= 0)
-                continue;
+            if (PagesPanel.Children[i] is not Border border) continue;
 
-            try
+            double pageH = 0;
+            if (border.Tag is (double _, double ph)) pageH = ph;
+            else if (border.ActualHeight > 0)         pageH = border.ActualHeight;
+            if (pageH <= 0) continue;
+
+            double pageBottom = cumulative + pageH;
+
+            // Once we find a page whose bottom is past the scroll position,
+            // that page is at least partially visible at the top — it's current.
+            if (pageBottom > scrollTop)
             {
-                var transform = border.TransformToVisual(DocumentScrollViewer);
-                double top = transform.TransformPoint(new Windows.Foundation.Point(0, 0)).Y;
-                double bottom = top + border.ActualHeight;
-
-                if (top <= readingPoint && readingPoint <= bottom)
-                {
-                    best = i;
-                    found = true;
-                    break;
-                }
+                best = i;
+                break;
             }
-            catch { }
-        }
 
-        // Fallback: full scan if user jumped/dragged scrollbar
-        if (!found)
-        {
-            double lastTop = double.NegativeInfinity;
-            for (int i = 0; i < PagesPanel.Children.Count; i++)
-            {
-                if (PagesPanel.Children[i] is not Border border || border.ActualHeight <= 0)
-                    continue;
-
-                try
-                {
-                    var transform = border.TransformToVisual(DocumentScrollViewer);
-                    double top = transform.TransformPoint(new Windows.Foundation.Point(0, 0)).Y;
-                    double bottom = top + border.ActualHeight;
-
-                    if (top <= readingPoint && top >= lastTop)
-                    {
-                        best = i;
-                        lastTop = top;
-                    }
-
-                    if (top <= readingPoint && readingPoint <= bottom)
-                    {
-                        best = i;
-                        break;
-                    }
-                }
-                catch { }
-            }
+            cumulative = pageBottom + PagesPanel.Spacing;
+            best = i;
         }
 
         int newPage = best + 1;
-        if (newPage != _page || _page.ToString() != newPage.ToString())
+        if (newPage != _page)
         {
             UpdateCurrentPage(newPage);
             PrefetchPagesAround(best);
@@ -184,6 +134,7 @@ public sealed partial class ViewerPage
 
     private void ThumbnailList_ItemClick(object sender, ItemClickEventArgs e)
     {
+        if (_suppressThumbnailSync) return;
         if (e.ClickedItem is PageThumbnailItem item)
             GoToPage(item.PageNumber);
     }
