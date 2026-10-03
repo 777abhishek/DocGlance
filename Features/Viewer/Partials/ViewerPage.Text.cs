@@ -16,16 +16,18 @@ namespace QuickView.Features.Viewer;
 public sealed partial class ViewerPage
 {
     // ── Extension sets ────────────────────────────────────────────────────────
-
-    private static readonly HashSet<string> _plainTextExts = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".txt", ".log", ".csv", ".tsv", ".ini", ".cfg", ".conf",
-        ".env", ".toml", ".yaml", ".yml", ".properties", ".gitignore",
-        ".editorconfig", ".htaccess",
-    };
+    // All text-based files go through the code renderer — dark background,
+    // Cascadia Code font, proper line height, Unicode box-drawing support.
 
     private static readonly HashSet<string> _codeExts = new(StringComparer.OrdinalIgnoreCase)
     {
+        // Plain text / config
+        ".txt", ".log", ".csv", ".tsv", ".ini", ".cfg", ".conf",
+        ".env", ".toml", ".yaml", ".yml", ".properties", ".gitignore",
+        ".editorconfig", ".htaccess",
+        // Markdown
+        ".md", ".markdown", ".mdx",
+        // C-family
         ".cs", ".vb", ".fs", ".csx",
         ".js", ".mjs", ".cjs", ".jsx",
         ".ts", ".tsx",
@@ -34,24 +36,21 @@ public sealed partial class ViewerPage
         ".cpp", ".c", ".h", ".hpp", ".cc",
         ".go", ".rs", ".swift",
         ".rb", ".php", ".pl",
+        // Shell / scripts
         ".sh", ".bash", ".zsh", ".ps1", ".psm1", ".bat", ".cmd",
+        // Web / markup
         ".html", ".htm", ".cshtml", ".razor",
         ".css", ".scss", ".less",
+        // Data
         ".json", ".jsonc", ".json5",
         ".xml", ".xaml", ".svg", ".csproj", ".sln", ".props", ".targets",
         ".sql", ".graphql", ".gql",
+        // Misc
         ".dockerfile", ".makefile",
         ".r", ".lua", ".dart", ".ex", ".exs",
     };
 
-    private static readonly HashSet<string> _markdownExts = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".md", ".markdown", ".mdx",
-    };
-
-    internal static bool IsTextFile(string ext)     => _plainTextExts.Contains(ext);
-    internal static bool IsCodeFile(string ext)     => _codeExts.Contains(ext);
-    internal static bool IsMarkdownFile(string ext) => _markdownExts.Contains(ext);
+    internal static bool IsCodeFile(string ext) => _codeExts.Contains(ext);
 
     // ── State ─────────────────────────────────────────────────────────────────
 
@@ -61,59 +60,6 @@ public sealed partial class ViewerPage
     private SearchState? _textSearchState;
 
     // ── Plain text viewer ─────────────────────────────────────────────────────
-
-    private async Task LoadTextFileAsync(string filePath, CancellationToken ct)
-    {
-        ShowLoading(true);
-        try
-        {
-            var loaded = await Task.Run(
-                () => Rendering.Text.TextFileReader.ReadCapped(filePath, 1_000_000), ct);
-
-            if (ct.IsCancellationRequested) return;
-
-            string raw = loaded.Text;
-            int lineCount = loaded.LineCount;
-            if (loaded.Truncated)
-            {
-                raw += $"\n\n--- File truncated — showing first 1000 KB of {loaded.FileBytes / 1000} KB ---";
-                lineCount += 2;
-            }
-
-            DispatcherQueue.TryEnqueue(() =>
-            {
-                try
-                {
-                    PlainTextBlock.Text         = raw;
-                    PlainTextBlock.FontSize     = 13;
-                    PlainTextBlock.TextWrapping = TextWrapping.NoWrap;
-
-                    LineNumberBlock.FontSize    = 13;
-                    LineNumberBlock.LineHeight  = 22;
-                    GeneratePlainLineNumbers(lineCount);
-
-                    _currentTextFilePath = filePath;
-                    Toolbar.IsWordWrapChecked = false;
-                    ClearTextHighlights();
-
-                    ShowPlainViewer();
-                    Logger.Log($"[TextViewer] Loaded {lineCount} lines");
-                }
-                catch (Exception ex)
-                {
-                    Logger.Log($"[TextViewer] UI error: {ex.Message}");
-                    ShowErrorCard($"Cannot display text file\n{ex.Message}");
-                }
-                finally { ShowLoading(false); }
-            });
-        }
-        catch (Exception ex) when (!ct.IsCancellationRequested)
-        {
-            Logger.Log($"[TextViewer] Error: {ex.Message}");
-            ShowErrorCard($"Cannot open text file\n{ex.Message}");
-            ShowLoading(false);
-        }
-    }
 
     // ── Code viewer ───────────────────────────────────────────────────────────
 
@@ -164,16 +110,6 @@ public sealed partial class ViewerPage
             ShowErrorCard($"Cannot open code file\n{ex.Message}");
             ShowLoading(false);
         }
-    }
-
-    // ── Markdown viewer ───────────────────────────────────────────────────────
-    // NOTE: Markdown now renders as plain text. WebView2 renderer removed due to
-    // 800MB+ memory usage. Future: consider lightweight Markdown → RichTextBlock.
-
-    private async Task LoadMarkdownFileAsync(string filePath, CancellationToken ct)
-    {
-        // Render Markdown as plain text (WebView2 removed - too heavy)
-        await LoadTextFileAsync(filePath, ct);
     }
 
     // ── Visibility helpers ────────────────────────────────────────────────────

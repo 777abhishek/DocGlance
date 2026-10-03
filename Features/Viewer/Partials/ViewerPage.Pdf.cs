@@ -60,15 +60,11 @@ public sealed partial class ViewerPage
 
         if (ext == ".pdf")
             await LoadPdfAsync(doc.FilePath ?? string.Empty, ct);
-        else if (IsMarkdownFile(ext))
-            await LoadMarkdownFileAsync(doc.FilePath ?? string.Empty, ct);
         else if (IsCodeFile(ext))
             await LoadCodeFileAsync(doc.FilePath ?? string.Empty, ct);
-        else if (IsTextFile(ext))
-            await LoadTextFileAsync(doc.FilePath ?? string.Empty, ct);
         else
         {
-            // A1: Try RendererRegistry before showing "unsupported" info card
+            // Try RendererRegistry (Office etc.) before falling back to info card
             var renderer = QuickView.Rendering.RendererRegistry.GetRenderer(ext);
             if (renderer != null)
                 await LoadViaRendererAsync(renderer, doc.FilePath ?? string.Empty, ct);
