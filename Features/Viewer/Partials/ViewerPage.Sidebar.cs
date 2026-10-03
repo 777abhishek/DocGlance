@@ -24,14 +24,11 @@ public sealed partial class ViewerPage
         UpdateCurrentPage(n);
         PrefetchPagesAround(idx);
 
-        // ── Scroll the main canvas to the target page ─────────────────────────
-        // Compute the page's vertical offset in content coordinates (physical px)
-        // by summing up heights of preceding pages using the Tag tuple.
-        // Then suppress scroll-sync so the event doesn't flicker the page number
-        // back to the previous value while ChangeView animates.
         if (idx >= 0 && idx < PagesPanel.Children.Count)
         {
-            double targetY = GetPageScrollOffset(idx);
+            // Compute content-space Y by summing page heights from Tag tuples.
+            // VerticalOffset is in content (unscaled) coordinates — no ZoomFactor needed.
+            double targetY = GetPageContentTop(idx);
 
             _suppressScrollSync = true;
             DocumentScrollViewer.ChangeView(null, targetY, null, disableAnimation: true);
@@ -39,41 +36,25 @@ public sealed partial class ViewerPage
                 Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
                 () => _suppressScrollSync = false);
         }
-
     }
 
     private double GetPageContentTop(int pageIndex)
     {
+        // Sum up page heights in content coordinates (physical px = what ScrollViewer
+        // uses for VerticalOffset before ZoomFactor is applied).
         double top = PagesPanel.Margin.Top;
         for (int i = 0; i < pageIndex && i < PagesPanel.Children.Count; i++)
         {
-            if (PagesPanel.Children[i] is Border page && page.Tag is (double _, double height))
-                top += height + PagesPanel.Spacing;
-            else if (PagesPanel.Children[i] is FrameworkElement element)
-                top += element.ActualHeight + PagesPanel.Spacing;
+            if (PagesPanel.Children[i] is Border page && page.Tag is (double _, double ph))
+                top += ph + PagesPanel.Spacing;
+            else if (PagesPanel.Children[i] is FrameworkElement el && el.ActualHeight > 0)
+                top += el.ActualHeight + PagesPanel.Spacing;
         }
         return top;
     }
 
-    private double GetPageScrollOffset(int pageIndex)
-    {
-        double zoom = Math.Max(0.01, DocumentScrollViewer.ZoomFactor);
-        try
-        {
-            var page = PagesPanel.Children[pageIndex] as FrameworkElement;
-            if (page != null && page.ActualHeight > 0)
-            {
-                double pageTop = page.TransformToVisual(DocumentScrollViewer)
-                    .TransformPoint(new Windows.Foundation.Point(0, 0)).Y;
-                double targetViewportTop = PagesPanel.Margin.Top;
-                return Math.Max(0, DocumentScrollViewer.VerticalOffset
-                    + (pageTop - targetViewportTop) / zoom);
-            }
-        }
-        catch (Exception) { }
-
-        return GetPageContentTop(pageIndex);
-    }
+    // Guard: prevents ThumbnailList.SelectedIndex assignment from re-firing navigation
+    private bool _suppressThumbnailSync;
 
     private void UpdateCurrentPage(int page)
     {
@@ -86,12 +67,14 @@ public sealed partial class ViewerPage
         for (int i = 0; i < Thumbnails.Count; i++)
             Thumbnails[i].IsSelected = i == index;
 
+        _suppressThumbnailSync = true;
         if (index >= 0 && index < ThumbnailList.Items.Count)
         {
             ThumbnailList.SelectedIndex = index;
             if (ThumbnailList.SelectedItem != null)
                 ThumbnailList.ScrollIntoView(ThumbnailList.SelectedItem);
         }
+        _suppressThumbnailSync = false;
     }
 
     // ── Scroll → page number + thumbnail sync ────────────────────────────────
@@ -107,46 +90,37 @@ public sealed partial class ViewerPage
         if (_suppressScrollSync) return;
         if (PagesPanel.Children.Count == 0) return;
 
-        // The "reading point" is 40% down the viewport — the line the user's
-        // eyes are naturally on. The current page is whichever page's top edge
-        // is closest to (but not below) this point, i.e. the last page that
-        // has started entering the viewport from the top.
-        double readingPoint = DocumentScrollViewer.ViewportHeight * 0.40;
+        // VerticalOffset is in content-space coordinates (physical px, unaffected
+        // by ZoomFactor). Page heights in Tag tuples are also physical px.
+        // So we can compare them directly with no zoom math.
+        double scrollTop = DocumentScrollViewer.VerticalOffset;
+        double viewportH = DocumentScrollViewer.ViewportHeight / Math.Max(0.001, DocumentScrollViewer.ZoomFactor);
 
+        // Flip point: page is "current" once its top has scrolled 20% into view.
+        double threshold = scrollTop + viewportH * 0.20;
+
+        double cumulative = PagesPanel.Margin.Top;
         int best = 0;
-        double bestTop = double.NegativeInfinity;
 
         for (int i = 0; i < PagesPanel.Children.Count; i++)
         {
-            if (PagesPanel.Children[i] is not Border border || border.ActualHeight <= 0)
-                continue;
+            if (PagesPanel.Children[i] is not Border border) continue;
 
-            try
+            double pageH = 0;
+            if (border.Tag is (double _, double ph)) pageH = ph;
+            else if (border.ActualHeight > 0)         pageH = border.ActualHeight;
+            if (pageH <= 0) continue;
+
+            double pageBottom = cumulative + pageH;
+
+            if (pageBottom > threshold)
             {
-                var transform = border.TransformToVisual(DocumentScrollViewer);
-                double top    = transform.TransformPoint(new Windows.Foundation.Point(0, 0)).Y;
-                double bottom = top + border.ActualHeight;
-
-                // Page fully above the reading point — candidate if it's the lowest one so far
-                if (top <= readingPoint && top > bestTop)
-                {
-                    best    = i;
-                    bestTop = top;
-                }
-
-                // Page straddles the reading point — this is the definitive answer
-                if (top <= readingPoint && bottom > readingPoint)
-                {
-                    best = i;
-                    break;
-                }
-
-                // Pages are laid out top-to-bottom; once the top edge is below
-                // the reading point all subsequent pages will be too — stop early.
-                if (top > readingPoint)
-                    break;
+                best = i;
+                break;
             }
-            catch { }
+
+            cumulative = pageBottom + PagesPanel.Spacing;
+            best = i;
         }
 
         int newPage = best + 1;
@@ -161,6 +135,7 @@ public sealed partial class ViewerPage
 
     private void ThumbnailList_ItemClick(object sender, ItemClickEventArgs e)
     {
+        if (_suppressThumbnailSync) return;
         if (e.ClickedItem is PageThumbnailItem item)
             GoToPage(item.PageNumber);
     }
