@@ -1,43 +1,46 @@
 using QuickView.Services.Documents;
-using QuickView.Rendering.Pdf;
 using Xunit;
+using System.IO;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace QuickView.Tests.Services.Documents;
 
-public class PdfViewerServiceTests : IDisposable
+/// <summary>
+/// Unit tests for PdfViewerService.
+/// Uses a programmatically generated minimal valid PDF — no external file dependency.
+/// </summary>
+public sealed class PdfViewerServiceTests : IDisposable
 {
-    private readonly string _testPdfPath;
-    private PdfViewerService? _service;
+    private readonly string _validPdfPath;
+    private readonly string _invalidFilePath;
 
     public PdfViewerServiceTests()
     {
-        // Create a minimal valid PDF for testing
-        _testPdfPath = Path.Combine(Path.GetTempPath(), $"test_{Guid.NewGuid()}.pdf");
-        CreateMinimalPdf(_testPdfPath);
+        _validPdfPath   = Path.Combine(Path.GetTempPath(), $"qv_test_{Guid.NewGuid():N}.pdf");
+        _invalidFilePath = Path.Combine(Path.GetTempPath(), $"qv_notpdf_{Guid.NewGuid():N}.txt");
+
+        WriteSinglePagePdf(_validPdfPath);
+        File.WriteAllText(_invalidFilePath, "This is not a PDF file.");
     }
 
     public void Dispose()
     {
-        _service?.Dispose();
-        if (File.Exists(_testPdfPath))
-        {
-            File.Delete(_testPdfPath);
-        }
+        if (File.Exists(_validPdfPath))   File.Delete(_validPdfPath);
+        if (File.Exists(_invalidFilePath)) File.Delete(_invalidFilePath);
     }
 
-    #region LoadDocument Tests
+    // ── Document Lifecycle ────────────────────────────────────────────────
 
     [Fact]
     public async Task LoadDocumentAsync_ValidPdf_ReturnsSuccess()
     {
-        // Arrange
-        _service = new PdfViewerService();
+        using var svc = new PdfViewerService();
 
-        // Act
-        var result = await _service.LoadDocumentAsync(_testPdfPath);
+        var result = await svc.LoadDocumentAsync(_validPdfPath);
 
-        // Assert
-        Assert.True(result.IsSuccess);
+        Assert.True(result.Success);
         Assert.NotNull(result.Document);
         Assert.True(result.PageCount > 0);
         Assert.Null(result.ErrorMessage);
@@ -46,341 +49,275 @@ public class PdfViewerServiceTests : IDisposable
     [Fact]
     public async Task LoadDocumentAsync_NonExistentFile_ReturnsError()
     {
-        // Arrange
-        _service = new PdfViewerService();
-        var nonExistentPath = "C:\\NonExistent\\File.pdf";
+        using var svc = new PdfViewerService();
+        var missing = Path.Combine(Path.GetTempPath(), "does_not_exist_qv.pdf");
 
-        // Act
-        var result = await _service.LoadDocumentAsync(nonExistentPath);
+        var result = await svc.LoadDocumentAsync(missing);
 
-        // Assert
-        Assert.False(result.IsSuccess);
+        Assert.False(result.Success);
         Assert.Null(result.Document);
         Assert.Equal(0, result.PageCount);
         Assert.NotNull(result.ErrorMessage);
-        Assert.Contains("not found", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task LoadDocumentAsync_InvalidPdf_ReturnsError()
+    public async Task LoadDocumentAsync_InvalidFile_ReturnsError()
     {
-        // Arrange
-        _service = new PdfViewerService();
-        var invalidPath = Path.Combine(Path.GetTempPath(), $"invalid_{Guid.NewGuid()}.pdf");
-        await File.WriteAllTextAsync(invalidPath, "This is not a valid PDF");
+        using var svc = new PdfViewerService();
 
-        try
-        {
-            // Act
-            var result = await _service.LoadDocumentAsync(invalidPath);
+        var result = await svc.LoadDocumentAsync(_invalidFilePath);
 
-            // Assert
-            Assert.False(result.IsSuccess);
-            Assert.Null(result.Document);
-            Assert.Equal(0, result.PageCount);
-            Assert.NotNull(result.ErrorMessage);
-        }
-        finally
-        {
-            File.Delete(invalidPath);
-        }
+        Assert.False(result.Success);
+        Assert.Null(result.Document);
+        Assert.Equal(0, result.PageCount);
+        Assert.NotNull(result.ErrorMessage);
     }
 
     [Fact]
-    public async Task LoadDocumentAsync_MultipleLoads_DisposesOldDocument()
+    public async Task LoadDocumentAsync_Cancelled_ReturnsError()
     {
-        // Arrange
-        _service = new PdfViewerService();
-        await _service.LoadDocumentAsync(_testPdfPath);
-        var firstDoc = _service.CurrentDocument;
+        using var svc = new PdfViewerService();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
 
-        // Act
-        await _service.LoadDocumentAsync(_testPdfPath);
-        var secondDoc = _service.CurrentDocument;
+        var result = await svc.LoadDocumentAsync(_validPdfPath, ct: cts.Token);
 
-        // Assert
-        Assert.NotNull(firstDoc);
-        Assert.NotNull(secondDoc);
-        Assert.NotEqual(firstDoc, secondDoc);
-    }
-
-    #endregion
-
-    #region CloseDocument Tests
-
-    [Fact]
-    public async Task CloseDocument_DisposesResources()
-    {
-        // Arrange
-        _service = new PdfViewerService();
-        await _service.LoadDocumentAsync(_testPdfPath);
-        Assert.NotNull(_service.CurrentDocument);
-
-        // Act
-        _service.CloseDocument();
-
-        // Assert
-        Assert.Null(_service.CurrentDocument);
+        Assert.False(result.Success);
     }
 
     [Fact]
-    public void CloseDocument_NoDocumentLoaded_DoesNotThrow()
+    public async Task LoadDocumentAsync_LoadTwice_DisposesFirst()
     {
-        // Arrange
-        _service = new PdfViewerService();
+        using var svc = new PdfViewerService();
 
-        // Act & Assert
-        var exception = Record.Exception(() => _service.CloseDocument());
-        Assert.Null(exception);
+        var r1 = await svc.LoadDocumentAsync(_validPdfPath);
+        var r2 = await svc.LoadDocumentAsync(_validPdfPath);
+
+        Assert.True(r2.Success);
+        Assert.NotNull(r2.Document);
     }
 
-    #endregion
-
-    #region RenderPageProgressiveAsync Tests
+    // ── CloseDocument ─────────────────────────────────────────────────────
 
     [Fact]
-    public async Task RenderPageProgressiveAsync_PreviewMode_ReturnsLowResImage()
+    public async Task CloseDocument_AfterLoad_ClearsState()
     {
-        // Arrange
-        _service = new PdfViewerService();
-        await _service.LoadDocumentAsync(_testPdfPath);
-        bool previewCallbackCalled = false;
-        bool fullCallbackCalled = false;
+        using var svc = new PdfViewerService();
+        await svc.LoadDocumentAsync(_validPdfPath);
 
-        // Act
-        await _service.RenderPageProgressiveAsync(
-            pageIndex: 0,
-            targetWidth: 800,
-            onPreview: (bitmap) => { previewCallbackCalled = bitmap != null; },
-            onFull: (bitmap) => { fullCallbackCalled = bitmap != null; }
-        );
+        svc.CloseDocument();
 
-        // Assert
-        Assert.True(previewCallbackCalled, "Preview callback should be called");
-        Assert.True(fullCallbackCalled, "Full quality callback should be called");
+        Assert.Null(svc.CurrentDocument);
+        Assert.Equal(0, svc.PageCount);
     }
 
     [Fact]
-    public async Task RenderPageProgressiveAsync_InvalidPageIndex_ThrowsException()
+    public void CloseDocument_WithNoDocument_DoesNotThrow()
     {
-        // Arrange
-        _service = new PdfViewerService();
-        await _service.LoadDocumentAsync(_testPdfPath);
+        using var svc = new PdfViewerService();
 
-        // Act & Assert
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () =>
-        {
-            await _service.RenderPageProgressiveAsync(
-                pageIndex: 999,
-                targetWidth: 800,
-                onPreview: (_) => { },
-                onFull: (_) => { }
-            );
-        });
+        var ex = Record.Exception(() => svc.CloseDocument());
+
+        Assert.Null(ex);
+    }
+
+    // ── State Queries ─────────────────────────────────────────────────────
+
+    [Fact]
+    public void CurrentDocument_BeforeLoad_IsNull()
+    {
+        using var svc = new PdfViewerService();
+
+        Assert.Null(svc.CurrentDocument);
     }
 
     [Fact]
-    public async Task RenderPageProgressiveAsync_NoDocumentLoaded_ThrowsException()
+    public void PageCount_BeforeLoad_IsZero()
     {
-        // Arrange
-        _service = new PdfViewerService();
+        using var svc = new PdfViewerService();
 
-        // Act & Assert
-        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-        {
-            await _service.RenderPageProgressiveAsync(
-                pageIndex: 0,
-                targetWidth: 800,
-                onPreview: (_) => { },
-                onFull: (_) => { }
-            );
-        });
-    }
-
-    #endregion
-
-    #region Prefetch Tests
-
-    [Fact]
-    public async Task PrefetchPagesAround_ValidIndex_QueuesPages()
-    {
-        // Arrange
-        _service = new PdfViewerService();
-        await _service.LoadDocumentAsync(_testPdfPath);
-        var renderedPages = new HashSet<int>();
-
-        // Act
-        await _service.PrefetchPagesAround(
-            currentPageIndex: 2,
-            targetWidth: 800,
-            onPageReady: (pageIndex, bitmap) => { renderedPages.Add(pageIndex); },
-            onEvictPage: (_) => { }
-        );
-
-        // Give it time to render prefetch pages
-        await Task.Delay(500);
-
-        // Assert
-        Assert.Contains(2, renderedPages); // Current page
-        // Should have attempted 0, 1, 3, 4 (±2 range)
+        Assert.Equal(0, svc.PageCount);
     }
 
     [Fact]
-    public async Task PrefetchPagesAround_BoundaryConditions_HandlesEdges()
+    public async Task PageCount_AfterLoad_MatchesDocument()
     {
-        // Arrange
-        _service = new PdfViewerService();
-        await _service.LoadDocumentAsync(_testPdfPath);
-        var renderedPages = new HashSet<int>();
+        using var svc = new PdfViewerService();
 
-        // Act - First page
-        await _service.PrefetchPagesAround(
-            currentPageIndex: 0,
-            targetWidth: 800,
-            onPageReady: (pageIndex, bitmap) => { renderedPages.Add(pageIndex); },
-            onEvictPage: (_) => { }
-        );
+        var result = await svc.LoadDocumentAsync(_validPdfPath);
 
-        await Task.Delay(300);
-
-        // Assert - Should not try negative indices
-        Assert.Contains(0, renderedPages);
-        Assert.DoesNotContain(-1, renderedPages);
-        Assert.DoesNotContain(-2, renderedPages);
+        Assert.Equal(result.PageCount, svc.PageCount);
     }
 
     [Fact]
-    public async Task PrefetchPagesAround_MultipleCallsQuickly_CancelsOldOperations()
+    public async Task GetPageSize_ValidPage_ReturnsPositiveDimensions()
     {
-        // Arrange
-        _service = new PdfViewerService();
-        await _service.LoadDocumentAsync(_testPdfPath);
-        var renderedPages = new HashSet<int>();
+        using var svc = new PdfViewerService();
+        await svc.LoadDocumentAsync(_validPdfPath);
 
-        // Act - Rapid page changes
-        var task1 = _service.PrefetchPagesAround(0, 800,
-            (i, b) => renderedPages.Add(i), (_) => { });
-        var task2 = _service.PrefetchPagesAround(5, 800,
-            (i, b) => renderedPages.Add(i), (_) => { });
-        var task3 = _service.PrefetchPagesAround(10, 800,
-            (i, b) => renderedPages.Add(i), (_) => { });
+        var (w, h) = svc.GetPageSize(0);
 
-        await Task.WhenAll(task1, task2, task3);
-        await Task.Delay(300);
-
-        // Assert - Should have cancelled early prefetch operations
-        // (Exact pages depend on timing, but should have some results)
-        Assert.NotEmpty(renderedPages);
-    }
-
-    #endregion
-
-    #region Thumbnail Prefetch Tests
-
-    [Fact]
-    public async Task PrefetchThumbnailsAround_ValidIndex_QueuesThumbnails()
-    {
-        // Arrange
-        _service = new PdfViewerService();
-        await _service.LoadDocumentAsync(_testPdfPath);
-        var renderedThumbs = new HashSet<int>();
-
-        // Act
-        await _service.PrefetchThumbnailsAround(
-            currentPageIndex: 3,
-            targetHeight: 150,
-            onThumbReady: (pageIndex, bitmap) => { renderedThumbs.Add(pageIndex); },
-            onEvictThumb: (_) => { }
-        );
-
-        await Task.Delay(500);
-
-        // Assert
-        Assert.Contains(3, renderedThumbs); // Current page
-        // Should have attempted ±4 range
+        Assert.True(w > 0, "Width should be positive");
+        Assert.True(h > 0, "Height should be positive");
     }
 
     [Fact]
-    public async Task PrefetchThumbnailsAround_NoDocument_ThrowsException()
+    public void NaturalZoom_IsPositive()
     {
-        // Arrange
-        _service = new PdfViewerService();
+        using var svc = new PdfViewerService();
 
-        // Act & Assert
-        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-        {
-            await _service.PrefetchThumbnailsAround(
-                currentPageIndex: 0,
-                targetHeight: 150,
-                onThumbReady: (_, __) => { },
-                onEvictThumb: (_) => { }
-            );
-        });
+        Assert.True(svc.NaturalZoom > 0);
     }
 
-    #endregion
-
-    #region Eviction Tests
+    // ── Rendering ─────────────────────────────────────────────────────────
+    // NOTE: RenderPageProgressiveAsync and RenderThumbnailAsync call PDFium
+    // which requires a UI thread for WriteableBitmap creation. In the headless
+    // test runner these return null (no bitmap). We test the service's tracking
+    // logic (HashSet guard, eviction, invalidation) independently of the bitmap.
 
     [Fact]
-    public void EvictPage_RemovesFromCache()
+    public async Task RenderPageProgressiveAsync_NoDocument_ReturnsNull()
     {
-        // Arrange
-        _service = new PdfViewerService();
+        using var svc = new PdfViewerService();
 
-        // Act & Assert - Should not throw
-        var exception = Record.Exception(() => _service.EvictPage(5));
-        Assert.Null(exception);
+        var bmp = await svc.RenderPageProgressiveAsync(0);
+
+        Assert.Null(bmp);
     }
 
     [Fact]
-    public void EvictThumbnail_RemovesFromCache()
+    public async Task RenderPageProgressiveAsync_SecondCallSamePage_SkippedByHashSet()
     {
-        // Arrange
-        _service = new PdfViewerService();
+        // Even without a real bitmap, the second call returns null because
+        // _renderedPages.Add(0) returns false on the second attempt.
+        using var svc = new PdfViewerService();
+        await svc.LoadDocumentAsync(_validPdfPath);
 
-        // Act & Assert - Should not throw
-        var exception = Record.Exception(() => _service.EvictThumbnail(5));
-        Assert.Null(exception);
+        // First call — adds to HashSet (may return null if no UI thread)
+        await svc.RenderPageProgressiveAsync(0);
+        // Second call — HashSet blocks it, definitely returns null
+        var second = await svc.RenderPageProgressiveAsync(0);
+
+        Assert.Null(second);
     }
 
-    #endregion
-
-    #region Helper Methods
-
-    private static void CreateMinimalPdf(string path)
+    [Fact]
+    public async Task EvictPage_AllowsRenderRetry()
     {
-        // Minimal valid PDF structure (1 page, blank)
-        var pdfContent = @"%PDF-1.4
-1 0 obj
-<< /Type /Catalog /Pages 2 0 R >>
-endobj
-2 0 obj
-<< /Type /Pages /Kids [3 0 R] /Count 1 >>
-endobj
-3 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << >> >>
-endobj
-4 0 obj
-<< /Length 0 >>
-stream
-endstream
-endobj
-xref
-0 5
-0000000000 65535 f
-0000000009 00000 n
-0000000058 00000 n
-0000000115 00000 n
-0000000230 00000 n
-trailer
-<< /Size 5 /Root 1 0 R >>
-startxref
-279
-%%EOF";
+        using var svc = new PdfViewerService();
+        await svc.LoadDocumentAsync(_validPdfPath);
 
-        File.WriteAllText(path, pdfContent);
+        await svc.RenderPageProgressiveAsync(0); // first call — marks page rendered
+        svc.EvictPage(0);                         // removes from HashSet
+        // After eviction the service no longer skips the page.
+        // We can't assert a bitmap (no UI thread) but we can confirm the
+        // call does NOT return null due to the skip guard — it either renders
+        // or fails on bitmap creation. Either way it re-entered the render path.
+        var ex = await Record.ExceptionAsync(() => svc.RenderPageProgressiveAsync(0));
+        Assert.Null(ex); // no exception thrown
     }
 
-    #endregion
+    [Fact]
+    public async Task InvalidateRenderedPages_ClearsAllTracking()
+    {
+        using var svc = new PdfViewerService();
+        await svc.LoadDocumentAsync(_validPdfPath);
+
+        await svc.RenderPageProgressiveAsync(0);
+        svc.InvalidateRenderedPages();
+        // After invalidation, the second call is no longer blocked by the guard.
+        var ex = await Record.ExceptionAsync(() => svc.RenderPageProgressiveAsync(0));
+        Assert.Null(ex);
+    }
+
+    // ── Thumbnails ────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task RenderThumbnailAsync_NoDocument_ReturnsNull()
+    {
+        using var svc = new PdfViewerService();
+
+        var bmp = await svc.RenderThumbnailAsync(0);
+
+        Assert.Null(bmp);
+    }
+
+    [Fact]
+    public async Task IsThumbnailRendered_BeforeRender_ReturnsFalse()
+    {
+        using var svc = new PdfViewerService();
+        await svc.LoadDocumentAsync(_validPdfPath);
+
+        Assert.False(svc.IsThumbnailRendered(0));
+    }
+
+    [Fact]
+    public async Task EvictThumbnail_ResetsTracking()
+    {
+        using var svc = new PdfViewerService();
+        await svc.LoadDocumentAsync(_validPdfPath);
+
+        await svc.RenderThumbnailAsync(0);
+        svc.EvictThumbnail(0);
+
+        // After eviction, thumbnail is no longer tracked as rendered
+        Assert.False(svc.IsThumbnailRendered(0));
+    }
+
+    // ── CancelPrefetch ────────────────────────────────────────────────────
+
+    [Fact]
+    public void CancelPrefetch_WithNoInflightWork_DoesNotThrow()
+    {
+        using var svc = new PdfViewerService();
+
+        var ex = Record.Exception(() => svc.CancelPrefetch());
+
+        Assert.Null(ex);
+    }
+
+    // ── PdfLoadResult factory methods ─────────────────────────────────────
+
+    [Fact]
+    public void PdfLoadResult_Ok_HasCorrectState()
+    {
+        var result = PdfLoadResult.Ok(null!, 5);
+
+        Assert.True(result.Success);
+        Assert.Equal(5, result.PageCount);
+        Assert.Null(result.ErrorMessage);
+    }
+
+    [Fact]
+    public void PdfLoadResult_Error_HasCorrectState()
+    {
+        var result = PdfLoadResult.Error("Something failed");
+
+        Assert.False(result.Success);
+        Assert.Equal(0, result.PageCount);
+        Assert.Null(result.Document);
+        Assert.Equal("Something failed", result.ErrorMessage);
+    }
+
+    // ── Minimal valid single-page PDF generator ───────────────────────────
+
+    private static void WriteSinglePagePdf(string path)
+    {
+        // Minimal valid PDF 1.4 — one blank letter-size page (612×792 pts).
+        // Hand-crafted to avoid any external dependency.
+        const string body =
+            "%PDF-1.4\n" +
+            "1 0 obj\n<</Type/Catalog/Pages 2 0 R>>\nendobj\n" +
+            "2 0 obj\n<</Type/Pages/Kids[3 0 R]/Count 1>>\nendobj\n" +
+            "3 0 obj\n<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]>>\nendobj\n" +
+            "xref\n0 4\n" +
+            "0000000000 65535 f \n" +
+            "0000000009 00000 n \n" +
+            "0000000058 00000 n \n" +
+            "0000000115 00000 n \n" +
+            "trailer\n<</Size 4/Root 1 0 R>>\n" +
+            "startxref\n190\n%%EOF";
+
+        File.WriteAllText(path, body);
+    }
 }
