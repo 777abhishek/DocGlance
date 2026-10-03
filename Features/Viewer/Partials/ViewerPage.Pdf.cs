@@ -249,53 +249,26 @@ public sealed partial class ViewerPage
     {
         int generation = Interlocked.Increment(ref _prefetchGeneration);
 
-        // Keep ±2 pages around centerPage (fast, low memory)
-        int first = Math.Max(0, centerPage - 2);
-        int last  = Math.Min(pdfState.PageCount - 1, centerPage + 2);
+        // Render ±5 pages around center — enough that normal scrolling never
+        // shows a blank page while the next render is queued.
+        int first = Math.Max(0, centerPage - 5);
+        int last  = Math.Min(pdfState.PageCount - 1, centerPage + 5);
 
-        // Eviction window: keep rendered bitmaps only for ±6 pages
-        int evictFirst = Math.Max(0, centerPage - 6);
-        int evictLast  = Math.Min(pdfState.PageCount - 1, centerPage + 6);
+        // Eviction window: ±30 pages.
+        // Large enough that fast scrolling never evicts a page the user will
+        // immediately scroll back to. At 384 DPI a letter page is ~8 MB;
+        // 60 pages × 8 MB = ~480 MB — acceptable on an 8 GB machine.
+        // For machines with less RAM this could be tuned down to ±15.
+        int evictFirst = Math.Max(0, centerPage - 30);
+        int evictLast  = Math.Min(pdfState.PageCount - 1, centerPage + 30);
 
         try
         {
-            // Evict pages far outside the window
-            DispatcherQueue.TryEnqueue(() =>
-            {
-                for (int i = 0; i < PagesPanel.Children.Count; i++)
-                {
-                    if (i >= evictFirst && i <= evictLast) continue;
-                    if (PagesPanel.Children[i] is not Border border) continue;
-                    if (border.Child is not Grid grid || grid.Children.Count < 2) continue; // already placeholder
-
-                    double physW = 0, physH = 0;
-                    if (border.Tag is (double ow, double oh)) { physW = ow; physH = oh; }
-
-                    border.Child = new Grid
-                    {
-                        Width  = physW > 0 ? physW : 100,
-                        Height = physH > 0 ? physH : 140,
-                    };
-                    _pdfService.EvictPage(i); // notify service page was evicted
-                }
-                
-                // H1: Evict thumbnails far outside a wider window (±10 pages)
-                int thumbEvictFirst = Math.Max(0, centerPage - 10);
-                int thumbEvictLast = Math.Min(pdfState.PageCount - 1, centerPage + 10);
-                for (int i = 0; i < Thumbnails.Count; i++)
-                {
-                    if (i >= thumbEvictFirst && i <= thumbEvictLast) continue;
-                    if (_pdfService.IsThumbnailRendered(i))
-                    {
-                        Thumbnails[i].Thumbnail = null;
-                        _pdfService.EvictThumbnail(i);
-                    }
-                }
-            });
-
-            // Prioritized order: centerPage first, then closest neighbours
+            // STEP 1 — Render the ±5 window first, THEN evict.
+            // This order prevents the visible pages from going blank between
+            // the eviction dispatch and the render completing.
             var queue = new List<int> { centerPage };
-            for (int offset = 1; offset <= 2; offset++)
+            for (int offset = 1; offset <= 5; offset++)
             {
                 if (centerPage + offset <= last) queue.Add(centerPage + offset);
                 if (centerPage - offset >= first) queue.Add(centerPage - offset);
@@ -308,7 +281,45 @@ public sealed partial class ViewerPage
                 await RenderPageAsync(pdfState, pageIndex, ct);
             }
 
-            // Once main pages are done, prefetch visible thumbnails if sidebar is visible
+            // STEP 2 — Only evict AFTER rendering is done for this generation.
+            // If a newer prefetch started while we were rendering, skip eviction
+            // entirely — the newer call will do its own eviction with a fresh center.
+            if (generation != _prefetchGeneration) return;
+
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                for (int i = 0; i < PagesPanel.Children.Count; i++)
+                {
+                    if (i >= evictFirst && i <= evictLast) continue;
+                    if (PagesPanel.Children[i] is not Border border) continue;
+                    if (border.Child is not Grid grid || grid.Children.Count < 2) continue;
+
+                    double physW = 0, physH = 0;
+                    if (border.Tag is (double ow, double oh)) { physW = ow; physH = oh; }
+
+                    border.Child = new Grid
+                    {
+                        Width  = physW > 0 ? physW : 100,
+                        Height = physH > 0 ? physH : 140,
+                    };
+                    _pdfService.EvictPage(i);
+                }
+
+                // Evict thumbnails outside ±40 pages
+                int thumbFirst = Math.Max(0, centerPage - 40);
+                int thumbLast  = Math.Min(pdfState.PageCount - 1, centerPage + 40);
+                for (int i = 0; i < Thumbnails.Count; i++)
+                {
+                    if (i >= thumbFirst && i <= thumbLast) continue;
+                    if (_pdfService.IsThumbnailRendered(i))
+                    {
+                        Thumbnails[i].Thumbnail = null;
+                        _pdfService.EvictThumbnail(i);
+                    }
+                }
+            });
+
+            // STEP 3 — Thumbnails after pages (lower priority)
             if (SidebarCard.Visibility == Visibility.Visible && generation == _prefetchGeneration)
             {
                 _ = PrefetchThumbnailsAroundAsync(centerPage, pdfState, ct);
