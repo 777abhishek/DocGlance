@@ -107,16 +107,20 @@ public sealed partial class ViewerPage
         if (_suppressScrollSync) return;
         if (PagesPanel.Children.Count == 0) return;
 
-        // The "reading point" is 40% down the viewport — the line the user's
-        // eyes are naturally on. The current page is whichever page's top edge
-        // is closest to (but not below) this point, i.e. the last page that
-        // has started entering the viewport from the top.
-        double readingPoint = DocumentScrollViewer.ViewportHeight * 0.40;
+        // Rune's PageAt() uses page rectangles in one document coordinate
+        // system. Here the ScrollViewer is allowed to zoom a physical-pixel
+        // canvas, so reading VerticalOffset against the stored page sizes can
+        // drift. Transform each page into the viewport instead; this remains
+        // correct at every zoom and display scale.
+        double readingPoint = DocumentScrollViewer.ViewportHeight * 0.35;
+        int best = Math.Clamp(_page - 1, 0, PagesPanel.Children.Count - 1);
+        bool found = false;
 
-        int best = 0;
-        double bestTop = double.NegativeInfinity;
+        // Fast path: check near the current page first (O(1) in typical scrolling)
+        int searchStart = Math.Max(0, best - 2);
+        int searchEnd   = Math.Min(PagesPanel.Children.Count - 1, best + 2);
 
-        for (int i = 0; i < PagesPanel.Children.Count; i++)
+        for (int i = searchStart; i <= searchEnd; i++)
         {
             if (PagesPanel.Children[i] is not Border border || border.ActualHeight <= 0)
                 continue;
@@ -124,33 +128,52 @@ public sealed partial class ViewerPage
             try
             {
                 var transform = border.TransformToVisual(DocumentScrollViewer);
-                double top    = transform.TransformPoint(new Windows.Foundation.Point(0, 0)).Y;
+                double top = transform.TransformPoint(new Windows.Foundation.Point(0, 0)).Y;
                 double bottom = top + border.ActualHeight;
 
-                // Page fully above the reading point — candidate if it's the lowest one so far
-                if (top <= readingPoint && top > bestTop)
-                {
-                    best    = i;
-                    bestTop = top;
-                }
-
-                // Page straddles the reading point — this is the definitive answer
-                if (top <= readingPoint && bottom > readingPoint)
+                if (top <= readingPoint && readingPoint <= bottom)
                 {
                     best = i;
+                    found = true;
                     break;
                 }
-
-                // Pages are laid out top-to-bottom; once the top edge is below
-                // the reading point all subsequent pages will be too — stop early.
-                if (top > readingPoint)
-                    break;
             }
             catch { }
         }
 
+        // Fallback: full scan if user jumped/dragged scrollbar
+        if (!found)
+        {
+            double lastTop = double.NegativeInfinity;
+            for (int i = 0; i < PagesPanel.Children.Count; i++)
+            {
+                if (PagesPanel.Children[i] is not Border border || border.ActualHeight <= 0)
+                    continue;
+
+                try
+                {
+                    var transform = border.TransformToVisual(DocumentScrollViewer);
+                    double top = transform.TransformPoint(new Windows.Foundation.Point(0, 0)).Y;
+                    double bottom = top + border.ActualHeight;
+
+                    if (top <= readingPoint && top >= lastTop)
+                    {
+                        best = i;
+                        lastTop = top;
+                    }
+
+                    if (top <= readingPoint && readingPoint <= bottom)
+                    {
+                        best = i;
+                        break;
+                    }
+                }
+                catch { }
+            }
+        }
+
         int newPage = best + 1;
-        if (newPage != _page)
+        if (newPage != _page || _page.ToString() != newPage.ToString())
         {
             UpdateCurrentPage(newPage);
             PrefetchPagesAround(best);
