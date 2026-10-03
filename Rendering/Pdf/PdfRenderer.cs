@@ -21,7 +21,10 @@ public readonly record struct PdfOpenResult(PdfDocumentState? Document, string? 
 /// </summary>
 public static class PdfRenderer
 {
-    public const float RenderDpi    = 192f;
+    // Rune-style high-quality: 384 DPI gives perfect text at all zoom levels
+    // Memory: ~8-10 MB per page (letter size) = ~80-100 MB for 10 pages
+    // Your 8GB RAM + GPU can easily handle this
+    public const float RenderDpi    = 384f;
     public const float ViewerDpi    = RenderDpi;
     public const float ThumbnailDpi = 96f;
 

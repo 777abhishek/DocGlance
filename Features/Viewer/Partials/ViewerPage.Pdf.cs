@@ -30,7 +30,6 @@ public sealed partial class ViewerPage
         _doc = doc;
         _cts?.Cancel();
         _prefetchCts?.Cancel();
-        _reRenderCts?.Cancel();
         _searchCts?.Cancel();
         _pdfState?.Dispose();
         _pdfState = null;

@@ -17,11 +17,9 @@ public sealed partial class ViewerPage
     private FitMode _fitMode = FitMode.None;
     
     // ── Zoom quality tracking ─────────────────────────────────────────────────
-    // RenderScale = zoom expressed as a multiplier of 100% reading size.
-    // At 100% zoom = 1.0, at 200% zoom = 2.0, etc.
-    // Effective render DPI = RenderDpi × RenderScale
+    // At 300 DPI base rendering, quality is excellent at all zoom levels (100%-300%)
+    // No need for per-zoom re-rendering - ScrollViewer scaling handles it perfectly
     private float RenderScale => (float)(_zoom / NaturalZoom);
-    private CancellationTokenSource? _reRenderCts;
 
     // ── Zoom buttons ──────────────────────────────────────────────────────────
 
@@ -86,8 +84,6 @@ public sealed partial class ViewerPage
         double displayPct = Math.Round(_zoom / NaturalZoom * 100.0);
         ZoomLabel.Text = $"{displayPct}%";
         SyncToViewModel();
-
-        _ = ReRenderVisiblePagesAsync();
     }
 
     private Windows.Foundation.Point GetViewportCenter() =>
@@ -122,8 +118,6 @@ public sealed partial class ViewerPage
             () => _suppressScrollSync = false);
         ZoomLabel.Text = $"{Math.Round(_zoom / NaturalZoom * 100.0)}%";
         SyncToViewModel();
-
-        _ = ReRenderVisiblePagesAsync();
     }
 
     private bool TryCapturePageAnchor(Windows.Foundation.Point viewportPoint,
@@ -306,109 +300,6 @@ public sealed partial class ViewerPage
         SetZoomAnchored(newZoom, point.Position);
 
         e.Handled = true;
-    }
-
-    // ── Re-render at new zoom for crisp quality (Rune's approach) ────────────
-    
-    /// <summary>
-    /// Re-renders visible pages at the current zoom level for crisp quality.
-    /// Key insight: keep page layout dimensions (physW×physH) the same so the
-    /// ScrollViewer position never jumps. Render a higher-res bitmap and use
-    /// Stretch.Fill to fill the same slot — no blurry upscaling.
-    ///
-    /// Effective render DPI = RenderDpi × (zoom / NaturalZoom)
-    /// At 100% zoom this equals RenderDpi (192). At 200% this equals 384.
-    /// Chrome does the same thing: re-rasterizes at the actual screen DPI.
-    /// </summary>
-    private async Task ReRenderVisiblePagesAsync()
-    {
-        if (_pdfState == null || _cts == null) return;
-        
-        // Cancel any in-flight re-render
-        _reRenderCts?.Cancel();
-        _reRenderCts?.Dispose();
-        _reRenderCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
-        var ct = _reRenderCts.Token;
-
-        // Small delay to coalesce rapid zoom steps (wheel spin)
-        await Task.Delay(80, ct).ContinueWith(_ => { }, TaskContinuationOptions.None);
-        if (ct.IsCancellationRequested) return;
-
-        var visiblePages = GetVisiblePageIndices();
-        if (visiblePages.Count == 0) return;
-        
-        // Effective DPI = base DPI × zoom factor expressed as multiple of 100%
-        // NaturalZoom maps RenderDpi → 100% reading size, so:
-        //   effectiveDpi = RenderDpi × (_zoom / NaturalZoom)
-        float effectiveDpi = PdfRenderer.RenderDpi * (float)(_zoom / NaturalZoom);
-        // H3: Cap at 2.5× physical display DPI (not a fixed 768)
-        // On 96 DPI display: max 240 DPI. On 192 DPI (200% scaling): max 480 DPI
-        // This prevents excessive memory while respecting high-DPI displays
-        float maxDpi = DisplayScale * 96f * 2.5f;
-        effectiveDpi = Math.Min(effectiveDpi, maxDpi);
-
-        foreach (int pageIdx in visiblePages)
-        {
-            if (ct.IsCancellationRequested) return;
-            
-            var (ptW, ptH) = _pdfState.GetPageSize(pageIdx);
-            
-            // Layout dimensions stay constant — same as initial render at RenderDpi
-            double physW = Math.Round(ptW * PdfRenderer.RenderDpi / 96.0);
-            double physH = Math.Round(ptH * PdfRenderer.RenderDpi / 96.0);
-
-            // Render at the higher effective DPI
-            var bmp = await PdfRenderer.RenderPageAsync(_pdfState, pageIdx, effectiveDpi, ct);
-            if (bmp == null || ct.IsCancellationRequested) return;
-            
-            // Capture for closure
-            int idx = pageIdx;
-            double pw = physW, ph = physH;
-
-            DispatcherQueue.TryEnqueue(() =>
-            {
-                if (_pdfState == null) return;
-                if (idx >= PagesPanel.Children.Count) return;
-                if (PagesPanel.Children[idx] is not Border border) return;
-                if (border.Child is not Grid grid) return;
-                
-                // Replace only the Image source; keep layout size (physW×physH) fixed
-                // so the ScrollViewer offset doesn't move.
-                if (grid.Children.Count > 0 && grid.Children[0] is Image img)
-                {
-                    // Stretch.Fill: fills the physW×physH slot with the new high-res bitmap
-                    img.Source  = bmp;
-                    img.Width   = pw;
-                    img.Height  = ph;
-                    img.Stretch = Microsoft.UI.Xaml.Media.Stretch.Fill;
-                }
-                else
-                {
-                    // Slot had a placeholder — build the full grid
-                    grid.Width  = pw;
-                    grid.Height = ph;
-                    grid.Children.Clear();
-                    grid.Children.Add(new Image
-                    {
-                        Source  = bmp,
-                        Stretch = Microsoft.UI.Xaml.Media.Stretch.Fill,
-                        Width   = pw,
-                        Height  = ph,
-                    });
-                    grid.Children.Add(CreateHighlightCanvas(idx, pw, ph));
-                    var overlay = new QuickView.UI.Controls.PdfTextSelectionOverlay
-                    {
-                        Width  = pw,
-                        Height = ph,
-                        HorizontalAlignment = HorizontalAlignment.Stretch,
-                        VerticalAlignment   = VerticalAlignment.Stretch,
-                    };
-                    overlay.SetPage(_pdfState, idx, pw, ph);
-                    grid.Children.Add(overlay);
-                }
-                DrawHighlights(idx);
-            });
-        }
     }
     
     private List<int> GetVisiblePageIndices()
