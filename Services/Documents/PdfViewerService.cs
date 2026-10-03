@@ -90,16 +90,102 @@ public sealed class PdfViewerService : IPdfViewerService, IDisposable
 
     // ── Rendering ─────────────────────────────────────────────────────────
 
-    public Task<WriteableBitmap?> RenderPageProgressiveAsync(
+    /// <summary>
+    /// Renders a page with progressive strategy: fast 96 DPI preview immediately,
+    /// then full 192 DPI quality in background via callback.
+    /// </summary>
+    public async Task<WriteableBitmap?> RenderPageProgressiveAsync(
         int pageIndex,
         Action<WriteableBitmap>? onFullQuality = null,
         CancellationToken ct = default)
-        => throw new NotImplementedException("Phase 3");
+    {
+        if (_document == null)
+            return null;
+
+        // Skip if already rendered
+        if (!_renderedPages.Add(pageIndex))
+            return null;
+
+        try
+        {
+            // Phase 1: Render 96 DPI preview for instant feedback
+            var previewBmp = await PdfRenderer.RenderPageAsync(_document, pageIndex, 96f, ct);
+            
+            if (previewBmp == null || ct.IsCancellationRequested)
+            {
+                _renderedPages.Remove(pageIndex);
+                return null;
+            }
+
+            // Phase 2: Render full quality (192 DPI) in background
+            if (onFullQuality != null)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var fullBmp = await PdfRenderer.RenderPageAsync(_document, pageIndex, PdfRenderer.RenderDpi, ct);
+                        if (fullBmp != null && !ct.IsCancellationRequested)
+                        {
+                            onFullQuality(fullBmp);
+                        }
+                        else
+                        {
+                            _renderedPages.Remove(pageIndex);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _renderedPages.Remove(pageIndex);
+                        // Log error but don't throw (background task)
+                        System.Diagnostics.Debug.WriteLine($"[PdfViewerService] Full quality render failed for page {pageIndex}: {ex.Message}");
+                    }
+                }, ct);
+            }
+
+            return previewBmp;
+        }
+        catch (Exception ex)
+        {
+            _renderedPages.Remove(pageIndex);
+            System.Diagnostics.Debug.WriteLine($"[PdfViewerService] Progressive render failed for page {pageIndex}: {ex.Message}");
+            return null;
+        }
+    }
 
     public Task<WriteableBitmap?> RenderThumbnailAsync(
         int pageIndex,
         CancellationToken ct = default)
-        => throw new NotImplementedException("Phase 5");
+    {
+        if (_document == null)
+            return Task.FromResult<WriteableBitmap?>(null);
+
+        // Skip if already rendered
+        if (!_renderedThumbs.Add(pageIndex))
+            return Task.FromResult<WriteableBitmap?>(null);
+
+        return RenderThumbnailCoreAsync(pageIndex, ct);
+    }
+
+    private async Task<WriteableBitmap?> RenderThumbnailCoreAsync(int pageIndex, CancellationToken ct)
+    {
+        try
+        {
+            var bmp = await PdfRenderer.RenderPageAsync(_document!, pageIndex, PdfRenderer.ThumbnailDpi, ct);
+            if (bmp == null || ct.IsCancellationRequested)
+            {
+                _renderedThumbs.Remove(pageIndex);
+                return null;
+            }
+            return bmp;
+        }
+        catch (Exception ex)
+        {
+            _renderedThumbs.Remove(pageIndex);
+            System.Diagnostics.Debug.WriteLine($"[PdfViewerService] Thumbnail render failed for page {pageIndex}: {ex.Message}");
+            return null;
+        }
+    }
 
     // ── Prefetch & Memory Management ──────────────────────────────────────
 
@@ -116,8 +202,13 @@ public sealed class PdfViewerService : IPdfViewerService, IDisposable
         _prefetchCts = null;
     }
 
-    public void InvalidateRenderedPages()
-        => _renderedPages.Clear();
+    public void InvalidateRenderedPages() => _renderedPages.Clear();
+
+    public void EvictPage(int pageIndex) => _renderedPages.Remove(pageIndex);
+
+    public void EvictThumbnail(int pageIndex) => _renderedThumbs.Remove(pageIndex);
+
+    public bool IsThumbnailRendered(int pageIndex) => _renderedThumbs.Contains(pageIndex);
 
     // ── State Queries ─────────────────────────────────────────────────────
 

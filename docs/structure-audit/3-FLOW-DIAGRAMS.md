@@ -1,5 +1,6 @@
 # QuickView — Code Flow Diagrams
 
+**Updated:** 2026-10-03 — reflects post-migration file paths  
 Visual representation of how code flows through the system for common operations.
 
 ---
@@ -95,10 +96,10 @@ ViewerPage.LoadDocumentAsync() [Main entry point]
 
 ## 3. PDF Loading Flow (Sprint 5 Target)
 
-### Current Flow (Before Sprint 5):
+### Current Flow (Sprint 5 Phase 2 Complete):
 
 ```
-ViewerPage.LoadPdfAsync() [Features/Viewer/Pdf/ViewerPage.Pdf.cs]
+ViewerPage.LoadPdfAsync() [Features/Viewer/Partials/ViewerPage.Pdf.cs]
  ├─ ShowLoading(true)
  ├─ _pdfService.LoadDocumentAsync(filePath, ShowPasswordDialogAsync, ct)
  │    ↓
@@ -133,12 +134,12 @@ ViewerPage.LoadPdfAsync() [Features/Viewer/Pdf/ViewerPage.Pdf.cs]
  ├─ Create thumbnail items (Thumbnails.Add)
  ├─ Set zoom to 100% (NaturalZoom)
  ├─ WireScrollSync()
- ├─ RenderPageAsync(_pdfState, 0, ct) ← Render first page immediately
+ ├─ RenderPageAsync(_pdfState, 0, ct) ← Render first page immediately (⚠️ TODO: move to service in Phase 3)
  ├─ ShowLoading(false) ← Interactive now!
- └─ PrefetchPagesAroundAsync(0, _pdfState, ct) ← Background
+ └─ PrefetchPagesAroundAsync(0, _pdfState, ct) ← Background (⚠️ TODO: move to service in Phase 4)
 ```
 
-### Target Flow (After Sprint 5 Complete):
+### Target Flow (After Sprint 5 Phases 3-6 Complete):
 
 ```
 ViewerPage.LoadPdfAsync()
@@ -172,7 +173,9 @@ ViewerPage.LoadPdfAsync()
       └─ foreach page in range: RenderPageProgressiveAsync(page)
 ```
 
-**Key improvement:** UI layer (`ViewerPage`) only handles XAML updates. Service layer (`PdfViewerService`) owns all PDF business logic.
+**Key improvement:** UI layer (`ViewerPage.Pdf.cs`) only handles XAML updates. Service layer (`PdfViewerService`) owns all PDF business logic.
+
+**Current Status (Phase 2):** LoadDocument extracted ✅. Rendering, prefetch, thumbnails still in ViewerPage.Pdf.cs (Phases 3-6 pending).
 
 ---
 
@@ -181,7 +184,7 @@ ViewerPage.LoadPdfAsync()
 ```
 User types "invoice" in FindBox
          ↓
-ViewerPage.FindBox_TextChanged() [Features/Viewer/Search/ViewerPage.Search.cs]
+ViewerPage.FindBox_TextChanged() [Features/Viewer/Partials/ViewerPage.Search.cs]
  ├─ if (IsTextViewerActive()) → SearchInTextViewer() [different path]
  ├─ Cancel previous search (_searchCts?.Cancel())
  ├─ Cancel debounce timer (_searchDebounceCts?.Cancel())
@@ -218,7 +221,7 @@ ViewerPage.FindBox_TextChanged() [Features/Viewer/Search/ViewerPage.Search.cs]
  ├─ SetSearchLoading(false)
  └─ DrawHighlights() ← Draw yellow rectangles on all pages
       ↓
-     DrawHighlights()
+     DrawHighlights() [Features/Viewer/Partials/ViewerPage.Search.cs]
       ├─ foreach result in _searchResults:
       │    ├─ pageIndex = result.PageIndex
       │    ├─ Find Canvas overlay for this page (by Tag)
@@ -248,7 +251,7 @@ HomePage.ScanFolderAsync()
  ├─ ViewModel.IsScanning = true
  ├─ items = await FolderScanner.ScanFolderAsync(folderPath, cts.Token)
  │    ↓
- │   FolderScanner.ScanFolderAsync() [FileSystem/Scanner/FolderScanner.cs]
+ │   FolderScanner.ScanFolderAsync() [Services/FileSystem/Scanner/FolderScanner.cs]
  │    ├─ Task.Run(() => ScanCore(folderPath, ct))
  │    ├─ AllDirs(root, ct) ← Enumerate all subdirectories
  │    ├─ Parallel.ForEach(dirs, MaxDOP = CPU/2, dir => {
@@ -470,7 +473,7 @@ FolderScanner.ScanFolderAsync(folderPath)
 For each file found:
  ├─ PathValidator.IsValidFilePath(filePath, out error)
  │    ↓
- │   PathValidator.IsValidFilePath() [Core/Extensions/PathValidator.cs]
+ │   PathValidator.IsValidFilePath() [Common/Validators/PathValidator.cs]
  │    ├─ if (IsReparsePoint(filePath)) → REJECT ← Symlinks/junctions
  │    ├─ if (IsReparsePoint(parentDir)) → REJECT ← Parent is symlink
  │    ├─ if (filePath.StartsWith(@"\\")) → REJECT ← UNC paths

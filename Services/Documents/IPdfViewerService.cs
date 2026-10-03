@@ -58,11 +58,17 @@ public interface IPdfViewerService
     /// <summary>Cancels all in-flight prefetch operations.</summary>
     void CancelPrefetch();
 
-    /// <summary>
-    /// Triggers re-render of visible pages when zoom changes significantly.
-    /// Used when zoom crosses DPI threshold (e.g., 2x → needs higher res render).
-    /// </summary>
+    /// <summary>Clears all rendered page tracking so pages will be re-rendered.</summary>
     void InvalidateRenderedPages();
+
+    /// <summary>Marks a page as evicted so it can be re-rendered when needed.</summary>
+    void EvictPage(int pageIndex);
+
+    /// <summary>Marks a thumbnail as evicted so it can be re-rendered when needed.</summary>
+    void EvictThumbnail(int pageIndex);
+
+    /// <summary>Returns true if the thumbnail for the given page has been rendered.</summary>
+    bool IsThumbnailRendered(int pageIndex);
 
     // ── State Queries ─────────────────────────────────────────────────────
 

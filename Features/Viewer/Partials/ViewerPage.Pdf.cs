@@ -19,9 +19,6 @@ public sealed partial class ViewerPage
     private float DisplayScale => (float)(XamlRoot?.RasterizationScale ?? 1.0);
     private float NaturalZoom => 96f / PdfRenderer.RenderDpi;
 
-    // Track which pages have been rendered to avoid double-rendering
-    private readonly HashSet<int> _renderedPages = new();
-    private readonly HashSet<int> _renderedThumbs = new();
     private CancellationTokenSource? _prefetchCts;
     private int _prefetchGeneration;
 
@@ -50,8 +47,6 @@ public sealed partial class ViewerPage
         _fitMode  = FitMode.None;
         Toolbar.IsFitWidthChecked = false;
         Toolbar.IsFitPageChecked = false;
-        _renderedPages.Clear();
-        _renderedThumbs.Clear();
 
         _page = 1; _total = 1;
         Toolbar.UpdatePageInfo(1, 1);
@@ -282,7 +277,7 @@ public sealed partial class ViewerPage
                         Width  = physW > 0 ? physW : 100,
                         Height = physH > 0 ? physH : 140,
                     };
-                    _renderedPages.Remove(i);
+                    _pdfService.EvictPage(i); // notify service page was evicted
                 }
                 
                 // H1: Evict thumbnails far outside a wider window (±10 pages)
@@ -291,10 +286,10 @@ public sealed partial class ViewerPage
                 for (int i = 0; i < Thumbnails.Count; i++)
                 {
                     if (i >= thumbEvictFirst && i <= thumbEvictLast) continue;
-                    if (_renderedThumbs.Contains(i))
+                    if (_pdfService.IsThumbnailRendered(i))
                     {
                         Thumbnails[i].Thumbnail = null;
-                        _renderedThumbs.Remove(i);
+                        _pdfService.EvictThumbnail(i);
                     }
                 }
             });
@@ -345,54 +340,36 @@ public sealed partial class ViewerPage
         }
     }
 
-    /// <summary>Renders a single page in the main view using PDFium</summary>
+    /// <summary>Renders a single page using the service (progressive: preview then full quality)</summary>
     private async Task RenderPageAsync(PdfDocumentState pdfState, int pageIdx, CancellationToken ct)
     {
-        if (!_renderedPages.Add(pageIdx)) return;
+        var (ptW, ptH) = pdfState.GetPageSize(pageIdx);
+        double physW = Math.Round(ptW * PdfRenderer.RenderDpi / 96.0);
+        double physH = Math.Round(ptH * PdfRenderer.RenderDpi / 96.0);
 
-        try
-        {
-            var (ptW, ptH) = pdfState.GetPageSize(pageIdx);
-            double physW = Math.Round(ptW * PdfRenderer.RenderDpi / 96.0);
-            double physH = Math.Round(ptH * PdfRenderer.RenderDpi / 96.0);
-
-            // F4: Progressive rendering - fast 96 DPI preview first
-            var previewBmp = await PdfRenderer.RenderPageAsync(pdfState, pageIdx, 96f, ct);
-            if (previewBmp != null && !ct.IsCancellationRequested)
+        // Delegate rendering logic to service — it tracks _renderedPages and handles both phases
+        var previewBmp = await _pdfService.RenderPageProgressiveAsync(
+            pageIdx,
+            onFullQuality: fullBmp =>
             {
+                // UI callback: apply full quality bitmap and draw search highlights
                 DispatcherQueue.TryEnqueue(() =>
                 {
                     if (!ReferenceEquals(_pdfState, pdfState)) return;
-                    ApplyPageVisual(pageIdx, pdfState, previewBmp, physW, physH, Stretch.Fill);
+                    ApplyPageVisual(pageIdx, pdfState, fullBmp, physW, physH, Stretch.None);
+                    DrawHighlights(pageIdx);
                 });
-            }
+            },
+            ct);
 
-            if (ct.IsCancellationRequested)
-            {
-                _renderedPages.Remove(pageIdx);
-                return;
-            }
-
-            // F4: Now render at full quality in background
-            var fullBmp = await PdfRenderer.RenderPageAsync(pdfState, pageIdx, PdfRenderer.RenderDpi, ct);
-            if (fullBmp == null || ct.IsCancellationRequested)
-            {
-                _renderedPages.Remove(pageIdx);
-                return;
-            }
-
-            // Update to full quality
+        // Apply preview bitmap immediately (UI thread)
+        if (previewBmp != null && !ct.IsCancellationRequested)
+        {
             DispatcherQueue.TryEnqueue(() =>
             {
                 if (!ReferenceEquals(_pdfState, pdfState)) return;
-                ApplyPageVisual(pageIdx, pdfState, fullBmp, physW, physH, Stretch.None);
-                DrawHighlights(pageIdx);
+                ApplyPageVisual(pageIdx, pdfState, previewBmp, physW, physH, Stretch.Fill);
             });
-        }
-        catch (Exception ex)
-        {
-            _renderedPages.Remove(pageIdx);
-            Logger.Log($"[PDF ERROR] Page {pageIdx}: {ex.Message}");
         }
     }
 
@@ -443,32 +420,18 @@ public sealed partial class ViewerPage
         border.Child = pageGrid;
     }
 
-    /// <summary>Renders a single thumbnail using PDFium</summary>
+    /// <summary>Renders a single thumbnail via the service</summary>
     private async Task RenderThumbnailAsync(PdfDocumentState pdfState, int pageIdx, CancellationToken ct)
     {
-        if (!_renderedThumbs.Add(pageIdx)) return;
+        var bmp = await _pdfService.RenderThumbnailAsync(pageIdx, ct);
+        if (bmp == null || ct.IsCancellationRequested) return;
 
-        try
+        DispatcherQueue.TryEnqueue(() =>
         {
-            var bmp = await PdfRenderer.RenderPageAsync(pdfState, pageIdx, PdfRenderer.ThumbnailDpi, ct);
-            if (bmp == null || ct.IsCancellationRequested)
-            {
-                _renderedThumbs.Remove(pageIdx);
-                return;
-            }
-
-            DispatcherQueue.TryEnqueue(() =>
-            {
-                if (!ReferenceEquals(_pdfState, pdfState)) return;
-                if (pageIdx < Thumbnails.Count)
-                    Thumbnails[pageIdx].Thumbnail = bmp;
-            });
-        }
-        catch (Exception ex)
-        {
-            _renderedThumbs.Remove(pageIdx);
-            Logger.Log($"[PDF ERROR] Thumbnail {pageIdx}: {ex.Message}");
-        }
+            if (!ReferenceEquals(_pdfState, pdfState)) return;
+            if (pageIdx < Thumbnails.Count)
+                Thumbnails[pageIdx].Thumbnail = bmp;
+        });
     }
 
     private void ShowInfoCard(DocumentItem doc)
