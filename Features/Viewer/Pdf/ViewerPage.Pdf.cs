@@ -88,34 +88,27 @@ public sealed partial class ViewerPage
         ShowLoading(true);
         try
         {
-            // 1. Open PDF with PDFium & pre-cache page sizes instantaneously
-            var opened = await PdfRenderer.OpenDocumentAsync(filePath, ct);
-            
-            // F5: Handle password-protected PDFs
-            if (!opened.Ok && opened.NeedsPassword)
+            // Delegate PDF loading to service (Phase 2: LoadDocument extraction)
+            var result = await _pdfService.LoadDocumentAsync(
+                filePath,
+                ShowPasswordDialogAsync, // UI callback for password prompt
+                ct);
+
+            if (!result.Success)
             {
-                string? password = await ShowPasswordDialogAsync();
-                if (password != null)
-                {
-                    // Retry with password
-                    opened = await PdfRenderer.OpenDocumentAsync(filePath, ct, password);
-                }
-            }
-            
-            if (ct.IsCancellationRequested)
-            {
-                opened.Document?.Dispose();
-                return;
-            }
-            if (!opened.Ok || opened.Document == null)
-            {
-                ShowErrorCard(opened.Error ?? "Cannot open PDF with PDFium.");
+                ShowErrorCard(result.ErrorMessage ?? "Cannot open PDF");
                 return;
             }
 
             _pdfState?.Dispose();
-            _pdfState = opened.Document;
-            _total = _pdfState.PageCount;
+            _pdfState = result.Document;
+            _total = result.PageCount;
+            
+            if (_pdfState == null)
+            {
+                ShowErrorCard("Failed to load PDF document");
+                return;
+            }
 
             Toolbar.UpdatePageInfo(_page, _total);
             _page = 1;

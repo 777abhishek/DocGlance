@@ -23,11 +23,58 @@ public sealed class PdfViewerService : IPdfViewerService, IDisposable
 
     // ── Document Lifecycle ────────────────────────────────────────────────
 
-    public Task<PdfLoadResult> LoadDocumentAsync(
+    public async Task<PdfLoadResult> LoadDocumentAsync(
         string filePath,
         Func<Task<string?>>? passwordPrompt = null,
         CancellationToken ct = default)
-        => throw new NotImplementedException("Phase 2");
+    {
+        CloseDocument();
+
+        try
+        {
+            // First attempt: open without password
+            var openResult = await PdfRenderer.OpenDocumentAsync(filePath, ct);
+
+            if (ct.IsCancellationRequested)
+                return PdfLoadResult.Error("Operation cancelled");
+
+            // Handle password-protected PDFs
+            if (!openResult.Ok && openResult.NeedsPassword && passwordPrompt != null)
+            {
+                string? password = await passwordPrompt();
+                if (password != null)
+                {
+                    // Retry with password (one attempt only)
+                    openResult = await PdfRenderer.OpenDocumentAsync(filePath, ct, password);
+                }
+            }
+
+            if (ct.IsCancellationRequested)
+            {
+                openResult.Document?.Dispose();
+                return PdfLoadResult.Error("Operation cancelled");
+            }
+
+            if (!openResult.Ok || openResult.Document == null)
+            {
+                return PdfLoadResult.Error(openResult.Error ?? "Cannot open PDF");
+            }
+
+            // Success: store document state
+            _document = openResult.Document;
+            _pageCount = openResult.Document.PageCount;
+
+            return PdfLoadResult.Ok(_document, _pageCount);
+        }
+        catch (OperationCanceledException)
+        {
+            return PdfLoadResult.Error("Operation cancelled");
+        }
+        catch (Exception ex)
+        {
+            return PdfLoadResult.Error($"Failed to load PDF: {ex.Message}");
+        }
+    }
 
     public void CloseDocument()
     {
