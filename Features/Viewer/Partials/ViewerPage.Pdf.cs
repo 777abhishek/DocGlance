@@ -460,12 +460,31 @@ public sealed partial class ViewerPage
     {
         try
         {
+            // PERF-05: Clean up previous renderer before loading new one
+            if (_currentRenderer != null && _currentRenderedElement != null)
+            {
+                try
+                {
+                    await _currentRenderer.CleanupAsync(_currentRenderedElement);
+                }
+                catch
+                {
+                    // Swallow cleanup exceptions
+                }
+                _currentRenderer = null;
+                _currentRenderedElement = null;
+            }
+
             ShowLoading(true);
             var element = await renderer.RenderAsync(filePath, ct);
             ShowLoading(false);
 
             if (ct.IsCancellationRequested || element == null)
                 return;
+
+            // Track for cleanup later
+            _currentRenderer = renderer;
+            _currentRenderedElement = element;
 
             // Hide all non-PDF viewers but KEEP DocumentScrollViewer visible —
             // PagesPanel lives inside it, so collapsing it would hide the content.

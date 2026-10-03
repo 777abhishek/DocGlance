@@ -17,4 +17,10 @@ public sealed class PptxRenderer : IFileRenderer
         var doc = DocumentItem.FromFileInfo(new FileInfo(filePath));
         return Task.FromResult<UIElement?>(new ViewerInfoCard(doc));
     }
+
+    public Task CleanupAsync(UIElement? element)
+    {
+        // ViewerInfoCard has no resources to clean up
+        return Task.CompletedTask;
+    }
 }

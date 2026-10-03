@@ -35,6 +35,11 @@ public sealed partial class ViewerPage : Page
     internal CancellationTokenSource? _cts;
     internal List<OutlineItem>        _outline  = new();
 
+    // ── PERF-05: WebView2 disposal tracking ──────────────────────────────────
+    // Track current renderer and element to ensure proper cleanup
+    private Core.Interfaces.IFileRenderer? _currentRenderer;
+    private Microsoft.UI.Xaml.UIElement? _currentRenderedElement;
+
     public ObservableCollection<PageThumbnailItem> Thumbnails { get; } = new();
 
     // ── Construction ─────────────────────────────────────────────────────────
@@ -92,6 +97,22 @@ public sealed partial class ViewerPage : Page
         _cts?.Cancel();
         _prefetchCts?.Cancel();
         _searchCts?.Cancel();
+        
+        // PERF-05: Clean up WebView2 and other resources
+        if (_currentRenderer != null && _currentRenderedElement != null)
+        {
+            try
+            {
+                _ = _currentRenderer.CleanupAsync(_currentRenderedElement);
+            }
+            catch
+            {
+                // Swallow cleanup exceptions (already shutting down)
+            }
+            _currentRenderer = null;
+            _currentRenderedElement = null;
+        }
+        
         _pdfState?.Dispose();
         _pdfState = null;
         ViewModel.Reset();

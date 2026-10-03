@@ -19,4 +19,10 @@ public sealed class DocxRenderer : IFileRenderer
         UIElement card = new ViewerInfoCard(doc);
         return Task.FromResult<UIElement?>(card);
     }
+
+    public Task CleanupAsync(UIElement? element)
+    {
+        // ViewerInfoCard has no resources to clean up
+        return Task.CompletedTask;
+    }
 }

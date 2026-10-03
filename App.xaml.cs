@@ -126,6 +126,7 @@ public partial class App : Application
         QuickView.Rendering.RendererRegistry.Register(new QuickView.Rendering.Office.XlsxRenderer());
         QuickView.Rendering.RendererRegistry.Register(new QuickView.Rendering.Office.PptxRenderer());
         QuickView.Rendering.RendererRegistry.Register(new QuickView.Rendering.Web.HtmlRenderer());
+        QuickView.Rendering.RendererRegistry.Register(new QuickView.Rendering.Web.MarkdownRenderer());
     }
 
     /// <summary>

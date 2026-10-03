@@ -1,6 +1,7 @@
 ﻿using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Markdig;
+using QuickView.Core.Interfaces;
 using System;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -13,18 +14,22 @@ namespace QuickView.Rendering.Web;
 /// Supports: MD, MARKDOWN, MDX.
 /// SEC-02: Uses Markdig library instead of custom parser to prevent XSS vulnerabilities.
 /// </summary>
-public static class MarkdownRenderer
+public sealed class MarkdownRenderer : IFileRenderer
 {
     private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder()
         .UseAdvancedExtensions()  // Tables, task lists, etc.
         .DisableHtml()            // Block inline HTML to prevent XSS
         .Build();
 
-    public static async Task<WebView2> RenderAsync(string filePath, bool isDarkTheme, CancellationToken ct = default)
+    public string[] SupportedExtensions => [".md", ".markdown", ".mdx"];
+
+    public async Task<UIElement?> RenderAsync(string filePath, CancellationToken ct = default)
     {
         string mdText = await Task.Run(
             () => QuickView.Rendering.Text.TextFileReader.ReadCapped(filePath, 1_000_000).Text, ct);
 
+        // Determine theme from app-level setting (simplified for now)
+        bool isDarkTheme = Application.Current.RequestedTheme == ApplicationTheme.Dark;
         string html = BuildHtml(mdText, isDarkTheme);
 
         var webView = new WebView2
@@ -35,7 +40,7 @@ public static class MarkdownRenderer
 
         await webView.EnsureCoreWebView2Async();
 
-        if (ct.IsCancellationRequested) return webView;
+        if (ct.IsCancellationRequested) return null;
 
         // SEC-02: Harden settings
         webView.CoreWebView2.Settings.IsScriptEnabled                = false;
@@ -65,6 +70,27 @@ public static class MarkdownRenderer
             webView.NavigateToString(html);
 
         return webView;
+    }
+
+    /// <summary>
+    /// PERF-05: Dispose WebView2 to prevent memory leak.
+    /// Without this, WebView2 processes remain after tab close.
+    /// </summary>
+    public Task CleanupAsync(UIElement? element)
+    {
+        if (element is WebView2 webView)
+        {
+            try
+            {
+                // Close WebView2 to release native resources and terminate process
+                webView.Close();
+            }
+            catch
+            {
+                // Swallow exceptions during cleanup (already shutting down)
+            }
+        }
+        return Task.CompletedTask;
     }
 
     private static string BuildHtml(string md, bool dark)

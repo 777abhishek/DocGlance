@@ -173,8 +173,8 @@ public sealed partial class ViewerPage
         ShowLoading(true);
         try
         {
-            bool isDark = IsDarkTheme();
-            var webView = await Rendering.Web.MarkdownRenderer.RenderAsync(filePath, isDark, ct);
+            var renderer = new Rendering.Web.MarkdownRenderer();
+            var webView = await renderer.RenderAsync(filePath, ct) as Microsoft.UI.Xaml.Controls.WebView2;
             if (ct.IsCancellationRequested) return;
 
             MarkdownViewerHost.Children.Clear();

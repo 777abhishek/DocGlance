@@ -61,4 +61,25 @@ public sealed class HtmlRenderer : IFileRenderer
         wv.Source = new Uri(filePath);
         return wv;
     }
+
+    /// <summary>
+    /// PERF-05: Dispose WebView2 to prevent memory leak.
+    /// Without this, WebView2 processes remain after tab close.
+    /// </summary>
+    public Task CleanupAsync(UIElement? element)
+    {
+        if (element is WebView2 webView)
+        {
+            try
+            {
+                // Close WebView2 to release native resources and terminate process
+                webView.Close();
+            }
+            catch
+            {
+                // Swallow exceptions during cleanup (already shutting down)
+            }
+        }
+        return Task.CompletedTask;
+    }
 }
