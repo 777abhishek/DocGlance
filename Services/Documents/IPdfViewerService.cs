@@ -34,6 +34,7 @@ public interface IPdfViewerService
     /// </summary>
     Task<WriteableBitmap?> RenderPageProgressiveAsync(
         int pageIndex,
+        float zoomFactor = 1.0f,
         Action<WriteableBitmap>? onFullQuality = null,
         CancellationToken ct = default);
 
@@ -81,6 +82,6 @@ public interface IPdfViewerService
     /// <summary>Gets page size in points (PDF units, 1 pt = 1/72 inch).</summary>
     (double Width, double Height) GetPageSize(int pageIndex);
 
-    /// <summary>Natural zoom factor (96 DPI / RenderDpi).</summary>
+    /// <summary>Natural zoom factor (always 1.0 with dynamic DPI rendering).</summary>
     double NaturalZoom { get; }
 }

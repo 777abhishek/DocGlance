@@ -24,7 +24,8 @@ public static class PdfLinkService
         return await PdfOperationBase.ExecutePageOperationAsync(state, pageIndex, (doc, page) =>
         {
             var links = new List<PdfLink>();
-            var (pageW, pageH) = PdfOperationBase.GetPageDimensions(page, PdfRenderer.RenderDpi);
+            // Use 100% zoom (1.0x) for link extraction - link coordinates are zoom-independent
+            var (pageW, pageH) = PdfOperationBase.GetPageDimensions(page, PdfRenderer.GetRenderDpi(1.0f));
 
             // 1. Extract web links from text
             IntPtr textPage = Pdfium.FPDFText_LoadPage(page);

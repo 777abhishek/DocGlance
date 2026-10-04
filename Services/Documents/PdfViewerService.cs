@@ -91,11 +91,12 @@ public sealed class PdfViewerService : IPdfViewerService, IDisposable
     // ── Rendering ─────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Renders a page at full quality (RenderDpi). No preview phase — avoids
+    /// Renders a page at dynamic DPI (screen_dpi × zoomFactor). No preview phase — avoids
     /// the blurry-preview-stuck problem. Skips if already rendered.
     /// </summary>
     public async Task<WriteableBitmap?> RenderPageProgressiveAsync(
         int pageIndex,
+        float zoomFactor = 1.0f,
         Action<WriteableBitmap>? onFullQuality = null,
         CancellationToken ct = default)
     {
@@ -108,8 +109,10 @@ public sealed class PdfViewerService : IPdfViewerService, IDisposable
 
         try
         {
-            // Render directly at full quality — no blurry 96 DPI preview
-            var bmp = await PdfRenderer.RenderPageAsync(_document, pageIndex, PdfRenderer.RenderDpi, ct);
+            // Calculate DPI based on zoom factor (96 at 1.0x, 144 at 1.5x, 192 at 2.0x)
+            float renderDpi = PdfRenderer.GetRenderDpi(zoomFactor);
+            
+            var bmp = await PdfRenderer.RenderPageAsync(_document, pageIndex, renderDpi, ct);
 
             if (bmp == null || ct.IsCancellationRequested)
             {
@@ -196,8 +199,7 @@ public sealed class PdfViewerService : IPdfViewerService, IDisposable
     public (double Width, double Height) GetPageSize(int pageIndex)
         => _document?.GetPageSize(pageIndex) ?? (0, 0);
 
-    public double NaturalZoom
-        => _document != null ? 96.0 / PdfRenderer.RenderDpi : 1.0;
+    public double NaturalZoom => 1.0; // Always 1.0 with dynamic DPI rendering
 
     // ── IDisposable ───────────────────────────────────────────────────────
 

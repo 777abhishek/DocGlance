@@ -71,12 +71,12 @@ public sealed partial class ViewerPage
     /// <summary>
     /// Sets the ScrollViewer ZoomFactor and updates the zoom pill label.
     ///
-    /// CRITICAL: Unlike our old approach, we now render pages at the CURRENT
-    /// zoom level (like Chrome/Rune), not at a fixed DPI. When zoom changes,
-    /// we mark visible pages as stale and re-render them at the new scale.
+    /// With dynamic DPI rendering, zoom changes require re-rendering visible pages
+    /// at the new DPI to maintain quality (like Chrome/SumatraPDF).
     /// </summary>
     internal void SetZoom(double z)
     {
+        double oldZoom = _zoom;
         _zoom = Math.Clamp(z, DocumentScrollViewer.MinZoomFactor,
                               DocumentScrollViewer.MaxZoomFactor);
         DocumentScrollViewer.ChangeView(null, null, (float)_zoom);
@@ -84,6 +84,12 @@ public sealed partial class ViewerPage
         double displayPct = Math.Round(_zoom / NaturalZoom * 100.0);
         ZoomLabel.Text = $"{displayPct}%";
         SyncToViewModel();
+        
+        // Re-render visible pages if zoom changed significantly (>5%)
+        if (Math.Abs(_zoom - oldZoom) / oldZoom > 0.05)
+        {
+            InvalidateAndReRenderVisiblePages();
+        }
     }
 
     private Windows.Foundation.Point GetViewportCenter() =>
@@ -118,6 +124,12 @@ public sealed partial class ViewerPage
             () => _suppressScrollSync = false);
         ZoomLabel.Text = $"{Math.Round(_zoom / NaturalZoom * 100.0)}%";
         SyncToViewModel();
+        
+        // Re-render visible pages if zoom changed significantly (>5%)
+        if (Math.Abs(newZoom - oldZoom) / oldZoom > 0.05)
+        {
+            InvalidateAndReRenderVisiblePages();
+        }
     }
 
     private bool TryCapturePageAnchor(Windows.Foundation.Point viewportPoint,

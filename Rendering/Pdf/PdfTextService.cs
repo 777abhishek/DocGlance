@@ -52,7 +52,8 @@ public static class PdfTextService
 
         return await PdfOperationBase.ExecuteTextPageOperationAsync(state, pageIndex, (doc, page, textPage) =>
         {
-            var (pageW, pageH) = PdfOperationBase.GetPageDimensions(page, PdfRenderer.RenderDpi);
+            // Use 100% zoom (1.0x) for coordinate calculations - search is zoom-independent
+            var (pageW, pageH) = PdfOperationBase.GetPageDimensions(page, PdfRenderer.GetRenderDpi(1.0f));
             
             // Convert device coordinates to PDF page coordinates
             var (pageX, pageY) = PdfOperationBase.DeviceToPageCoordinates(page, pageW, pageH, 0, deviceX, deviceY);
@@ -128,7 +129,8 @@ public static class PdfTextService
                 {
                     float pageWidthPt  = Pdfium.FPDF_GetPageWidthF(page);
                     float pageHeightPt = Pdfium.FPDF_GetPageHeightF(page);
-                    float renderDpi = PdfRenderer.RenderDpi;
+                    // Use 100% zoom (1.0x) for text extraction - text content is zoom-independent
+                    float renderDpi = PdfRenderer.GetRenderDpi(1.0f);
                     int pageW = (int)Math.Max(1, Math.Round(pageWidthPt  * renderDpi / 96.0));
                     int pageH = (int)Math.Max(1, Math.Round(pageHeightPt * renderDpi / 96.0));
 

@@ -17,7 +17,9 @@ namespace QuickView.Features.Viewer;
 public sealed partial class ViewerPage
 {
     private float DisplayScale => (float)(XamlRoot?.RasterizationScale ?? 1.0);
-    private float NaturalZoom => 96f / PdfRenderer.RenderDpi;
+    
+    // Natural zoom is 1.0 now since we render at screen DPI × zoom dynamically
+    private float NaturalZoom => 1.0f;
 
     private CancellationTokenSource? _prefetchCts;
     private int _prefetchGeneration;
@@ -137,9 +139,12 @@ public sealed partial class ViewerPage
                 var (ptW, ptH) = _pdfState.GetPageSize(i);
                 double aspect = ptH / Math.Max(1.0, ptW);
 
-                // Physical pixels at RenderDpi for main view
-                double physW = Math.Round(ptW * PdfRenderer.RenderDpi / 96.0);
-                double physH = Math.Round(ptH * PdfRenderer.RenderDpi / 96.0);
+                // Physical pixels at current zoom (dynamic DPI)
+                // At 100% zoom: 96 DPI, at 150% zoom: 144 DPI, etc.
+                float zoomFactor = (float)NaturalZoom; // Start at 1.0 (100%)
+                float renderDpi = PdfRenderer.GetRenderDpi(zoomFactor);
+                double physW = Math.Round(ptW * renderDpi / 96.0);
+                double physH = Math.Round(ptH * renderDpi / 96.0);
 
                 // Clean white page placeholder (no heavy active ProgressRing controls)
                 var pageBorder = new Border
@@ -247,22 +252,20 @@ public sealed partial class ViewerPage
     {
         int generation = Interlocked.Increment(ref _prefetchGeneration);
 
-        // Render ±5 pages around center — enough that normal scrolling never
-        // shows a blank page while the next render is queued.
-        int first = Math.Max(0, centerPage - 5);
-        int last  = Math.Min(pdfState.PageCount - 1, centerPage + 5);
+        // SumatraPDF-inspired cache strategy:
+        // Render ±2 pages around center (was ±5) — reduces memory from 10 to 4 pages
+        // Eviction window: ±2 pages (was ±30) — reduces cache from 60 to 4 pages
+        // At 100% zoom: 4 pages × 3.5 MB = ~14 MB (was 60 pages × 47 MB = 2820 MB)
+        int first = Math.Max(0, centerPage - 2);
+        int last  = Math.Min(pdfState.PageCount - 1, centerPage + 2);
 
-        // Eviction window: ±30 pages.
-        // Large enough that fast scrolling never evicts a page the user will
-        // immediately scroll back to. At 384 DPI a letter page is ~8 MB;
-        // 60 pages × 8 MB = ~480 MB — acceptable on an 8 GB machine.
-        // For machines with less RAM this could be tuned down to ±15.
-        int evictFirst = Math.Max(0, centerPage - 30);
-        int evictLast  = Math.Min(pdfState.PageCount - 1, centerPage + 30);
+        // Eviction window matches render window for aggressive cleanup
+        int evictFirst = first;
+        int evictLast  = last;
 
         // Build render queue outside try so it's accessible throughout
         var queue = new List<int> { centerPage };
-        for (int offset = 1; offset <= 5; offset++)
+        for (int offset = 1; offset <= 2; offset++)
         {
             if (centerPage + offset <= last) queue.Add(centerPage + offset);
             if (centerPage - offset >= first) queue.Add(centerPage - offset);
@@ -276,7 +279,7 @@ public sealed partial class ViewerPage
             foreach (int pageIndex in queue)
                 _pdfService.EvictPage(pageIndex);
 
-            // STEP 2 — Render the ±5 window. Eviction already cleared the HashSet
+            // STEP 2 — Render the ±2 window. Eviction already cleared the HashSet
             // so every page in the queue will actually render.
             foreach (int pageIndex in queue)
             {
@@ -308,9 +311,9 @@ public sealed partial class ViewerPage
                     _pdfService.EvictPage(i);
                 }
 
-                // Evict thumbnails outside ±40 pages
-                int thumbFirst = Math.Max(0, centerPage - 40);
-                int thumbLast  = Math.Min(pdfState.PageCount - 1, centerPage + 40);
+                // Evict thumbnails outside ±10 pages (reduced from ±40)
+                int thumbFirst = Math.Max(0, centerPage - 10);
+                int thumbLast  = Math.Min(pdfState.PageCount - 1, centerPage + 10);
                 for (int i = 0; i < Thumbnails.Count; i++)
                 {
                     if (i >= thumbFirst && i <= thumbLast) continue;
@@ -329,6 +332,25 @@ public sealed partial class ViewerPage
             }
         }
         catch (OperationCanceledException) { }
+    }
+    
+    /// <summary>
+    /// Invalidates rendered pages and re-renders visible pages at current zoom level.
+    /// Called when zoom changes significantly to maintain quality.
+    /// </summary>
+    private void InvalidateAndReRenderVisiblePages()
+    {
+        if (_pdfState == null) return;
+        
+        // Clear all rendered pages so they can be re-rendered at new DPI
+        _pdfService.InvalidateRenderedPages();
+        
+        // Trigger re-render of visible pages
+        int currentPage = Math.Clamp(_page - 1, 0, _total - 1);
+        _prefetchCts?.Cancel();
+        _prefetchCts = CancellationTokenSource.CreateLinkedTokenSource(
+            _cts?.Token ?? CancellationToken.None);
+        _ = PrefetchPagesAroundAsync(currentPage, _pdfState, _prefetchCts.Token);
     }
 
     private async Task PrefetchThumbnailsAroundAsync(
@@ -356,11 +378,14 @@ public sealed partial class ViewerPage
     /// <summary>Renders a single page at full quality and applies it to the UI.</summary>
     private async Task RenderPageAsync(PdfDocumentState pdfState, int pageIdx, CancellationToken ct)
     {
+        // Calculate physical dimensions based on current zoom factor
         var (ptW, ptH) = pdfState.GetPageSize(pageIdx);
-        double physW = Math.Round(ptW * PdfRenderer.RenderDpi / 96.0);
-        double physH = Math.Round(ptH * PdfRenderer.RenderDpi / 96.0);
+        float zoomFactor = (float)_zoom;
+        float renderDpi = PdfRenderer.GetRenderDpi(zoomFactor);
+        double physW = Math.Round(ptW * renderDpi / 96.0);
+        double physH = Math.Round(ptH * renderDpi / 96.0);
 
-        var bmp = await _pdfService.RenderPageProgressiveAsync(pageIdx, ct: ct);
+        var bmp = await _pdfService.RenderPageProgressiveAsync(pageIdx, zoomFactor, ct: ct);
         if (bmp == null || ct.IsCancellationRequested) return;
 
         DispatcherQueue.TryEnqueue(() =>

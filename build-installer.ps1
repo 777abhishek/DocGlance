@@ -158,9 +158,11 @@ if ($MsixOnly -or (-not $InstallerOnly)) {
     $msixFiles = Get-ChildItem -Path $OutputDir -Filter "*.msix" -Recurse -ErrorAction SilentlyContinue
     if ($msixFiles) {
         $msix = $msixFiles | Select-Object -First 1
-        # Copy to output root for easy access
+        # Copy to output root for easy access (skip if already there)
         $msixDest = "$OutputDir\QuickView_$Version`_x64.msix"
-        Copy-Item $msix.FullName $msixDest -Force
+        if ($msix.FullName -ne $msixDest) {
+            Copy-Item $msix.FullName $msixDest -Force
+        }
         $sizeMb = [math]::Round((Get-Item $msixDest).Length / 1MB, 1)
         Write-OK "MSIX package: $msixDest  ($sizeMb MB)"
     } else {

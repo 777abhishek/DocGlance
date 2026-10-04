@@ -21,12 +21,24 @@ public readonly record struct PdfOpenResult(PdfDocumentState? Document, string? 
 /// </summary>
 public static class PdfRenderer
 {
-    // Rune-style high-quality: 384 DPI gives perfect text at all zoom levels
-    // Memory: ~8-10 MB per page (letter size) = ~80-100 MB for 10 pages
-    // Your 8GB RAM + GPU can easily handle this
-    public const float RenderDpi    = 384f;
-    public const float ViewerDpi    = RenderDpi;
+    // Dynamic DPI rendering: screen DPI × zoom factor
+    // At 100% zoom: 96 DPI = ~3.5 MB per letter page (was 47 MB at 384 DPI)
+    // At 150% zoom: 144 DPI = ~8 MB per page
+    // At 200% zoom: 192 DPI = ~14 MB per page
+    // Matches SumatraPDF's memory-efficient approach
+    public const float ScreenDpi    = 96f;
     public const float ThumbnailDpi = 96f;
+    
+    /// <summary>
+    /// Calculate render DPI based on zoom factor.
+    /// Returns screen DPI × zoom (e.g., 96 at 1.0x, 144 at 1.5x, 192 at 2.0x)
+    /// </summary>
+    public static float GetRenderDpi(float zoomFactor)
+    {
+        // Clamp to reasonable range: 48 DPI (0.5x zoom) to 576 DPI (6x zoom)
+        float zoom = Math.Clamp(zoomFactor, 0.5f, 6.0f);
+        return ScreenDpi * zoom;
+    }
 
     /// <summary>Alias for the process-wide PDFium lock.</summary>
     internal static object PdfiumLock => Pdfium.Gate;
