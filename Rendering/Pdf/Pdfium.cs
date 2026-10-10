@@ -344,4 +344,33 @@ internal static class Pdfium
     public const int FPDF_ANNOT_SUBTYPE_UNDERLINE = 10;
     public const int FPDF_ANNOT_SUBTYPE_STRIKEOUT = 12;
     public const int FPDF_ANNOT_SUBTYPE_STAMP = 14;
+
+    // ── Progressive Rendering API ─────────────────────────────────────────────
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct IFSDK_PAUSE
+    {
+        public int version;           // Must be 1
+        public IntPtr NeedToPauseNow; // Cdecl function pointer: int(IntPtr)
+    }
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    public delegate int PauseCallback(IntPtr pause);
+
+    public const int FPDF_RENDER_READY         = 0;
+    public const int FPDF_RENDER_TOBECONTINUED = 1;
+    public const int FPDF_RENDER_DONE          = 2;
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int FPDF_RenderPage_Start(
+        IntPtr bitmap, IntPtr page,
+        int start_x, int start_y, int size_x, int size_y,
+        int rotate, int flags,
+        ref IFSDK_PAUSE pause);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int FPDF_RenderPage_Continue(IntPtr page, ref IFSDK_PAUSE pause);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern void FPDF_RenderPage_Close(IntPtr page);
 }

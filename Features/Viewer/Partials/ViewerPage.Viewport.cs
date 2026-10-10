@@ -6,7 +6,9 @@ using QuickView.Rendering.Pdf;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading;
 using System.Threading.Tasks;
@@ -303,7 +305,7 @@ public sealed partial class ViewerPage
         int renderH = Math.Max(1, (int)Math.Round(pageH * display));
 
         var pixelBuffer = await Task.Run(() =>
-            RenderFullPage(pdfState, pageIndex, dpi, renderW, renderH,
+            RenderFullPageProgressive(pdfState, pageIndex, dpi, renderW, renderH,
                            (int)(_rotation % 360 / 90), ct), ct);
 
         if (pixelBuffer == null || ct.IsCancellationRequested) return;
@@ -459,6 +461,135 @@ public sealed partial class ViewerPage
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Renders a full PDF page with progressive rendering (time-sliced) to prevent
+    /// UI freezes during scrolling. Yields to the UI thread every 16ms.
+    /// Falls back to RenderFullPage on any error.
+    /// </summary>
+    private static byte[]? RenderFullPageProgressive(
+        PdfDocumentState state, int pageIndex, float dpi,
+        int renderW, int renderH, int rotate, CancellationToken ct)
+    {
+        try
+        {
+            if (ct.IsCancellationRequested) return null;
+
+            int stride    = renderW * 4;
+            int byteCount = stride * renderH;
+            byte[] output = ArrayPool<byte>.Shared.Rent(byteCount);
+
+            PdfRenderer.EnsureInitialized();
+
+            IntPtr page = IntPtr.Zero;
+            IntPtr bmp  = IntPtr.Zero;
+            GCHandle cbHandle = default;
+            Pdfium.PauseCallback? callback = null;
+            Stopwatch sw = new Stopwatch();
+
+            try
+            {
+                lock (Pdfium.Gate)
+                {
+                    if (ct.IsCancellationRequested)
+                    {
+                        ArrayPool<byte>.Shared.Return(output);
+                        return null;
+                    }
+
+                    page = Pdfium.FPDF_LoadPage(state.Handle, pageIndex);
+                    if (page == IntPtr.Zero)
+                    {
+                        ArrayPool<byte>.Shared.Return(output);
+                        return null;
+                    }
+
+                    unsafe
+                    {
+                        fixed (byte* p = output)
+                        {
+                            bmp = Pdfium.FPDFBitmap_CreateEx(
+                                renderW, renderH, Pdfium.BitmapBgra, (IntPtr)p, stride);
+                            if (bmp == IntPtr.Zero)
+                            {
+                                Pdfium.FPDF_ClosePage(page);
+                                ArrayPool<byte>.Shared.Return(output);
+                                return null;
+                            }
+
+                            Pdfium.FPDFBitmap_FillRect(bmp, 0, 0, renderW, renderH, 0xFFFFFFFF);
+
+                            // Create pause callback: returns 1 when elapsed > 16ms
+                            callback = new Pdfium.PauseCallback(_ => sw.ElapsedMilliseconds > 16 ? 1 : 0);
+                            cbHandle = GCHandle.Alloc(callback);
+
+                            var pause = new Pdfium.IFSDK_PAUSE
+                            {
+                                version = 1,
+                                NeedToPauseNow = Marshal.GetFunctionPointerForDelegate(callback)
+                            };
+
+                            sw.Start();
+                            int status = Pdfium.FPDF_RenderPage_Start(
+                                bmp, page,
+                                0, 0, renderW, renderH,
+                                rotate,
+                                Pdfium.RenderAnnot | Pdfium.RenderLcdText,
+                                ref pause);
+
+                            int iteration = 0;
+                            while (status == Pdfium.FPDF_RENDER_TOBECONTINUED && 
+                                   !ct.IsCancellationRequested && 
+                                   iteration < 200)
+                            {
+                                // Yield briefly to let other threadpool work proceed
+                                Thread.Yield();
+                                sw.Restart();
+                                status = Pdfium.FPDF_RenderPage_Continue(page, ref pause);
+                                iteration++;
+                            }
+
+                            // Always close progressive render before closing page
+                            Pdfium.FPDF_RenderPage_Close(page);
+                        }
+                    }
+
+                    Pdfium.FPDF_ClosePage(page);
+                    page = IntPtr.Zero;
+                }
+            }
+            finally
+            {
+                if (cbHandle.IsAllocated)
+                    cbHandle.Free();
+
+                if (bmp != IntPtr.Zero)
+                    Pdfium.FPDFBitmap_Destroy(bmp);
+
+                if (page != IntPtr.Zero)
+                {
+                    lock (Pdfium.Gate)
+                    {
+                        Pdfium.FPDF_ClosePage(page);
+                    }
+                }
+            }
+
+            if (ct.IsCancellationRequested)
+            {
+                ArrayPool<byte>.Shared.Return(output);
+                return null;
+            }
+
+            return output;
+        }
+        catch (Exception ex)
+        {
+            Infrastructure.Logging.Logger.Error("RenderFullPageProgressive failed, falling back to RenderFullPage", ex);
+            // Fallback to non-progressive rendering
+            return RenderFullPage(state, pageIndex, dpi, renderW, renderH, rotate, ct);
+        }
     }
 
     /// <summary>
