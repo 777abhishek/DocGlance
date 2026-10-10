@@ -305,7 +305,7 @@ public sealed partial class ViewerPage
         int renderH = Math.Max(1, (int)Math.Round(pageH * display));
 
         var pixelBuffer = await Task.Run(() =>
-            RenderFullPageProgressive(pdfState, pageIndex, dpi, renderW, renderH,
+            RenderFullPage(pdfState, pageIndex, dpi, renderW, renderH,
                            (int)(_rotation % 360 / 90), ct), ct);
 
         if (pixelBuffer == null || ct.IsCancellationRequested) return;
@@ -316,25 +316,53 @@ public sealed partial class ViewerPage
 
         if (bitmap == null || ct.IsCancellationRequested) return;
 
-        if (!_pdfPageCache.TryGetValue(pageIndex, out var img))
+        // Create Image on UI thread to avoid WinUI crash
+        bool success = false;
+        if (DispatcherQueue.HasThreadAccess)
         {
-            img = new Image
+            CreateImageOnUI();
+            success = true;
+        }
+        else
+        {
+            var tcs = new TaskCompletionSource<bool>();
+            DispatcherQueue.TryEnqueue(() =>
             {
-                Stretch = Microsoft.UI.Xaml.Media.Stretch.Fill,
-                Width   = pageW,
-                Height  = pageH,
-            };
-            Canvas.SetLeft(img, 0);
-            Canvas.SetTop(img, pageY);
-            // Insert BEFORE SearchHighlightCanvas so highlights stay on top
-            int insertAt = Math.Max(0, PdfViewportCanvas.Children.Count - 1);
-            if (SearchHighlightCanvas != null)
-                insertAt = Math.Max(0, PdfViewportCanvas.Children.IndexOf(SearchHighlightCanvas));
-            PdfViewportCanvas.Children.Insert(insertAt, img);
-            _pdfPageCache[pageIndex] = img;
+                try
+                {
+                    CreateImageOnUI();
+                    tcs.SetResult(true);
+                }
+                catch (Exception ex)
+                {
+                    tcs.SetException(ex);
+                }
+            });
+            success = await tcs.Task;
         }
 
-        img.Source = bitmap;
+        void CreateImageOnUI()
+        {
+            if (!_pdfPageCache.TryGetValue(pageIndex, out var img))
+            {
+                img = new Image
+                {
+                    Stretch = Microsoft.UI.Xaml.Media.Stretch.Fill,
+                    Width   = pageW,
+                    Height  = pageH,
+                };
+                Canvas.SetLeft(img, 0);
+                Canvas.SetTop(img, pageY);
+                // Insert BEFORE SearchHighlightCanvas so highlights stay on top
+                int insertAt = Math.Max(0, PdfViewportCanvas.Children.Count - 1);
+                if (SearchHighlightCanvas != null)
+                    insertAt = Math.Max(0, PdfViewportCanvas.Children.IndexOf(SearchHighlightCanvas));
+                PdfViewportCanvas.Children.Insert(insertAt, img);
+                _pdfPageCache[pageIndex] = img;
+            }
+
+            img.Source = bitmap;
+        }
     }
 
     /// <summary>Returns the first/last page indices that intersect the viewport + buffer.</summary>

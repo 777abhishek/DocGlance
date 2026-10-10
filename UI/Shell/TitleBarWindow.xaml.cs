@@ -156,8 +156,6 @@ public sealed partial class TitleBarWindow : Window
                 return;
             }
         }
-        
-        // Create new Settings tab with a Frame to host the settings page
         var frame = new Frame();
         frame.Navigate(typeof(Features.Settings.SettingsPage));
         
