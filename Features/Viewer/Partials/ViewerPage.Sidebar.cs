@@ -13,61 +13,50 @@ public sealed partial class ViewerPage
 {
     // ── Page navigation ───────────────────────────────────────────────────────
 
-    // Guard: prevents scroll-sync from firing while GoToPage is animating,
-    // which would cause the page number to flicker back to the previous value.
-    private bool _suppressScrollSync;
-
     // Guard: prevents ThumbnailList.SelectedIndex assignment from re-firing ItemClick
     private bool _suppressThumbnailSync;
 
     internal void GoToPage(int n)
     {
-        n = Math.Clamp(n, 1, _total);
-        int idx = n - 1;
-        UpdateCurrentPage(n);
-        PrefetchPagesAround(idx);
-
-        if (idx >= 0 && idx < PagesPanel.Children.Count)
-        {
-            // ChangeView VerticalOffset is in DIP space.
-            // physH is physical px; DIP = physH * ZoomFactor.
-            double targetY = GetPageTopDip(idx);
-            _suppressScrollSync = true;
-            DocumentScrollViewer.ChangeView(null, targetY, null, disableAnimation: true);
-            _ = DispatcherQueue.TryEnqueue(
-                Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
-                () => _suppressScrollSync = false);
-        }
+        ScrollToPage(n);
     }
 
-    // Returns the top Y of a page in DIP space — same space as VerticalOffset.
-    // physH (stored in Tag) is physical pixels; multiply by ZoomFactor to get DIPs.
-    private double GetPageTopDip(int pageIndex)
+    /// <summary>
+    /// VIEWPORT ARCHITECTURE: Scroll to a specific page by calculating its offset in the document.
+    /// For PPTX: render the requested slide instead.
+    /// </summary>
+    private void ScrollToPage(int pageNumber)
     {
-        double zoom = Math.Max(0.001, DocumentScrollViewer.ZoomFactor);
-        double top  = PagesPanel.Margin.Top * zoom;
-        for (int i = 0; i < pageIndex && i < PagesPanel.Children.Count; i++)
-        {
-            if (PagesPanel.Children[i] is Border b && b.Tag is (double _, double ph))
-                top += ph * zoom + PagesPanel.Spacing * zoom;
-            else if (PagesPanel.Children[i] is FrameworkElement el && el.ActualHeight > 0)
-                top += el.ActualHeight * zoom + PagesPanel.Spacing * zoom;
-        }
-        return top;
-    }
+        pageNumber = Math.Clamp(pageNumber, 1, _total);
+        UpdateCurrentPage(pageNumber);
 
-    // Physical-px content top — kept for GetPageContentTop callers in Zoom.cs.
-    private double GetPageContentTop(int pageIndex)
-    {
-        double top = PagesPanel.Margin.Top;
-        for (int i = 0; i < pageIndex && i < PagesPanel.Children.Count; i++)
+        // PPTX: render the requested slide
+        if (_pptxDocument != null)
         {
-            if (PagesPanel.Children[i] is Border b && b.Tag is (double _, double ph))
-                top += ph + PagesPanel.Spacing;
-            else if (PagesPanel.Children[i] is FrameworkElement el && el.ActualHeight > 0)
-                top += el.ActualHeight + PagesPanel.Spacing;
+            _ = RenderCurrentSlideAsync(_cts?.Token ?? default);
+            return;
         }
-        return top;
+
+        // PDF: scroll to page
+        if (_pdfState == null) return;
+        
+        int pageIndex = pageNumber - 1;
+
+        // Accumulate page heights in PDF points, add gaps — then scale by zoom
+        // (the canvas extent is zoom-scaled in the viewport architecture).
+        const double PtToLp   = 96.0 / 72.0;
+        const double PageGapLp = 12.0;
+
+        double offsetLp = 0;
+        for (int i = 0; i < pageIndex && i < _pdfState.PageCount; i++)
+        {
+            var (_, pageHeightPt) = GetRotatedPageSize(i);
+            offsetLp += pageHeightPt * PtToLp + PageGapLp;
+        }
+        offsetLp *= _zoom;
+
+        // ChangeView takes layout pixels (same unit as Canvas size)
+        DocumentScrollViewer.ChangeView(null, offsetLp, null, disableAnimation: true);
     }
 
     private void UpdateCurrentPage(int page)
@@ -102,50 +91,9 @@ public sealed partial class ViewerPage
 
     private void OnScrollViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
     {
-        if (_suppressScrollSync) return;
-        if (PagesPanel.Children.Count == 0) return;
-
-        // Rune formula (PdfViewer.xaml.cs UpdateCurrentPage):
-        //   page = layout.PageAt(VerticalOffset + ViewportHeight * 0.4)
-        //
-        // VerticalOffset is in DIP space. physH (Tag) is physical px.
-        // DIP height of a page = physH * ZoomFactor.
-        // We walk the stack summing DIP heights and find the first page whose
-        // bottom passes the reading point (offset + 40% of viewport height).
-        double zoom         = Math.Max(0.001, DocumentScrollViewer.ZoomFactor);
-        double readingPoint = DocumentScrollViewer.VerticalOffset
-                            + DocumentScrollViewer.ViewportHeight * 0.1;
-
-        double cumulative = PagesPanel.Margin.Top * zoom;
-        int best = 0;
-
-        for (int i = 0; i < PagesPanel.Children.Count; i++)
-        {
-            if (PagesPanel.Children[i] is not Border border) continue;
-
-            double pageH = 0;
-            if (border.Tag is (double _, double ph)) pageH = ph * zoom;
-            else if (border.ActualHeight > 0)         pageH = border.ActualHeight * zoom;
-            if (pageH <= 0) continue;
-
-            double pageBottom = cumulative + pageH;
-
-            if (pageBottom > readingPoint)
-            {
-                best = i;
-                break;
-            }
-
-            cumulative = pageBottom + PagesPanel.Spacing * zoom;
-            best = i;
-        }
-
-        int newPage = best + 1;
-        if (newPage != _page)
-        {
-            UpdateCurrentPage(newPage);
-            PrefetchPagesAround(best);
-        }
+        // Viewport handler (ViewerPage.Viewport.cs) handles everything now.
+        // This is intentionally empty — kept so the wire-up in WireScrollSync
+        // doesn't crash, but the viewport's OnViewportViewChanged does the work.
     }
 
     // ── Thumbnail click ───────────────────────────────────────────────────────

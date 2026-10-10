@@ -35,6 +35,9 @@ public sealed partial class ViewerPage : Page
     internal CancellationTokenSource? _cts;
     internal List<OutlineItem>        _outline  = new();
 
+    // Guard: prevents scroll-sync feedback loop when programmatically scrolling to a search hit
+    private bool _suppressScrollSync;
+
     // ── PERF-05: WebView2 disposal tracking ──────────────────────────────────
     // Track current renderer and element to ensure proper cleanup
     private Core.Interfaces.IFileRenderer? _currentRenderer;
@@ -47,8 +50,13 @@ public sealed partial class ViewerPage : Page
     {
         InitializeComponent();
 
-        // Wire viewport-resize → reapply active fit mode.
-        DocumentScrollViewer.SizeChanged += (_, _) => ReapplyFitMode();
+        // Wire viewport-resize → reapply active fit mode + re-render (the
+        // viewport may have grown — re-render pages.
+        DocumentScrollViewer.SizeChanged += (_, _) =>
+        {
+            ReapplyFitMode();
+            if (_pdfState != null) _ = RenderPagesAsync();
+        };
 
         // Ctrl+Wheel zoom anchored at the cursor.
         DocumentScrollViewer.PointerWheelChanged += OnViewerPointerWheelChanged;
@@ -88,6 +96,7 @@ public sealed partial class ViewerPage : Page
     protected override void OnNavigatedFrom(NavigationEventArgs e)
     {
         base.OnNavigatedFrom(e);
+        CleanupViewportRendering();
         CancelLoad();
     }
 
@@ -95,7 +104,7 @@ public sealed partial class ViewerPage : Page
     public void CancelLoad()
     {
         _cts?.Cancel();
-        _prefetchCts?.Cancel();
+
         _searchCts?.Cancel();
         
         // PERF-05: Clean up WebView2 and other resources
@@ -113,7 +122,7 @@ public sealed partial class ViewerPage : Page
             _currentRenderedElement = null;
         }
         
-        _pdfState?.Dispose();
+        // Service owns document lifecycle — just clear our reference
         _pdfState = null;
         ViewModel.Reset();
     }
