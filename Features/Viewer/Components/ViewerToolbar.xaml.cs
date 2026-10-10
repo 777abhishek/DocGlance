@@ -27,13 +27,6 @@ public sealed partial class ViewerToolbar : UserControl
     // Page navigation
     public event EventHandler<int>? GoToPageRequested;
 
-    // Annotation tools
-    public event EventHandler? PenToolRequested;
-    public event EventHandler? HighlighterToolRequested;
-    public event EventHandler? NoteToolRequested;
-    public event EventHandler? TextToolRequested;
-    public event EventHandler? EraserToolRequested;
-
     // ── SidebarButton proxies ─────────────────────────────────────────────────
     public bool IsSidebarOpen => SidebarButton.IsChecked ?? false;
     public bool? SidebarIsChecked
@@ -134,49 +127,5 @@ public sealed partial class ViewerToolbar : UserControl
                 flyout.Hide();
         };
         flyout.ShowAt(PageNumberBox);
-    }
-    
-    private void SetActiveTool(ToggleButton? active)
-    {
-        PenToolButton.IsChecked = false;
-        HighlighterToolButton.IsChecked = false;
-        NoteToolButton.IsChecked = false;
-        TextToolButton.IsChecked = false;
-        EraserToolButton.IsChecked = false;
-        
-        if (active != null)
-        {
-            active.IsChecked = true;
-        }
-    }
-
-    private void PenToolButton_Click(object sender, RoutedEventArgs e)
-    {
-        SetActiveTool(PenToolButton.IsChecked == true ? PenToolButton : null);
-        PenToolRequested?.Invoke(this, EventArgs.Empty);
-    }
-
-    private void HighlighterToolButton_Click(object sender, RoutedEventArgs e)
-    {
-        SetActiveTool(HighlighterToolButton.IsChecked == true ? HighlighterToolButton : null);
-        HighlighterToolRequested?.Invoke(this, EventArgs.Empty);
-    }
-
-    private void NoteToolButton_Click(object sender, RoutedEventArgs e)
-    {
-        SetActiveTool(NoteToolButton.IsChecked == true ? NoteToolButton : null);
-        NoteToolRequested?.Invoke(this, EventArgs.Empty);
-    }
-
-    private void TextToolButton_Click(object sender, RoutedEventArgs e)
-    {
-        SetActiveTool(TextToolButton.IsChecked == true ? TextToolButton : null);
-        TextToolRequested?.Invoke(this, EventArgs.Empty);
-    }
-
-    private void EraserToolButton_Click(object sender, RoutedEventArgs e)
-    {
-        SetActiveTool(EraserToolButton.IsChecked == true ? EraserToolButton : null);
-        EraserToolRequested?.Invoke(this, EventArgs.Empty);
     }
 }

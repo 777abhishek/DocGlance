@@ -286,12 +286,29 @@
                     VerticalScrollBarVisibility="Auto"
                     ZoomMode="Enabled"
                     MinZoomFactor="0.1" MaxZoomFactor="6.4"
-                    Background="Transparent">
-                    <!-- Minimal margin so pages use maximum available space -->
-                    <StackPanel x:Name="PagesPanel"
-                        Orientation="Vertical" Spacing="12"
-                        HorizontalAlignment="Center"
-                        Margin="28,16"/>
+                    Background="Transparent"
+                    ViewChanged="OnViewportViewChanged">
+                    
+                    <!-- VIEWPORT RENDERING: Single Canvas with viewport-sized Image
+                         Old approach: StackPanel with N Border elements (one per page)
+                         New approach: Canvas with 1 Image showing only visible content
+                         Memory: 8MB (viewport) vs 132MB (4 full pages at 200% zoom) -->
+                    <Canvas x:Name="PdfViewportCanvas"
+                        Background="Transparent"
+                        Width="1000" Height="1400">
+                        
+                        <!-- Single viewport Image - updated on scroll/zoom.
+                             Stretch=Fill maps the render-pixel bitmap exactly onto
+                             its layout-pixel size (render px = lp × displayScale). -->
+                        <Image x:Name="ViewportImage"
+                            Stretch="Fill"
+                            Canvas.Left="0"
+                            Canvas.Top="0"/>
+                            
+                        <!-- Canvas for search highlight overlays -->
+                        <Canvas x:Name="SearchHighlightCanvas"
+                            IsHitTestVisible="False"/>
+                    </Canvas>
                 </ScrollViewer>
 
                 <!-- ── TEXT viewer (plain) — TextBox IS the scroll host ── -->

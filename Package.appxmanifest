@@ -70,7 +70,7 @@
 
       <uap:VisualElements
         DisplayName="QuickView"
-        Description="Fast universal file viewer for Windows"
+        Description="Fast document viewer for PDF, PowerPoint, Word, and Excel"
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png">
@@ -91,10 +91,10 @@
       <Extensions>
 
         <!-- FILE TYPE ASSOCIATIONS
-             Declares every extension QuickView can open so Windows
-             shows it in the "Open with" menu and can set it as default.
-             The declarative approach replaces the manual registry writes
-             in AppRegistration.cs that are not permitted for packaged apps. -->
+             QuickView supports PDF, PowerPoint, Word, and Excel files
+             using Rust-based rendering via PDFCraft, DeckCraft, WordCraft, and GridCraft -->
+        
+        <!-- PDF files (PDFCraft) -->
         <uap:Extension Category="windows.fileTypeAssociation">
           <uap:FileTypeAssociation Name="quickview-pdf">
             <uap:SupportedFileTypes>
@@ -105,106 +105,25 @@
             <uap:InfoTip>Open with QuickView</uap:InfoTip>
           </uap:FileTypeAssociation>
         </uap:Extension>
-
-        <!-- Plain text and configuration files -->
+        
+        <!-- PowerPoint files (DeckCraft) -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="quickview-text">
+          <uap:FileTypeAssociation Name="quickview-pptx">
             <uap:SupportedFileTypes>
-              <uap:FileType>.txt</uap:FileType>
-              <uap:FileType>.log</uap:FileType>
-              <uap:FileType>.ini</uap:FileType>
-              <uap:FileType>.cfg</uap:FileType>
-              <uap:FileType>.conf</uap:FileType>
-              <uap:FileType>.env</uap:FileType>
-              <uap:FileType>.toml</uap:FileType>
-              <uap:FileType>.properties</uap:FileType>
+              <uap:FileType>.pptx</uap:FileType>
+              <uap:FileType>.ppt</uap:FileType>
+              <uap:FileType>.pptm</uap:FileType>
+              <uap:FileType>.ppsx</uap:FileType>
             </uap:SupportedFileTypes>
-            <uap:DisplayName>Text File</uap:DisplayName>
-            <uap:Logo>Assets\FileTypeIcons\Text.png</uap:Logo>
+            <uap:DisplayName>PowerPoint Presentation</uap:DisplayName>
+            <uap:Logo>Assets\FileTypeIcons\PowerPoint.png</uap:Logo>
             <uap:InfoTip>Open with QuickView</uap:InfoTip>
           </uap:FileTypeAssociation>
         </uap:Extension>
-
-        <!-- Data files -->
+        
+        <!-- Word files (WordCraft - coming soon) -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="quickview-data">
-            <uap:SupportedFileTypes>
-              <uap:FileType>.csv</uap:FileType>
-              <uap:FileType>.tsv</uap:FileType>
-            </uap:SupportedFileTypes>
-            <uap:DisplayName>Data File</uap:DisplayName>
-            <uap:Logo>Assets\FileTypeIcons\CSV.png</uap:Logo>
-            <uap:InfoTip>Open with QuickView</uap:InfoTip>
-          </uap:FileTypeAssociation>
-        </uap:Extension>
-
-        <!-- Markup and structured data -->
-        <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="quickview-markup">
-            <uap:SupportedFileTypes>
-              <uap:FileType>.json</uap:FileType>
-              <uap:FileType>.xml</uap:FileType>
-              <uap:FileType>.yaml</uap:FileType>
-              <uap:FileType>.yml</uap:FileType>
-              <uap:FileType>.html</uap:FileType>
-              <uap:FileType>.htm</uap:FileType>
-              <uap:FileType>.xaml</uap:FileType>
-            </uap:SupportedFileTypes>
-            <uap:DisplayName>Markup/Data File</uap:DisplayName>
-            <uap:Logo>Assets\FileTypeIcons\XML.png</uap:Logo>
-            <uap:InfoTip>Open with QuickView</uap:InfoTip>
-          </uap:FileTypeAssociation>
-        </uap:Extension>
-
-        <!-- Markdown -->
-        <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="quickview-markdown">
-            <uap:SupportedFileTypes>
-              <uap:FileType>.md</uap:FileType>
-              <uap:FileType>.markdown</uap:FileType>
-            </uap:SupportedFileTypes>
-            <uap:DisplayName>Markdown Document</uap:DisplayName>
-            <uap:Logo>Assets\FileTypeIcons\Markdown.png</uap:Logo>
-            <uap:InfoTip>Open with QuickView</uap:InfoTip>
-          </uap:FileTypeAssociation>
-        </uap:Extension>
-
-        <!-- Source code -->
-        <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="quickview-code">
-            <uap:SupportedFileTypes>
-              <uap:FileType>.cs</uap:FileType>
-              <uap:FileType>.vb</uap:FileType>
-              <uap:FileType>.fs</uap:FileType>
-              <uap:FileType>.ts</uap:FileType>
-              <uap:FileType>.tsx</uap:FileType>
-              <uap:FileType>.jsx</uap:FileType>
-              <uap:FileType>.py</uap:FileType>
-              <uap:FileType>.java</uap:FileType>
-              <uap:FileType>.kt</uap:FileType>
-              <uap:FileType>.cpp</uap:FileType>
-              <uap:FileType>.c</uap:FileType>
-              <uap:FileType>.h</uap:FileType>
-              <uap:FileType>.go</uap:FileType>
-              <uap:FileType>.rs</uap:FileType>
-              <uap:FileType>.swift</uap:FileType>
-              <uap:FileType>.rb</uap:FileType>
-              <uap:FileType>.php</uap:FileType>
-              <uap:FileType>.css</uap:FileType>
-              <uap:FileType>.scss</uap:FileType>
-              <uap:FileType>.sql</uap:FileType>
-              <uap:FileType>.gitignore</uap:FileType>
-              <uap:FileType>.editorconfig</uap:FileType>
-            </uap:SupportedFileTypes>
-            <uap:DisplayName>Source Code File</uap:DisplayName>
-            <uap:Logo>Assets\FileTypeIcons\Code.png</uap:Logo>
-            <uap:InfoTip>Open with QuickView</uap:InfoTip>
-          </uap:FileTypeAssociation>
-        </uap:Extension>
-
-        <!-- Office documents -->
-        <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="quickview-office">
+          <uap:FileTypeAssociation Name="quickview-word">
             <uap:SupportedFileTypes>
               <uap:FileType>.docx</uap:FileType>
               <uap:FileType>.doc</uap:FileType>
@@ -214,7 +133,8 @@
             <uap:InfoTip>Open with QuickView</uap:InfoTip>
           </uap:FileTypeAssociation>
         </uap:Extension>
-
+        
+        <!-- Excel files (GridCraft - coming soon) -->
         <uap:Extension Category="windows.fileTypeAssociation">
           <uap:FileTypeAssociation Name="quickview-excel">
             <uap:SupportedFileTypes>
@@ -223,30 +143,6 @@
             </uap:SupportedFileTypes>
             <uap:DisplayName>Excel Spreadsheet</uap:DisplayName>
             <uap:Logo>Assets\FileTypeIcons\Excel.png</uap:Logo>
-            <uap:InfoTip>Open with QuickView</uap:InfoTip>
-          </uap:FileTypeAssociation>
-        </uap:Extension>
-
-        <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="quickview-pptx">
-            <uap:SupportedFileTypes>
-              <uap:FileType>.pptx</uap:FileType>
-              <uap:FileType>.ppt</uap:FileType>
-            </uap:SupportedFileTypes>
-            <uap:DisplayName>PowerPoint Presentation</uap:DisplayName>
-            <uap:Logo>Assets\FileTypeIcons\PowerPoint.png</uap:Logo>
-            <uap:InfoTip>Open with QuickView</uap:InfoTip>
-          </uap:FileTypeAssociation>
-        </uap:Extension>
-
-        <!-- Rich text -->
-        <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="quickview-rtf">
-            <uap:SupportedFileTypes>
-              <uap:FileType>.rtf</uap:FileType>
-            </uap:SupportedFileTypes>
-            <uap:DisplayName>Rich Text Document</uap:DisplayName>
-            <uap:Logo>Assets\FileTypeIcons\RichText.png</uap:Logo>
             <uap:InfoTip>Open with QuickView</uap:InfoTip>
           </uap:FileTypeAssociation>
         </uap:Extension>

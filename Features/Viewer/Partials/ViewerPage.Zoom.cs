@@ -16,11 +16,6 @@ public sealed partial class ViewerPage
     private enum FitMode { None, FitWidth, FitPage }
     private FitMode _fitMode = FitMode.None;
     
-    // ── Zoom quality tracking ─────────────────────────────────────────────────
-    // At 300 DPI base rendering, quality is excellent at all zoom levels (100%-300%)
-    // No need for per-zoom re-rendering - ScrollViewer scaling handles it perfectly
-    private float RenderScale => (float)(_zoom / NaturalZoom);
-
     // ── Zoom buttons ──────────────────────────────────────────────────────────
 
     private void ZoomFitWidth_Click(object sender, RoutedEventArgs e)
@@ -41,14 +36,14 @@ public sealed partial class ViewerPage
     {
         _fitMode = FitMode.None;
         Toolbar.IsFitWidthChecked = Toolbar.IsFitPageChecked = false;
-        SetZoomAnchored(_zoom / 1.25, GetViewportCenter());
+        SetZoom(_zoom / 1.25);
     }
 
     private void ZoomInButton_Click(object sender, RoutedEventArgs e)
     {
         _fitMode = FitMode.None;
         Toolbar.IsFitWidthChecked = Toolbar.IsFitPageChecked = false;
-        SetZoomAnchored(_zoom * 1.25, GetViewportCenter());
+        SetZoom(_zoom * 1.25);
     }
 
     private void ZoomPreset_Click(object sender, RoutedEventArgs e)
@@ -60,35 +55,40 @@ public sealed partial class ViewerPage
         {
             _fitMode = FitMode.None;
             Toolbar.IsFitWidthChecked = Toolbar.IsFitPageChecked = false;
-            // pct is the user-facing percentage (0.5 = 50%, 1.0 = 100%)
-            // Convert to ScrollViewer zoom: 100% reading size = NaturalZoom
-            SetZoomAnchored(NaturalZoom * pct, GetViewportCenter());
+            SetZoom(NaturalZoom * pct);
         }
     }
 
     // ── Core zoom setter ──────────────────────────────────────────────────────
 
     /// <summary>
-    /// Sets the ScrollViewer ZoomFactor and updates the zoom pill label.
-    ///
-    /// With dynamic DPI rendering, zoom changes require re-rendering visible pages
-    /// at the new DPI to maintain quality (like Chrome/SumatraPDF).
+    /// Sets zoom. For PDF the ScrollViewer owns scaling (ZoomMode=Enabled,
+    /// canvas sized at zoom 1.0). For PPTX the canvas is sized at zoom 1.0 too
+    /// and the ScrollViewer scales it.
     /// </summary>
     internal void SetZoom(double z)
     {
-        double oldZoom = _zoom;
-        _zoom = Math.Clamp(z, DocumentScrollViewer.MinZoomFactor,
-                              DocumentScrollViewer.MaxZoomFactor);
-        DocumentScrollViewer.ChangeView(null, null, (float)_zoom);
+        _zoom = Math.Clamp(z, 0.1, 6.0);
+
+        if (_viewportState != null)
+            _viewportState.ZoomFactor = (float)_zoom;
 
         double displayPct = Math.Round(_zoom / NaturalZoom * 100.0);
         ZoomLabel.Text = $"{displayPct}%";
         SyncToViewModel();
-        
-        // Re-render visible pages if zoom changed significantly (>5%)
-        if (Math.Abs(_zoom - oldZoom) / oldZoom > 0.05)
+
+        // PDF: let ScrollViewer scale the canvas, then re-render pages at new resolution
+        if (_pdfState != null)
         {
-            InvalidateAndReRenderVisiblePages();
+            DocumentScrollViewer.ChangeView(null, null, (float)_zoom, disableAnimation: true);
+            _ = RenderPagesAsync();
+            return;
+        }
+
+        // PPTX: same — ScrollViewer scales the pre-sized canvas
+        if (_pptxDocument != null)
+        {
+            DocumentScrollViewer.ChangeView(null, null, (float)_zoom, disableAnimation: false);
         }
     }
 
@@ -96,145 +96,54 @@ public sealed partial class ViewerPage
         new(DocumentScrollViewer.ViewportWidth / 2.0,
             DocumentScrollViewer.ViewportHeight / 2.0);
 
-    private void SetZoomAnchored(double z, Windows.Foundation.Point anchor)
-    {
-        double oldZoom = Math.Max(0.01, DocumentScrollViewer.ZoomFactor);
-        double newZoom = Math.Clamp(z, DocumentScrollViewer.MinZoomFactor,
-                                       DocumentScrollViewer.MaxZoomFactor);
-        if (Math.Abs(newZoom - oldZoom) < 0.0001) return;
-
-        if (!TryCapturePageAnchor(anchor, oldZoom, out int pageIndex,
-                                  out double localX, out double localY))
-            return;
-
-        // Restore the page-relative point after rebuilding the scale. Page
-        // gaps and margins remain fixed, so scaling the total scroll offset
-        // would accumulate error on later pages, exactly as Rune documents.
-        double pageTop = GetPageContentTop(pageIndex);
-        double pageLeft = PagesPanel.Margin.Left;
-        double newOffsetX = Math.Max(0, (pageLeft + localX) * newZoom - anchor.X);
-        double newOffsetY = Math.Max(0, (pageTop + localY) * newZoom - anchor.Y);
-
-        _zoom = newZoom;
-        _suppressScrollSync = true;
-        DocumentScrollViewer.ChangeView(newOffsetX, newOffsetY, (float)newZoom,
-            disableAnimation: true);
-        _ = DispatcherQueue.TryEnqueue(
-            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
-            () => _suppressScrollSync = false);
-        ZoomLabel.Text = $"{Math.Round(_zoom / NaturalZoom * 100.0)}%";
-        SyncToViewModel();
-        
-        // Re-render visible pages if zoom changed significantly (>5%)
-        if (Math.Abs(newZoom - oldZoom) / oldZoom > 0.05)
-        {
-            InvalidateAndReRenderVisiblePages();
-        }
-    }
-
-    private bool TryCapturePageAnchor(Windows.Foundation.Point viewportPoint,
-        double zoom, out int pageIndex, out double localX, out double localY)
-    {
-        pageIndex = -1;
-        localX = localY = 0;
-
-        for (int i = 0; i < PagesPanel.Children.Count; i++)
-        {
-            if (PagesPanel.Children[i] is not FrameworkElement page || page.ActualHeight <= 0)
-                continue;
-            try
-            {
-                var transform = page.TransformToVisual(DocumentScrollViewer);
-                var topLeft = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
-                var bottomRight = transform.TransformPoint(
-                    new Windows.Foundation.Point(page.ActualWidth, page.ActualHeight));
-                if (viewportPoint.X >= topLeft.X && viewportPoint.X <= bottomRight.X &&
-                    viewportPoint.Y >= topLeft.Y && viewportPoint.Y <= bottomRight.Y)
-                {
-                    pageIndex = i;
-                    localX = (viewportPoint.X - topLeft.X) / zoom;
-                    localY = (viewportPoint.Y - topLeft.Y) / zoom;
-                    return true;
-                }
-            }
-            catch (Exception) { }
-        }
-
-        // Fit operations can be requested while the current page is just
-        // outside the viewport. Preserve that page's identity nonetheless.
-        pageIndex = Math.Clamp(_page - 1, 0, PagesPanel.Children.Count - 1);
-        if (pageIndex < 0 || pageIndex >= PagesPanel.Children.Count) return false;
-        localX = 0;
-        localY = 0;
-        return true;
-    }
-
     // ── Fit-Width ─────────────────────────────────────────────────────────────
 
     internal void ApplyFitWidth()
     {
-        // Force a synchronous layout pass so ViewportWidth reflects the current
-        // column geometry (sidebar open/closed, window size).
         DocumentScrollViewer.UpdateLayout();
 
-        if (_pdfState == null) return;
-
-        // Get the physical pixel width of the first rendered page directly from
-        // the stored Tag tuple — this is always accurate even before layout has
-        // fully settled (unlike img.Width which may differ from the layout size).
-        double physW = 0;
-        foreach (var child in PagesPanel.Children)
+        // Handle PDF
+        if (_pdfState != null && _viewportState != null)
         {
-            if (child is Border b && b.Tag is (double pw, double _) && pw > 0)
-            {
-                physW = pw;
-                break;
-            }
-        }
+            // Base width = page width at zoom 1.0 in layout px
+            var (ptW, _) = _pdfState.GetPageSize(0);
+            if (ptW <= 0) return;
 
-        // Fallback: read from rendered Image if Tag isn't set yet.
-        if (physW <= 0)
+            double pageWidthLp = ptW * (96.0 / 72.0);
+
+            // Available width in viewport
+            const double sidePad = 28.0;
+            double avail = DocumentScrollViewer.ViewportWidth - sidePad * 2;
+            if (avail <= 0) return;
+
+            // Calculate zoom to fit width
+            double targetZoom = avail / pageWidthLp;
+            SetZoom(targetZoom);
+            return;
+        }
+        
+        // Handle PPTX
+        if (_pptxDocument != null)
         {
-            foreach (var child in PagesPanel.Children)
-            {
-                if (child is Border b2 && b2.Child is Image img && img.Width > 0)
-                {
-                    physW = img.Width;
-                    break;
-                }
-            }
+            const double PtToLp = 96.0 / 72.0;
+            var (ptW, _) = _pptxDocument.GetSlideSize(0);
+            if (ptW <= 0) return;
+
+            // Convert to layout pixels
+            double widthLp = ptW * PtToLp;
+
+            // Available width in viewport
+            const double sidePad = 28.0;
+            double avail = DocumentScrollViewer.ViewportWidth - sidePad * 2;
+            if (avail <= 0) return;
+
+            // Calculate zoom to fit width
+            double targetZoom = avail / widthLp;
+            
+            QuickView.Infrastructure.Logging.Logger.Log($"ApplyFitWidth PPTX: widthLp={widthLp}, avail={avail}, targetZoom={targetZoom}");
+            
+            SetZoom(targetZoom);
         }
-        if (physW <= 0) return;
-
-        // Available logical-pixel width = viewport minus left + right padding.
-        // PagesPanel.Margin is 12px each side = 24 total. Add 4px extra breathing
-        // room on each side (matches Rune's PageLayout.Margin = 24 strategy).
-        const double sidePad = 28.0; // px per side
-        double avail = DocumentScrollViewer.ViewportWidth - sidePad * 2;
-        if (avail <= 0) return;
-
-        // The ScrollViewer's ZoomFactor scales the child in its *own* coordinate
-        // system, which uses the child's Width/Height as set in XAML (physical px).
-        // At ZoomFactor = z, a child of width physW occupies physW * z *screen*
-        // pixels, but those screen pixels map to logical pixels at rate 1:1 from
-        // the ScrollViewer's perspective (the ScrollViewer measures viewport in
-        // logical px = screen px / DisplayScale, and the child's Width is already
-        // in that same logical px space because WinUI XAML uses logical px).
-        //
-        // Wait — actually in WinUI 3 Image.Width / img.Width is set in XAML
-        // logical pixels (DIPs).  We set it to the physical pixel count, which
-        // means the Image is enormously wide in logical pixels.  ZoomFactor then
-        // scales that enormous logical width down to reading size via NaturalZoom.
-        //
-        // So the correct formula is:
-        //   displayed_logical_width = physW * ZoomFactor
-        //   we want:  physW * zoom = avail
-        //   therefore: zoom = avail / physW
-        //
-        // NaturalZoom (= 96/384 = 0.25) is already baked into that: avail / physW
-        // will naturally be ≈ NaturalZoom when avail ≈ the page's natural width.
-
-        SetZoomAnchored(avail / physW, GetViewportCenter());
     }
 
     // ── Fit-Page ──────────────────────────────────────────────────────────────
@@ -243,35 +152,54 @@ public sealed partial class ViewerPage
     {
         DocumentScrollViewer.UpdateLayout();
 
-        double physW = 0, physH = 0;
-        foreach (var child in PagesPanel.Children)
+        // Handle PDF
+        if (_pdfState != null && _viewportState != null)
         {
-            if (child is Border b && b.Tag is (double pw, double ph) && pw > 0)
-            {
-                physW = pw; physH = ph;
-                break;
-            }
+            // Base dimensions = page size at zoom 1.0 in layout px
+            var (ptW, ptH) = _pdfState.GetPageSize(0);
+            if (ptW <= 0 || ptH <= 0) return;
+
+            double widthLp  = ptW * (96.0 / 72.0);
+            double heightLp = ptH * (96.0 / 72.0);
+
+            // Available space
+            const double sidePad = 28.0;
+            const double topPad  = 16.0;
+            double aw = DocumentScrollViewer.ViewportWidth  - sidePad * 2;
+            double ah = DocumentScrollViewer.ViewportHeight - topPad  * 2;
+            if (aw <= 0 || ah <= 0) return;
+
+            // Fit both dimensions
+            double targetZoom = Math.Min(aw / widthLp, ah / heightLp);
+            SetZoom(targetZoom);
+            return;
         }
-        if (physW <= 0 || physH <= 0)
+        
+        // Handle PPTX
+        if (_pptxDocument != null)
         {
-            foreach (var child in PagesPanel.Children)
-            {
-                if (child is Border b2 && b2.Child is Image img && img.Width > 0)
-                {
-                    physW = img.Width; physH = img.Height;
-                    break;
-                }
-            }
+            const double PtToLp = 96.0 / 72.0;
+            var (ptW, ptH) = _pptxDocument.GetSlideSize(0);
+            if (ptW <= 0 || ptH <= 0) return;
+
+            // Convert to layout pixels
+            double widthLp = ptW * PtToLp;
+            double heightLp = ptH * PtToLp;
+
+            // Available space
+            const double sidePad = 28.0;
+            const double topPad  = 16.0;
+            double aw = DocumentScrollViewer.ViewportWidth  - sidePad * 2;
+            double ah = DocumentScrollViewer.ViewportHeight - topPad  * 2;
+            if (aw <= 0 || ah <= 0) return;
+
+            // Fit both dimensions
+            double targetZoom = Math.Min(aw / widthLp, ah / heightLp);
+            
+            QuickView.Infrastructure.Logging.Logger.Log($"ApplyFitPage PPTX: widthLp={widthLp}, heightLp={heightLp}, aw={aw}, ah={ah}, targetZoom={targetZoom}");
+            
+            SetZoom(targetZoom);
         }
-        if (physW <= 0 || physH <= 0) return;
-
-        const double sidePad = 28.0;
-        const double topPad  = 16.0;
-        double aw = DocumentScrollViewer.ViewportWidth  - sidePad * 2;
-        double ah = DocumentScrollViewer.ViewportHeight - topPad  * 2;
-        if (aw <= 0 || ah <= 0) return;
-
-        SetZoomAnchored(Math.Min(aw / physW, ah / physH), GetViewportCenter());
     }
 
     // ── Re-apply active fit on viewport change ────────────────────────────────
@@ -299,43 +227,15 @@ public sealed partial class ViewerPage
         _fitMode = FitMode.None;
         Toolbar.IsFitWidthChecked = Toolbar.IsFitPageChecked = false;
 
-        // One notch = 120; multiplicative so each step feels the same at any zoom.
+        // One notch = 120; multiplicative so each step feels the same at any zoom
         double steps  = point.Properties.MouseWheelDelta / 120.0;
         double factor = Math.Pow(1.1, steps);
 
-        // Anchor the zoom at the cursor position so the content under the
-        // pointer stays stationary — same technique as Rune's SetZoom(anchor).
         double newZoom = Math.Clamp(_zoom * factor,
                                     DocumentScrollViewer.MinZoomFactor,
                                     DocumentScrollViewer.MaxZoomFactor);
 
-        SetZoomAnchored(newZoom, point.Position);
-
+        SetZoom(newZoom);
         e.Handled = true;
-    }
-    
-    private List<int> GetVisiblePageIndices()
-    {
-        var visible = new List<int>();
-        
-        for (int i = 0; i < PagesPanel.Children.Count; i++)
-        {
-            if (PagesPanel.Children[i] is not FrameworkElement page) continue;
-            
-            try
-            {
-                var transform = page.TransformToVisual(DocumentScrollViewer);
-                var topLeft   = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
-                
-                if (topLeft.Y < DocumentScrollViewer.ViewportHeight &&
-                    topLeft.Y + page.ActualHeight > 0)
-                {
-                    visible.Add(i);
-                }
-            }
-            catch { }
-        }
-        
-        return visible;
     }
 }

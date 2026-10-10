@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <!--
     TitleBarWindow.xaml
     Chrome-style TabView: Home tab (fixed, no close) + document tabs (closeable).
@@ -44,9 +44,13 @@
             Grid.Row="0"
             TabWidthMode="Equal"
             CloseButtonOverlayMode="Always"
+            CanTearOutTabs="True"
             SelectionChanged="Tabs_SelectionChanged"
             AddTabButtonClick="Tabs_AddTabButtonClick"
             TabCloseRequested="Tabs_TabCloseRequested"
+            TabTearOutWindowRequested="Tabs_TabTearOutWindowRequested"
+            TabTearOutRequested="Tabs_TabTearOutRequested"
+            ExternalTornOutTabsDropped="Tabs_ExternalTornOutTabsDropped"
             Background="Transparent">
 
             <!-- Left of tabs: app icon and name in title bar style -->

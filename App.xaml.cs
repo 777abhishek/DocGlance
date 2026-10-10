@@ -19,6 +19,9 @@ public partial class App : Application
 {
     public Window? MainWindow => m_window;
 
+    // All open TitleBarWindows — used for tab drag-between-windows
+    public static readonly System.Collections.Generic.List<TitleBarWindow> AllWindows = new();
+
     public App()
     {
         try
@@ -78,6 +81,8 @@ public partial class App : Application
             
             // Create and show window with full initialization
             m_window = new TitleBarWindow();
+            App.AllWindows.Add((TitleBarWindow)m_window);
+            m_window.Closed += (_, _) => App.AllWindows.Remove((TitleBarWindow)m_window);
             m_window.Activate();
             Logger.Log("Window activated");
 
@@ -122,9 +127,17 @@ public partial class App : Application
     {
         // Office renderers (DOCX, XLSX, PPTX) currently show info cards only.
         // Full Office rendering would require COM interop or third-party libraries.
-        QuickView.Rendering.RendererRegistry.Register(new QuickView.Rendering.Office.DocxRenderer());
-        QuickView.Rendering.RendererRegistry.Register(new QuickView.Rendering.Office.XlsxRenderer());
-        QuickView.Rendering.RendererRegistry.Register(new QuickView.Rendering.Office.PptxRenderer());
+        var docxRenderer = new QuickView.Rendering.Office.DocxRenderer();
+        var xlsxRenderer = new QuickView.Rendering.Office.XlsxRenderer();
+        var pptxRenderer = new QuickView.Rendering.Office.PptxRenderer();
+        
+        QuickView.Rendering.RendererRegistry.Register(docxRenderer);
+        QuickView.Rendering.RendererRegistry.Register(xlsxRenderer);
+        QuickView.Rendering.RendererRegistry.Register(pptxRenderer);
+        
+        System.Diagnostics.Debug.WriteLine($"[App] Registered DOCX renderer for: {string.Join(", ", docxRenderer.SupportedExtensions)}");
+        System.Diagnostics.Debug.WriteLine($"[App] Registered XLSX renderer for: {string.Join(", ", xlsxRenderer.SupportedExtensions)}");
+        System.Diagnostics.Debug.WriteLine($"[App] Registered PPTX renderer for: {string.Join(", ", pptxRenderer.SupportedExtensions)}");
         
         // NOTE: HTML and Markdown removed - WebView2 uses 800MB+ memory
         // These file types now render as plain text via TextFileReader

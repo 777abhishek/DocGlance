@@ -75,7 +75,7 @@ public sealed partial class TitleBarWindow : Window
         _homeTab = new TabViewItem
         {
             Header          = "Home",
-            IsClosable      = false,
+            IsClosable      = true,  // Home tab now closeable like other tabs
             IconSource      = new SymbolIconSource { Symbol = Symbol.Home },
         };
         Tabs.TabItems.Add(_homeTab);
@@ -193,6 +193,12 @@ public sealed partial class TitleBarWindow : Window
 
         bool isHome = ReferenceEquals(selected, _homeTab);
 
+        // Update window title to document name
+        if (!isHome && _tabData.TryGetValue(selected, out var selData))
+            Title = selData.doc.Title + " — QuickView";
+        else
+            Title = "QuickView";
+
         // Home tab
         HomeFrame.Visibility = isHome ? Visibility.Visible : Visibility.Collapsed;
 
@@ -218,20 +224,185 @@ public sealed partial class TitleBarWindow : Window
 
     private void Tabs_TabCloseRequested(TabView sender, TabViewTabCloseRequestedEventArgs args)
     {
-        var tab = args.Tab;
+        CloseTab(args.Tab);
+    }
+
+    private void CloseTab(TabViewItem tab)
+    {
+        // Handle closing Home tab — recreate it to ensure window always has one tab
+        bool wasHomeTab = ReferenceEquals(tab, _homeTab);
+        
+        // Clean up document/special tabs
         if (_tabData.ContainsKey(tab))
         {
-            // Cancel any in-progress rendering
             if (_tabData[tab].viewer is ViewerPage vp)
                 vp.CancelLoad();
-
             _tabData.Remove(tab);
         }
+        _specialTabs.Remove(tab);
+        
         Tabs.TabItems.Remove(tab);
 
-        // If no document tabs remain, go home
+        // If Home tab was closed, recreate it
+        if (wasHomeTab)
+        {
+            _homeTab = null;
+            AddHomeTab();
+            Tabs.SelectedItem = _homeTab;
+        }
+        // Otherwise, if all document tabs are closed, select Home
+        else if (_tabData.Count == 0 && Tabs.TabItems.Count > 0)
+        {
+            Tabs.SelectedItem = _homeTab;
+        }
+    }
+
+    // ── Tab tear-out: drag tab out → new window ──────────────────────────────
+    // SDK 2.3 two-phase protocol:
+    //   Phase 1 — TabTearOutWindowRequested: create window, MUST set args.NewWindowId
+    //             (if not set, the SDK cancels the tear-out and may crash).
+    //   Phase 2 — TabTearOutRequested: tab has been removed from this TabView by the
+    //             SDK; open the document in the new window and clean up local state.
+    //
+    // IMPORTANT: Only the PICKED (dragged) tab tears out — not all tabs in the window.
+
+    private TitleBarWindow? _tearOutWindow;
+    private DocumentItem?   _tearOutDoc;
+    private TabViewItem?    _tearOutTab;
+
+    private void Tabs_TabTearOutWindowRequested(
+        TabView sender, TabViewTabTearOutWindowRequestedEventArgs args)
+    {
+        // Identify the specific tab being torn out (args.Tabs[0] is the dragged tab).
+        if (args.Tabs.Length == 0) return;
+        if (args.Tabs[0] is not TabViewItem tab) return;
+        
+        // Store which tab is being torn out
+        _tearOutTab = tab;
+        
+        // Handle Home tab tear-out — create document from current Home state
+        if (ReferenceEquals(tab, _homeTab))
+        {
+            // Home tab tears out as a new Home tab in the new window
+            var w = new TitleBarWindow();
+            App.AllWindows.Add(w);
+            w.Closed += (_, _) => App.AllWindows.Remove(w);
+            
+            args.NewWindowId = w.AppWindow.Id;
+            _tearOutWindow = w;
+            _tearOutDoc = null;  // Home has no document
+            return;
+        }
+        
+        // Handle document tab tear-out
+        if (!_tabData.TryGetValue(tab, out var data)) return;
+
+        // Create a new TitleBarWindow but don't open the doc yet — the SDK
+        // still needs to complete its drag animation before the window is ready.
+        var newWindow = new TitleBarWindow();
+        App.AllWindows.Add(newWindow);
+        newWindow.Closed += (_, _) => App.AllWindows.Remove(newWindow);
+
+        // REQUIRED: tell the SDK which window will host the torn-out tab.
+        // Omitting this causes an access violation in the SDK's drag handler.
+        args.NewWindowId = newWindow.AppWindow.Id;
+
+        // Carry state to Phase 2.
+        _tearOutWindow = newWindow;
+        _tearOutDoc    = data.doc;
+    }
+
+    private void Tabs_TabTearOutRequested(
+        TabView sender, TabViewTabTearOutRequestedEventArgs args)
+    {
+        // The SDK has already removed the tab from this TabView.
+        // Our job: clean up local state and open the doc in the new window.
+        if (args.Tabs.Length == 0) return;
+        if (args.Tabs[0] is not TabViewItem tab) return;
+
+        var newWindow = _tearOutWindow;
+        var doc       = _tearOutDoc;
+        var tornTab   = _tearOutTab;
+        
+        _tearOutWindow = null;
+        _tearOutDoc    = null;
+        _tearOutTab    = null;
+
+        // Handle Home tab tear-out — just recreate it in source window
+        bool wasHomeTab = ReferenceEquals(tab, tornTab) && ReferenceEquals(tornTab, _homeTab);
+        if (wasHomeTab)
+        {
+            // Recreate Home tab in this window
+            _homeTab = null;
+            AddHomeTab();
+            Tabs.SelectedItem = _homeTab;
+            
+            // New window already has its Home tab from constructor
+            if (newWindow != null)
+            {
+                newWindow.Activate();
+                newWindow.Tabs.SelectedItem = newWindow._homeTab;
+            }
+            return;
+        }
+
+        // Clean up viewer state for the document tab that left this window.
+        if (_tabData.TryGetValue(tab, out var data))
+        {
+            data.viewer.CancelLoad();
+            _tabData.Remove(tab);
+        }
+
+        // If no more document tabs, select Home
         if (_tabData.Count == 0)
             Tabs.SelectedItem = _homeTab;
+
+        // Open the document in the detached window once it is activated.
+        if (newWindow == null || doc == null) return;
+
+        newWindow.Activate();
+        newWindow.Activated += OnReady;
+
+        void OnReady(object s, WindowActivatedEventArgs _)
+        {
+            newWindow.Activated -= OnReady;
+            newWindow.OpenDocument(doc);
+        }
+    }
+
+    private void Tabs_ExternalTornOutTabsDropped(TabView sender, TabViewExternalTornOutTabsDroppedEventArgs args)
+    {
+        // A tab from another QuickView window was dropped onto this one.
+        // args.Tabs contains the TabViewItems — but since UI elements can't
+        // cross windows we use the Tag (DocumentItem) we attached at tear-out.
+        foreach (var obj in args.Tabs)
+        {
+            if (obj is TabViewItem tab && tab.Tag is DocumentItem doc)
+                OpenDocument(doc);
+        }
+    }
+
+    /// <summary>
+    /// Creates a brand-new TitleBarWindow that opens doc and registers itself
+    /// in App.AllWindows. The window closes itself when its last doc tab closes.
+    /// </summary>
+    private static TitleBarWindow CreateDetachedWindow(DocumentItem doc)
+    {
+        var w = new TitleBarWindow();
+        App.AllWindows.Add(w);
+
+        w.Closed += (_, _) => App.AllWindows.Remove(w);
+
+        // Open document after the window is activated and laid out
+        w.Activated += OnNewWindowActivated;
+
+        void OnNewWindowActivated(object s, WindowActivatedEventArgs _)
+        {
+            w.Activated -= OnNewWindowActivated;
+            w.OpenDocument(doc);
+        }
+
+        return w;
     }
 
     private void Tabs_AddTabButtonClick(TabView sender, object args)

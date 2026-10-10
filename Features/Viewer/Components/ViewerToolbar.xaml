@@ -81,24 +81,8 @@
             </Button>
         </StackPanel>
 
-        <!-- Annotation Tools -->
-        <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
-            <ToggleButton x:Name="PenToolButton" Style="{StaticResource ITB}" Click="PenToolButton_Click" ToolTipService.ToolTip="Pen — draw freehand (Ctrl+E)">
-                <FontIcon Glyph="&#xE70F;" FontSize="14" />
-            </ToggleButton>
-            <ToggleButton x:Name="HighlighterToolButton" Style="{StaticResource ITB}" Click="HighlighterToolButton_Click" ToolTipService.ToolTip="Highlighter — drag over text (Ctrl+H)">
-                <FontIcon Glyph="&#xE891;" FontSize="14" />
-            </ToggleButton>
-            <ToggleButton x:Name="NoteToolButton" Style="{StaticResource ITB}" Click="NoteToolButton_Click" ToolTipService.ToolTip="Note — click to add a sticky note">
-                <FontIcon Glyph="&#xE70B;" FontSize="14" />
-            </ToggleButton>
-            <ToggleButton x:Name="TextToolButton" Style="{StaticResource ITB}" Click="TextToolButton_Click" ToolTipService.ToolTip="Text — click anywhere on the page and type (Ctrl+T)">
-                <FontIcon Glyph="&#xE8D2;" FontSize="14" />
-            </ToggleButton>
-            <ToggleButton x:Name="EraserToolButton" Style="{StaticResource ITB}" Click="EraserToolButton_Click" ToolTipService.ToolTip="Eraser — click an annotation to remove it">
-                <FontIcon Glyph="&#xE75C;" FontSize="14" />
-            </ToggleButton>
-        </StackPanel>
+        <!-- Annotation tools: removed — editing is not implemented yet.
+             Re-add here (column 4) when pen/highlighter/note/text/eraser land. -->
 
         <!-- Right actions -->
         <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="2">

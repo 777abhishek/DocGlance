@@ -48,64 +48,14 @@ public sealed partial class ViewerPage
         _rotation = (_rotation + delta + 360.0) % 360.0;
         ViewModel.Rotation = _rotation;
 
-        if (_pdfState == null) return;
-
-        bool swap = (int)(_rotation / 90.0) % 2 == 1; 
-
-        for (int i = 0; i < PagesPanel.Children.Count; i++)
+        // VIEWPORT ARCHITECTURE: rotation swaps page axes (90°/270°), so the
+        // canvas extent changes and the region must be re-rendered with the
+        // PDFium rotate flag.
+        if (_pdfState != null && _viewportState != null)
         {
-            if (PagesPanel.Children[i] is not Border border) continue;
-
-            double physW = 0, physH = 0;
-            if (border.Tag is (double ow, double oh))
-            {
-                physW = ow; physH = oh;
-            }
-            else
-            {
-                var img = FindPageImage(border);
-                if (img != null && img.Width > 0)
-                {
-                    physW = img.Width; physH = img.Height;
-                    border.Tag = (physW, physH); 
-                }
-            }
-
-            if (physW <= 0 || physH <= 0) continue;
-
-            if (swap)
-            {
-                border.Width  = physH;
-                border.Height = physW;
-            }
-            else
-            {
-                border.Width  = physW;
-                border.Height = physH;
-            }
-            border.RenderTransformOrigin = new Windows.Foundation.Point(0.5, 0.5);
-            border.RenderTransform = new Microsoft.UI.Xaml.Media.RotateTransform { Angle = _rotation };
+            UpdateCanvasSize();
+            _ = RenderPagesAsync();
         }
-
-        for (int i = 0; i < Thumbnails.Count && i < PagesPanel.Children.Count; i++)
-        {
-            if (PagesPanel.Children[i] is Border b && b.Tag is (double ow, double oh))
-            {
-                double aspect = swap ? (ow / oh) : (oh / ow);
-                Thumbnails[i].BoxHeight = 200.0 * aspect;
-            }
-        }
-
-        ReapplyFitMode();
-    }
-
-    private static Image? FindPageImage(Border border)
-    {
-        if (border.Child is Image img) return img;
-        if (border.Child is Grid grid)
-            foreach (var child in grid.Children)
-                if (child is Image i) return i;
-        return null;
     }
 
     private void Toolbar_FindRequested(object? sender, EventArgs e)

@@ -34,3 +34,5 @@ desktop.ini
 appsettings.Development.json
 *.pfx
 *.p12
+native/deckcraft_ffi/target
+.agents

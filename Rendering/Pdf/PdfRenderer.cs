@@ -198,4 +198,144 @@ public static class PdfRenderer
             ArrayPool<byte>.Shared.Return(renderResult.Buffer);
         }
     }
+
+    /// <summary>
+    /// VIEWPORT RENDERING: Renders only the visible portion of a page.
+    /// This is the KEY to low memory usage - we render a screen-sized bitmap (1920×1080)
+    /// instead of a full page bitmap (2550×3300 at 200% zoom).
+    /// 
+    /// Memory: 1920×1080×4 = 8.3 MB vs 2550×3300×4 = 33.6 MB (75% reduction)
+    /// </summary>
+    /// <param name="state">PDF document state</param>
+    /// <param name="pageIndex">Page to render</param>
+    /// <param name="dpi">Render DPI (96 × zoom factor)</param>
+    /// <param name="viewportWidthPx">Viewport width in pixels</param>
+    /// <param name="viewportHeightPx">Viewport height in pixels</param>
+    /// <param name="scrollXPt">Horizontal scroll position in PDF points</param>
+    /// <param name="scrollYPt">Vertical scroll position in PDF points</param>
+    /// <param name="ct">Cancellation token</param>
+    /// <returns>Bitmap of viewport size showing visible portion of page</returns>
+    public static async Task<WriteableBitmap?> RenderViewportAsync(
+        PdfDocumentState state, 
+        int pageIndex, 
+        float dpi,
+        int viewportWidthPx,
+        int viewportHeightPx,
+        double scrollXPt,
+        double scrollYPt,
+        CancellationToken ct = default)
+    {
+        if (ct.IsCancellationRequested || state == null) return null;
+
+        var renderResult = await Task.Run(() =>
+        {
+            if (ct.IsCancellationRequested) return default;
+            EnsureInitialized();
+
+            lock (Pdfium.Gate)
+            {
+                if (ct.IsCancellationRequested) return default;
+                IntPtr doc = state.Handle;
+                if (doc == IntPtr.Zero) return default;
+
+                IntPtr page = Pdfium.FPDF_LoadPage(doc, pageIndex);
+                if (page == IntPtr.Zero) return default;
+
+                try
+                {
+                    float pageWidthPt = Pdfium.FPDF_GetPageWidthF(page);
+                    float pageHeightPt = Pdfium.FPDF_GetPageHeightF(page);
+
+                    // Convert page dimensions from PDF points to pixels at current DPI
+                    int pageWidthPx = (int)Math.Round(pageWidthPt * dpi / 72.0);
+                    int pageHeightPx = (int)Math.Round(pageHeightPt * dpi / 72.0);
+
+                    // Convert scroll position from PDF points to pixels
+                    int scrollXPx = (int)Math.Round(scrollXPt * dpi / 72.0);
+                    int scrollYPx = (int)Math.Round(scrollYPt * dpi / 72.0);
+
+                    // Create bitmap of viewport size (not full page size!)
+                    int bitmapWidth = Math.Min(viewportWidthPx, pageWidthPx - scrollXPx);
+                    int bitmapHeight = Math.Min(viewportHeightPx, pageHeightPx - scrollYPx);
+                    
+                    if (bitmapWidth <= 0 || bitmapHeight <= 0) return default;
+
+                    int stride = bitmapWidth * 4;
+                    int byteCount = stride * bitmapHeight;
+                    byte[] buffer = ArrayPool<byte>.Shared.Rent(byteCount);
+
+                    unsafe
+                    {
+                        fixed (byte* p = buffer)
+                        {
+                            IntPtr bitmap = Pdfium.FPDFBitmap_CreateEx(
+                                bitmapWidth, bitmapHeight, Pdfium.BitmapBgra, (IntPtr)p, stride);
+                            
+                            if (bitmap != IntPtr.Zero)
+                            {
+                                try
+                                {
+                                    // Fill with white background
+                                    Pdfium.FPDFBitmap_FillRect(bitmap, 0, 0, bitmapWidth, bitmapHeight, 0xFFFFFFFF);
+                                    
+                                    // CRITICAL: Use negative start_x/start_y to implement viewport clipping
+                                    // This tells PDFium to render the page starting from (-scrollX, -scrollY)
+                                    // into our small viewport-sized bitmap.
+                                    // 
+                                    // The page still thinks it's rendering at full pageWidthPx × pageHeightPx,
+                                    // but only the visible portion lands in the bitmap.
+                                    Pdfium.FPDF_RenderPageBitmap(
+                                        bitmap,
+                                        page,
+                                        -scrollXPx,        // Start X: negative = viewport offset
+                                        -scrollYPx,        // Start Y: negative = viewport offset
+                                        pageWidthPx,       // Full page width (coordinate space)
+                                        pageHeightPx,      // Full page height (coordinate space)
+                                        0,                 // No rotation
+                                        Pdfium.RenderAnnot | Pdfium.RenderLcdText);
+                                }
+                                finally
+                                {
+                                    Pdfium.FPDFBitmap_Destroy(bitmap);
+                                }
+                            }
+                        }
+                    }
+
+                    return (Buffer: buffer, Width: bitmapWidth, Height: bitmapHeight, Stride: stride, ByteCount: byteCount);
+                }
+                finally
+                {
+                    Pdfium.FPDF_ClosePage(page);
+                }
+            }
+        }, ct);
+
+        if (renderResult.Buffer == null || ct.IsCancellationRequested)
+        {
+            if (renderResult.Buffer != null)
+                ArrayPool<byte>.Shared.Return(renderResult.Buffer);
+            return null;
+        }
+
+        try
+        {
+            lock (Pdfium.Gate)
+            {
+                if (state.Handle == IntPtr.Zero) return null;
+            }
+
+            var writeableBmp = new WriteableBitmap(renderResult.Width, renderResult.Height);
+            using (var stream = writeableBmp.PixelBuffer.AsStream())
+            {
+                stream.Write(renderResult.Buffer, 0, renderResult.ByteCount);
+            }
+            writeableBmp.Invalidate();
+            return writeableBmp;
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(renderResult.Buffer);
+        }
+    }
 }

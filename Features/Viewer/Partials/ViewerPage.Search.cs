@@ -120,53 +120,54 @@ public sealed partial class ViewerPage
 
     private void DrawAllHighlights()
     {
-        for (int i = 0; i < PagesPanel.Children.Count; i++)
-            DrawHighlights(i);
-    }
+        // VIEWPORT ARCHITECTURE: highlights are anchored in canvas coordinates
+        // (canvas lp = pt × 96/72 × zoom), so they scroll with the content.
+        if (SearchHighlightCanvas == null || _viewportState == null || _pdfState == null) return;
 
-    /// <summary>
-    /// Redraws search-highlight borders on the overlay Canvas for one page.
-    ///
-    /// Coordinate maths (matches Rune's HighlightRect):
-    ///   PdfSearchRect.X / Y are already in top-left-origin page points
-    ///   (1 pt = 1 px at 72 DPI), produced by FPDF_PageToDevice in PdfTextService.
-    ///   scale = RenderDpi / 96.0 converts them to the physical-pixel space the
-    ///   Canvas lives in (Canvas.Width == physW, Canvas.Height == physH).
-    ///   No Y-flip is needed because the origin is already top-left.
-    /// </summary>
-    internal void DrawHighlights(int pageIndex)
-    {
-        if (pageIndex < 0 || pageIndex >= PagesPanel.Children.Count) return;
-        if (PagesPanel.Children[pageIndex] is not Border border) return;
+        SearchHighlightCanvas.Children.Clear();
 
-        Canvas? canvas = FindHighlightCanvas(border);
-        if (canvas == null) return;
+        // Rects are in unrotated page space — skip rather than draw misplaced.
+        if (_rotation != 0) return;
 
-        canvas.Children.Clear();
-
-        // Rects from PdfTextService are ALREADY in physical pixels at RenderDpi (384),
-        // matching Canvas size exactly. Place directly without scaling.
+        var visiblePages = _viewportState.GetVisiblePages(_pdfState);
 
         for (int resultIndex = 0; resultIndex < _searchResults.Count; resultIndex++)
         {
             var result = _searchResults[resultIndex];
-            if (result.PageIndex != pageIndex) continue;
 
-            // Active hit: match by CharIndex (stable identity), falling back to
-            // list position — mirrors Rune's ReferenceEquals + CharIndex check.
+            // Skip results not in visible pages
+            bool isVisible = false;
+            foreach (var (pageIndex, _, _) in visiblePages)
+            {
+                if (pageIndex == result.PageIndex)
+                {
+                    isVisible = true;
+                    break;
+                }
+            }
+            if (!isVisible) continue;
+
+            // Active hit: match by CharIndex (stable identity), falling back to list position
             bool active = resultIndex == _activeSearchIndex ||
                           (_activeSearchIndex >= 0 &&
                            _activeSearchIndex < _searchResults.Count &&
                            _searchResults[_activeSearchIndex].PageIndex == result.PageIndex &&
                            _searchResults[_activeSearchIndex].CharIndex == result.CharIndex);
 
+            // Get page position in document to offset highlight coordinates
+            double pageOffsetY = GetPageOffsetInDocument(result.PageIndex);
+
+            double zoom = _zoom;
             foreach (var rect in result.Rects)
             {
-                // rect.X/Y/Width/Height are already in physical pixels
+                // PDF points → canvas layout pixels (× zoom, canvas is zoom-scaled)
+                double canvasX = rect.X * PtToLp * zoom;
+                double canvasY = (pageOffsetY + rect.Y) * PtToLp * zoom;
+
                 var highlight = new Border
                 {
-                    Width         = Math.Max(1, rect.Width),
-                    Height        = Math.Max(1, rect.Height),
+                    Width         = Math.Max(1, rect.Width  * PtToLp * zoom),
+                    Height        = Math.Max(1, rect.Height * PtToLp * zoom),
                     CornerRadius  = new CornerRadius(2),
                     Background    = new SolidColorBrush(active
                         ? Color.FromArgb(160, 255, 140, 0)   // orange — active hit
@@ -176,28 +177,29 @@ public sealed partial class ViewerPage
                         : Color.FromArgb(140, 200, 180, 0)),
                     BorderThickness = new Thickness(1),
                 };
-                Canvas.SetLeft(highlight, rect.X);
-                Canvas.SetTop (highlight, rect.Y);
-                canvas.Children.Add(highlight);
+                Canvas.SetLeft(highlight, canvasX);
+                Canvas.SetTop(highlight, canvasY);
+                SearchHighlightCanvas.Children.Add(highlight);
             }
         }
     }
 
     /// <summary>
-    /// Finds the highlight Canvas in a page border, regardless of whether
-    /// the page contains a plain Image (not yet rendered) or a Grid+Image+Canvas
-    /// (already rendered). Searches the child tree one level deep.
+    /// Gets the Y offset of a page within the entire document in PDF points.
     /// </summary>
-    private static Canvas? FindHighlightCanvas(Border border)
+    private double GetPageOffsetInDocument(int pageIndex)
     {
-        // Rendered pages: border.Child is Grid containing Image + Canvas
-        if (border.Child is Grid grid)
+        if (_pdfState == null || pageIndex <= 0) return 0;
+
+        const double PageGapPt = 12.0 * 72.0 / 96.0;  // gap converted to PDF points
+
+        double offset = 0;
+        for (int i = 0; i < pageIndex && i < _pdfState.PageCount; i++)
         {
-            foreach (var child in grid.Children)
-                if (child is Canvas c) return c;
+            var (_, pageHeight) = _pdfState.GetPageSize(i);
+            offset += pageHeight + PageGapPt;
         }
-        // Placeholder pages: border.Child is Grid with ProgressRing (no Canvas yet)
-        return null;
+        return offset;
     }
 
     // ── Navigate Prev / Next ──────────────────────────────────────────────────
@@ -222,9 +224,8 @@ public sealed partial class ViewerPage
     }
 
     /// <summary>
-    /// Scrolls so the active hit rect is centred vertically in the viewport —
-    /// matches Rune's HighlightHit which centres on hitTop rather than jumping
-    /// to the page top (important for long/multi-column pages).
+    /// Scrolls so the active hit rect is centred vertically in the viewport.
+    /// VIEWPORT ARCHITECTURE: Calculate page offset and scroll to position.
     /// </summary>
     private void ScrollToHit(int hitIndex)
     {
@@ -233,23 +234,19 @@ public sealed partial class ViewerPage
         var hit = _searchResults[hitIndex];
         if (hit.Rects.Count == 0)
         {
-            // No rect info — fall back to scrolling to the page top.
-            GoToPage(hit.PageIndex + 1);
+            ScrollToPage(hit.PageIndex + 1);
             return;
         }
 
-        // Rects are already in physical pixels, so convert directly to content coords.
-        // No scale multiplication needed.
-        double pageTop    = GetPageContentTop(hit.PageIndex);
-        double hitOffsetY = hit.Rects[0].Y;  // already in physical pixels
+        const double PtToLp   = 96.0 / 72.0;
 
-        // Content-space Y of the hit's top edge
-        double hitContentY = pageTop + hitOffsetY;
+        // Page top + hit position in canvas layout pixels (canvas is zoom-scaled)
+        double pageTopLp  = GetPageOffsetInDocument(hit.PageIndex) * PtToLp;
+        double hitOffsetLp = hit.Rects[0].Y * PtToLp;   // rect coords are in PDF points
+        double hitContentLp = (pageTopLp + hitOffsetLp) * _zoom;
 
-        // Centre the hit vertically in the viewport
-        double zoom       = Math.Max(0.01, DocumentScrollViewer.ZoomFactor);
         double viewportH  = DocumentScrollViewer.ViewportHeight;
-        double targetOffset = Math.Max(0, hitContentY * zoom - viewportH / 2);
+        double targetOffset = Math.Max(0, hitContentLp - viewportH / 2);
 
         _suppressScrollSync = true;
         DocumentScrollViewer.ChangeView(null, targetOffset, null, disableAnimation: true);
@@ -257,9 +254,7 @@ public sealed partial class ViewerPage
             Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
             () => _suppressScrollSync = false);
 
-        // Keep thumbnail + page number in sync.
         UpdateCurrentPage(hit.PageIndex + 1);
-        PrefetchPagesAround(hit.PageIndex);
     }
 
     // ── Count label ───────────────────────────────────────────────────────────
