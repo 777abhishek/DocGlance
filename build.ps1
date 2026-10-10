@@ -86,7 +86,24 @@ if (Test-Path $lockedDll) {
     catch { Write-Info "Could not remove locked DLL (still locked?) — trying anyway" }
 }
 
-# ── 2. Build ──────────────────────────────────────────────────────────────────
+# ── 2. Build native libraries ────────────────────────────────────────────────
+if (-not $NoBuild) {
+    Write-Step "Building native Rust libraries…"
+    $nativeBuildScript = "$PSScriptRoot\native\build-native.ps1"
+    if (Test-Path $nativeBuildScript) {
+        try {
+            & $nativeBuildScript
+            Write-OK "Native libraries built successfully"
+        } catch {
+            Write-Fail "Native build failed: $_"
+            exit 1
+        }
+    } else {
+        Write-Info "No native build script found, skipping…"
+    }
+}
+
+# ── 3. Build managed code ─────────────────────────────────────────────────────
 if (-not $NoBuild) {
 
     $buildArgs = @(
@@ -141,14 +158,14 @@ if (-not $NoBuild) {
     Write-OK "Build succeeded in ${elapsed}s  —  $errors  |  $warnings"
 }
 
-# ── 3. Verify exe exists ──────────────────────────────────────────────────────
+# ── 4. Verify exe exists ──────────────────────────────────────────────────────
 if (-not (Test-Path $Exe)) {
     Write-Fail "Exe not found: $Exe"
     Write-Info "Expected at: $Exe"
     exit 1
 }
 
-# ── 3b. Stamp app icon (unpackaged builds only) ───────────────────────────────
+# ── 4b. Stamp app icon (unpackaged builds only) ───────────────────────────────
 if ($Unpackaged) {
     $rcedit = "$PSScriptRoot\tools\rcedit.exe"
     $ico    = "$BinDir\Assets\AppIcon.ico"
@@ -167,7 +184,7 @@ if ($Unpackaged) {
     Write-Info "Skipping icon stamp (packaged builds use manifest assets)"
 }
 
-# ── 4. Launch ─────────────────────────────────────────────────────────────────
+# ── 5. Launch ─────────────────────────────────────────────────────────────────
 Write-Step "Launching $ExeName…"
 $proc = Start-Process $Exe -PassThru
 Start-Sleep -Seconds 3

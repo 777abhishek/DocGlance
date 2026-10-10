@@ -305,7 +305,7 @@ public sealed partial class ViewerPage
         int renderH = Math.Max(1, (int)Math.Round(pageH * display));
 
         var pixelBuffer = await Task.Run(() =>
-            RenderFullPageProgressive(pdfState, pageIndex, dpi, renderW, renderH,
+            RenderFullPage(pdfState, pageIndex, dpi, renderW, renderH,
                            (int)(_rotation % 360 / 90), ct), ct);
 
         if (pixelBuffer == null || ct.IsCancellationRequested) return;
