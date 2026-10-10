@@ -49,10 +49,14 @@ public static class PdfMetadataService
         var handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
         try
         {
-            Pdfium.FPDF_GetMetaText(doc, tag, handle.AddrOfPinnedObject(), len);
+            uint actualLen = Pdfium.FPDF_GetMetaText(doc, tag, handle.AddrOfPinnedObject(), len);
+            // Validate that the second call succeeded and returned data
+            if (actualLen <= 2)
+                return string.Empty;
+            
             // FPDF_GetMetaText returns byte count INCLUDING null terminator
             // Subtract 2 bytes for the UTF-16 null terminator
-            return Encoding.Unicode.GetString(buffer, 0, (int)len - 2);
+            return Encoding.Unicode.GetString(buffer, 0, (int)actualLen - 2);
         }
         finally
         {

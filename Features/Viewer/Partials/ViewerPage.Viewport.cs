@@ -305,7 +305,7 @@ public sealed partial class ViewerPage
         int renderH = Math.Max(1, (int)Math.Round(pageH * display));
 
         var pixelBuffer = await Task.Run(() =>
-            RenderFullPage(pdfState, pageIndex, dpi, renderW, renderH,
+            RenderFullPageProgressive(pdfState, pageIndex, dpi, renderW, renderH,
                            (int)(_rotation % 360 / 90), ct), ct);
 
         if (pixelBuffer == null || ct.IsCancellationRequested) return;
@@ -558,28 +558,33 @@ public sealed partial class ViewerPage
                                 NeedToPauseNow = Marshal.GetFunctionPointerForDelegate(callback)
                             };
 
-                            sw.Start();
-                            int status = Pdfium.FPDF_RenderPage_Start(
-                                bmp, page,
-                                0, 0, renderW, renderH,
-                                rotate,
-                                Pdfium.RenderAnnot | Pdfium.RenderLcdText,
-                                ref pause);
-
-                            int iteration = 0;
-                            while (status == Pdfium.FPDF_RENDER_TOBECONTINUED && 
-                                   !ct.IsCancellationRequested && 
-                                   iteration < 200)
+                            try
                             {
-                                // Yield briefly to let other threadpool work proceed
-                                Thread.Yield();
-                                sw.Restart();
-                                status = Pdfium.FPDF_RenderPage_Continue(page, ref pause);
-                                iteration++;
-                            }
+                                sw.Start();
+                                int status = Pdfium.FPDF_RenderPage_Start(
+                                    bmp, page,
+                                    0, 0, renderW, renderH,
+                                    rotate,
+                                    Pdfium.RenderAnnot | Pdfium.RenderLcdText,
+                                    ref pause);
 
-                            // Always close progressive render before closing page
-                            Pdfium.FPDF_RenderPage_Close(page);
+                                int iteration = 0;
+                                while (status == Pdfium.FPDF_RENDER_TOBECONTINUED && 
+                                       !ct.IsCancellationRequested && 
+                                       iteration < 200)
+                                {
+                                    // Yield briefly to let other threadpool work proceed
+                                    Thread.Yield();
+                                    sw.Restart();
+                                    status = Pdfium.FPDF_RenderPage_Continue(page, ref pause);
+                                    iteration++;
+                                }
+                            }
+                            finally
+                            {
+                                // Always close progressive render before closing page
+                                Pdfium.FPDF_RenderPage_Close(page);
+                            }
                         }
                     }
 

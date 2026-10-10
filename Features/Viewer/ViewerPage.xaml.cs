@@ -35,9 +35,6 @@ public sealed partial class ViewerPage : Page
     internal CancellationTokenSource? _cts;
     internal List<OutlineItem>        _outline  = new();
 
-    // Guard: prevents scroll-sync feedback loop when programmatically scrolling to a search hit
-    private bool _suppressScrollSync;
-
     // ── PERF-05: WebView2 disposal tracking ──────────────────────────────────
     // Track current renderer and element to ensure proper cleanup
     private Core.Interfaces.IFileRenderer? _currentRenderer;

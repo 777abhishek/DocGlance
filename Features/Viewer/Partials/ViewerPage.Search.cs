@@ -248,11 +248,7 @@ public sealed partial class ViewerPage
         double viewportH  = DocumentScrollViewer.ViewportHeight;
         double targetOffset = Math.Max(0, hitContentLp - viewportH / 2);
 
-        _suppressScrollSync = true;
         DocumentScrollViewer.ChangeView(null, targetOffset, null, disableAnimation: true);
-        _ = DispatcherQueue.TryEnqueue(
-            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
-            () => _suppressScrollSync = false);
 
         UpdateCurrentPage(hit.PageIndex + 1);
     }
