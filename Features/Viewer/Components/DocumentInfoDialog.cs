@@ -12,22 +12,43 @@ namespace QuickView.Features.Viewer.Components;
 /// </summary>
 internal static class DocumentInfoDialog
 {
-    public static ContentDialog Build(DocumentItem doc, int totalPages, XamlRoot root)
+    public static ContentDialog Build(DocumentItem doc, int totalPages, XamlRoot root, PdfMetadata? metadata = null)
     {
         var fi = File.Exists(doc.FilePath) ? new FileInfo(doc.FilePath) : null;
 
+        // Calculate row count: 8 base rows + metadata rows if present
+        int rowCount = 8;
+        bool hasTitle = metadata != null && !string.IsNullOrWhiteSpace(metadata.Title);
+        bool hasAuthor = metadata != null && !string.IsNullOrWhiteSpace(metadata.Author);
+        bool hasSubject = metadata != null && !string.IsNullOrWhiteSpace(metadata.Subject);
+        
+        if (hasTitle) rowCount++;
+        if (hasAuthor) rowCount++;
+        if (hasSubject) rowCount++;
+
         var grid = new Grid { RowSpacing = 4 };
-        for (int i = 0; i < 8; i++)
+        for (int i = 0; i < rowCount; i++)
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        AddRow(grid, 0, "\uE8A5", "File name",     Path.GetFileName(doc.FilePath) ?? "—");
-        AddRow(grid, 1, "\uE8EC", "Type",           (doc.FileType ?? "—").TrimStart('.').ToUpperInvariant());
-        AddRow(grid, 2, "\uE2B2", "Size",           fi != null ? FileSizeFormatter.Format(fi.Length) : "—");
-        AddRow(grid, 3, "\uE9D5", "Pages",          totalPages > 1 ? $"{totalPages} pages" : "—");
-        AddRow(grid, 4, "\uE8DA", "Location",       doc.FolderPath ?? "—", wrap: true);
-        AddRow(grid, 5, "\uE787", "Modified",       fi?.LastWriteTime.ToString("MMM d, yyyy  h:mm tt") ?? "—");
-        AddRow(grid, 6, "\uE8B5", "Created",        fi?.CreationTime.ToString("MMM d, yyyy  h:mm tt") ?? "—");
-        AddRow(grid, 7, "\uE71C", "Full path",      doc.FilePath ?? "—", wrap: true);
+        int currentRow = 0;
+
+        AddRow(grid, currentRow++, "\uE8A5", "File name",     Path.GetFileName(doc.FilePath) ?? "—");
+        AddRow(grid, currentRow++, "\uE8EC", "Type",           (doc.FileType ?? "—").TrimStart('.').ToUpperInvariant());
+        AddRow(grid, currentRow++, "\uE2B2", "Size",           fi != null ? FileSizeFormatter.Format(fi.Length) : "—");
+        AddRow(grid, currentRow++, "\uE9D5", "Pages",          totalPages > 1 ? $"{totalPages} pages" : "—");
+        
+        // Add metadata rows if present
+        if (hasTitle)
+            AddRow(grid, currentRow++, "\uE8A9", "Title", metadata!.Title);
+        if (hasAuthor)
+            AddRow(grid, currentRow++, "\uE77B", "Author", metadata!.Author);
+        if (hasSubject)
+            AddRow(grid, currentRow++, "\uE8D2", "Subject", metadata!.Subject);
+        
+        AddRow(grid, currentRow++, "\uE8DA", "Location",       doc.FolderPath ?? "—", wrap: true);
+        AddRow(grid, currentRow++, "\uE787", "Modified",       fi?.LastWriteTime.ToString("MMM d, yyyy  h:mm tt") ?? "—");
+        AddRow(grid, currentRow++, "\uE8B5", "Created",        fi?.CreationTime.ToString("MMM d, yyyy  h:mm tt") ?? "—");
+        AddRow(grid, currentRow++, "\uE71C", "Full path",      doc.FilePath ?? "—", wrap: true);
 
         var dialog = new ContentDialog
         {

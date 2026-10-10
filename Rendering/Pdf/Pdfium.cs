@@ -373,4 +373,57 @@ internal static class Pdfium
 
     [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
     public static extern void FPDF_RenderPage_Close(IntPtr page);
+
+    // ── Document Metadata API ────────────────────────────────────────────────
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern uint FPDF_GetMetaText(
+        IntPtr document,
+        [MarshalAs(UnmanagedType.LPStr)] string tag,
+        IntPtr buffer,
+        uint buflen);
+
+    // ── Document Permissions API ─────────────────────────────────────────────
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern uint FPDF_GetDocPermissions(IntPtr document);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int FPDF_GetSecurityHandlerRevision(IntPtr document);
+
+    public const uint FPDF_PERM_PRINT          = 1u << 2;
+    public const uint FPDF_PERM_MODIFY         = 1u << 3;
+    public const uint FPDF_PERM_EXTRACT        = 1u << 4;
+    public const uint FPDF_PERM_ANNOTATE       = 1u << 5;
+    public const uint FPDF_PERM_FILL_FORM      = 1u << 8;
+    public const uint FPDF_PERM_EXTRACT_ACCESS = 1u << 9;
+    public const uint FPDF_PERM_ASSEMBLE       = 1u << 10;
+    public const uint FPDF_PERM_PRINT_HIGH     = 1u << 11;
+
+    // ── Page Label API ───────────────────────────────────────────────────────
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern uint FPDF_GetPageLabel(
+        IntPtr document,
+        int page_index,
+        IntPtr buffer,
+        uint buflen);
+
+    // ── PDF Save API ─────────────────────────────────────────────────────────
+    [StructLayout(LayoutKind.Sequential)]
+    public struct FPDF_FILEWRITE
+    {
+        public int version;       // Must be 1
+        public IntPtr WriteBlock; // Function pointer to WriteBlockDelegate
+    }
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    public delegate int WriteBlockDelegate(IntPtr fileWrite, IntPtr data, uint size);
+
+    public const int FPDF_INCREMENTAL    = 1;
+    public const int FPDF_NO_INCREMENTAL = 2;
+    public const int FPDF_REMOVE_SECURITY = 3;
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int FPDF_SaveAsCopy(
+        IntPtr document,
+        ref FPDF_FILEWRITE fileWrite,
+        int flags);
 }

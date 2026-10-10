@@ -4,7 +4,9 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -336,6 +338,35 @@ public static class PdfRenderer
         finally
         {
             ArrayPool<byte>.Shared.Return(renderResult.Buffer);
+        }
+    }
+
+    /// <summary>
+    /// Gets the custom page label for a page (e.g., "i", "ii", "iii" for roman numerals).
+    /// Returns null if the page has no custom label (use default "Page N" in that case).
+    /// </summary>
+    public static string? GetPageLabel(PdfDocumentState state, int pageIndex)
+    {
+        if (state == null || pageIndex < 0 || pageIndex >= state.PageCount)
+            return null;
+
+        lock (Pdfium.Gate)
+        {
+            var len = Pdfium.FPDF_GetPageLabel(state.Handle, pageIndex, IntPtr.Zero, 0);
+            if (len <= 2) // No custom label (just null terminator or empty)
+                return null;
+
+            var buffer = new byte[len];
+            var handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+            try
+            {
+                Pdfium.FPDF_GetPageLabel(state.Handle, pageIndex, handle.AddrOfPinnedObject(), len);
+                return Encoding.Unicode.GetString(buffer, 0, (int)len - 2);
+            }
+            finally
+            {
+                handle.Free();
+            }
         }
     }
 }

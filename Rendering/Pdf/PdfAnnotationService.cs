@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using QuickView.Infrastructure.Logging;
 
@@ -170,6 +172,76 @@ public static class PdfAnnotationService
                 {
                     Pdfium.FPDF_ClosePage(page);
                 }
+            }
+        });
+    }
+
+    /// <summary>
+    /// Saves the PDF document to a file, including any annotations added in memory.
+    /// Returns true on success, false on failure.
+    /// </summary>
+    public static async Task<bool> SaveDocumentAsync(PdfDocumentState state, string outputPath)
+    {
+        if (state == null || string.IsNullOrWhiteSpace(outputPath))
+            return false;
+
+        return await Task.Run(() =>
+        {
+            FileStream? stream = null;
+            GCHandle delegateHandle = default;
+
+            try
+            {
+                stream = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.None);
+
+                // Create the write callback delegate
+                Pdfium.WriteBlockDelegate writeDelegate = (IntPtr fileWrite, IntPtr data, uint size) =>
+                {
+                    try
+                    {
+                        byte[] chunk = new byte[size];
+                        Marshal.Copy(data, chunk, 0, (int)size);
+                        stream.Write(chunk, 0, (int)size);
+                        return 1; // Success
+                    }
+                    catch
+                    {
+                        return 0; // Failure
+                    }
+                };
+
+                // Pin the delegate to prevent GC collection during native call
+                delegateHandle = GCHandle.Alloc(writeDelegate);
+
+                // Build FPDF_FILEWRITE structure
+                var fileWrite = new Pdfium.FPDF_FILEWRITE
+                {
+                    version = 1,
+                    WriteBlock = Marshal.GetFunctionPointerForDelegate(writeDelegate)
+                };
+
+                int result;
+                lock (Pdfium.Gate)
+                {
+                    result = Pdfium.FPDF_SaveAsCopy(state.Handle, ref fileWrite, Pdfium.FPDF_INCREMENTAL);
+                }
+
+                // Flush the stream before returning
+                stream.Flush();
+
+                return result != 0;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"[PdfAnnotationService] Failed to save document to {outputPath}", ex);
+                return false;
+            }
+            finally
+            {
+                if (delegateHandle.IsAllocated)
+                    delegateHandle.Free();
+                    
+                stream?.Dispose();
             }
         });
     }
