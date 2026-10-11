@@ -4,7 +4,7 @@
 > **Method:** Read-only static audit of actual source; build, `cargo check`, and `dotnet test` executed and inspected.
 > **Status:** This is the single deduplicated register. Specialist summaries that existed before this audit were consolidated here; `FINDINGS-SUMMARY.md` and `refactoring-roadmap.md` were removed as superseded (see [decision-log.md](./decision-log.md)).
 
-**Verified baseline (2026-10-11):** `dotnet build` → 0 errors / 0 warnings · `dotnet test` → **148 passed, 0 failed** (1 s) · `cargo check` → all three crates clean.
+**Verified baseline (2026-10-11):** `dotnet build` → 0 errors / 0 warnings · `dotnet test` → **133 passed, 0 failed** (1 s) · `cargo check` → all three crates clean. **Update (T-001):** 15 dead tests removed.
 
 ---
 
@@ -48,12 +48,11 @@
 - **Acceptance:** Opening a `.docx` shows rendered pages (or the crate is fully removed and `.docx` shows a truthful info card); test covering dispatch added.
 - **Effort:** M (wire) / S (remove) · **Status:** Confirmed — decision required
 
-### FIND-031 — 15 tests assert a copy of a regex from a deleted class · **Confirmed defect (test integrity)**
+### FIND-031 — 15 tests assert a copy of a regex from a deleted class · **FIXED (2026-10-11)**
 - **Evidence:** `QuickView.Tests/Rendering/Web/WebSecurityTests.cs:1-15` re-implements `SanitizeUrls` "since the method is private" — but `MarkdownRenderer` no longer exists anywhere in the tree (WebView2 rendering fully removed; only stale mentions remain in `App.xaml.cs:142` comment, `IFileRenderer.cs` doc comment).
 - **Impact:** 15 green tests provide false confidence about sanitization that no longer ships; they test the test file's own copy.
-- **Minimal fix:** Delete the file. Keep a decision note: HTML/MD rendering may return via Markdig — write real tests against the real renderer then (Markdig is currently an *unused* `QuickView.csproj` reference — see FIND-014).
-- **Acceptance:** `dotnet test` green with file deleted; no other test references it.
-- **Effort:** XS · **Status:** Confirmed
+- **Resolution (T-001, commit 538fcb9):** Deleted file and empty parent directories. Cleaned up stale App.xaml.cs comment. Suite now 133 tests (148 - 15).
+- **Effort:** XS · **Status:** Fixed
 
 ### FIND-032 — Zero test coverage for the new native-backed subsystems · **Confirmed gap**
 - **Evidence:** Tests exist for `PdfViewerService` (real `pdfium.dll` pattern, 22 facts) but nothing covers `Rendering/Document/SpreadsheetDocument.cs`, `Rendering/Document/SheetData.cs` (`FromJson` error paths), `Rendering/Presentation/PptxDocument.cs`, or the GridCraft/DeckCraft interop layer. A `SheetDataJsonTests.cs` existed untracked during development and was deleted before ever being committed (visible in session history; absent from HEAD).
@@ -120,10 +119,10 @@
   - `Rendering/Pdf/PdfRenderer.cs:372-494` `RenderViewportAsync` (superseded by `RenderFullPage` in Viewport.cs)
   - `Features/Viewer/Partials/ViewerPage.Viewport.cs:610-737` `RenderFullPageProgressive` (~128 lines; progressive rendering disabled by design, commit `68a3592`)
   - `Services/Documents/PdfViewerService.cs:131-168` `RenderPageProgressiveAsync` + its `IPdfViewerService` member + `_renderedPages` set
-  - `Markdig 1.4.0` package reference (`QuickView.csproj:65`) — zero `using Markdig` after Web renderers were removed
+  - ~~`Markdig 1.4.0` package reference (`QuickView.csproj:65`) — zero `using Markdig` after Web renderers were removed~~ **FIXED (T-001, commit 538fcb9)**
   - `Rendering/Data/` and `Common/Extensions/` empty directories
 - **Fix:** Remove each after a build+test run stays green (rule 7: verified no reflection/XAML/native-export consumers — these are ordinary methods/packages).
-- **Acceptance:** Build 0/0, 148 tests pass, grep confirms absence. · **Effort:** S · **Status:** Confirmed
+- **Acceptance:** Build 0/0, 133 tests pass (Markdig removal complete), grep confirms absence. · **Effort:** S · **Status:** Partially Fixed (Markdig done; render paths remain)
 
 ### FIND-018 — All nine Rust engine crates are floating `git` dependencies · Supply-chain / reproducibility risk
 - **Evidence:** `native/{gridcraft,wordcraft,deckcraft}_ffi/Cargo.toml` — `gridcraft-*`, `wordcraft-*`, `deckcraft-*` from `github.com/storytold/*` with **no `rev` pin**; only `Cargo.lock` (tracked ✓) holds the commit.

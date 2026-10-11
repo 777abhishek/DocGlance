@@ -25,7 +25,20 @@ Any new tests (T-040), any other dead code (T-022).
 Single commit; `git revert <sha>`.
 
 ## Completion checklist
-- [ ] Files deleted · [ ] csproj updated · [ ] Build 0/0 · [ ] Tests 133/133 · [ ] Checklist+findings updated (FIND-031 → Fixed)
+- [x] Files deleted · [x] csproj updated · [x] Build 0/0 · [x] Tests 133/133 · [x] Checklist+findings updated (FIND-031 → Fixed)
 
 ## Actual results
-_(fill on completion)_
+**Completed: 2026-10-11**
+
+✅ All steps completed successfully
+- Deleted `QuickView.Tests/Rendering/Web/WebSecurityTests.cs` and empty parent directories
+- Removed Markdig package reference from QuickView.csproj line 65
+- Cleaned up stale comment in App.xaml.cs:142 about "HTML and Markdown removed"
+- IFileRenderer.cs comment checked — mentions WebView2 as example only, left unchanged
+- Build: 0 errors / 0 warnings (110.1s)
+- Tests: 133/133 passed (3.5s)
+- Commit: 538fcb9 "T-001: Remove dead WebSecurityTests and unused Markdig package"
+
+**Findings resolved:**
+- FIND-031: Fixed — 15 false-confidence tests removed
+- FIND-014 (Markdig part): Fixed — unused package removed
