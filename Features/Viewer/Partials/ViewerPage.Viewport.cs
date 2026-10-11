@@ -529,10 +529,9 @@ public sealed partial class ViewerPage
 
         PdfRenderer.EnsureInitialized();
 
-        // Load and close the page handle under the lock (PDFium page handle ops are not
-        // thread-safe), but release the lock before rasterising so other pages can
-        // load/close concurrently.
-        IntPtr page;
+        // CRITICAL FIX: All PDFium operations including FPDF_RenderPageBitmap
+        // must be under Pdfium.Gate lock. PDFium is NOT thread-safe for concurrent
+        // rendering on the same document.
         lock (Pdfium.Gate)
         {
             if (ct.IsCancellationRequested)
@@ -540,39 +539,48 @@ public sealed partial class ViewerPage
                 ArrayPool<byte>.Shared.Return(output);
                 return null;
             }
-            page = Pdfium.FPDF_LoadPage(state.Handle, pageIndex);
-        }
-
-        if (page == IntPtr.Zero) return null;
-
-        try
-        {
-            unsafe
+            
+            IntPtr page = Pdfium.FPDF_LoadPage(state.Handle, pageIndex);
+            if (page == IntPtr.Zero)
             {
-                fixed (byte* p = output)
+                ArrayPool<byte>.Shared.Return(output);
+                return null;
+            }
+
+            try
+            {
+                unsafe
                 {
-                    // FPDFBitmap_CreateEx wraps our rented buffer — no extra allocation.
-                    IntPtr bmp = Pdfium.FPDFBitmap_CreateEx(
-                        renderW, renderH, Pdfium.BitmapBgra, (IntPtr)p, stride);
-                    if (bmp == IntPtr.Zero) return null;
-                    try
+                    fixed (byte* p = output)
                     {
-                        // Improvement 4: FPDFBitmap_FillRect is the only white-fill.
-                        // The old Buffer.BlockCopy loop has been removed.
-                        Pdfium.FPDFBitmap_FillRect(bmp, 0, 0, renderW, renderH, 0xFFFFFFFF);
-                        Pdfium.FPDF_RenderPageBitmap(
-                            bmp, page,
-                            0, 0, renderW, renderH,
-                            rotate,
-                            Pdfium.RenderAnnot | Pdfium.RenderLcdText);
+                        IntPtr bmp = Pdfium.FPDFBitmap_CreateEx(
+                            renderW, renderH, Pdfium.BitmapBgra, (IntPtr)p, stride);
+                        if (bmp == IntPtr.Zero)
+                        {
+                            ArrayPool<byte>.Shared.Return(output);
+                            return null;
+                        }
+                        
+                        try
+                        {
+                            Pdfium.FPDFBitmap_FillRect(bmp, 0, 0, renderW, renderH, 0xFFFFFFFF);
+                            Pdfium.FPDF_RenderPageBitmap(
+                                bmp, page,
+                                0, 0, renderW, renderH,
+                                rotate,
+                                Pdfium.RenderAnnot | Pdfium.RenderLcdText);
+                        }
+                        finally
+                        {
+                            Pdfium.FPDFBitmap_Destroy(bmp);
+                        }
                     }
-                    finally { Pdfium.FPDFBitmap_Destroy(bmp); }
                 }
             }
-        }
-        finally
-        {
-            lock (Pdfium.Gate) { Pdfium.FPDF_ClosePage(page); }
+            finally
+            {
+                Pdfium.FPDF_ClosePage(page);
+            }
         }
 
         return output;
