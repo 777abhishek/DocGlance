@@ -89,6 +89,12 @@ internal static class Pdfium
         [MarshalAs(UnmanagedType.LPUTF8Str)] string? password);
 
     [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    public static extern IntPtr FPDF_LoadMemDocument(
+        IntPtr data,
+        int size,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string? password);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
     public static extern void FPDF_CloseDocument(IntPtr document);
 
     [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]

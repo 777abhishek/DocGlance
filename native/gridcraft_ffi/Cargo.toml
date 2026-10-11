@@ -1,0 +1,20 @@
+[package]
+name = "gridcraft_ffi"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "gridcraft_ffi"
+crate-type = ["cdylib"]
+
+[dependencies]
+gridcraft-core    = { git = "https://github.com/storytold/gridcraft" }
+gridcraft-model   = { git = "https://github.com/storytold/gridcraft" }
+gridcraft-xlsx    = { git = "https://github.com/storytold/gridcraft" }
+gridcraft-engine  = { git = "https://github.com/storytold/gridcraft" }
+regex             = { version = "1", default-features = false, features = ["std", "unicode"] }
+
+[profile.release]
+opt-level     = 3
+lto           = "thin"
+codegen-units = 1

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace QuickView.Rendering.Pdf;
@@ -34,11 +34,17 @@ public sealed class PdfDocumentState : IDisposable
         }
     }
 
-    internal PdfDocumentState(IntPtr doc, int pageCount, IReadOnlyList<(double Width, double Height)> pageSizes)
+    private System.Runtime.InteropServices.GCHandle _pinnedMemory;
+
+    internal PdfDocumentState(IntPtr doc, int pageCount, IReadOnlyList<(double Width, double Height)> pageSizes, byte[]? backingBytes = null)
     {
         _document = doc;
         PageCount = pageCount;
         PageSizes = pageSizes;
+        if (backingBytes != null)
+        {
+            _pinnedMemory = System.Runtime.InteropServices.GCHandle.Alloc(backingBytes, System.Runtime.InteropServices.GCHandleType.Pinned);
+        }
         // Use TickCount64 (signed 64-bit) to avoid wraparound after ~25 days uptime.
         // Environment.TickCount (32-bit) wraps to negative which breaks generation comparison.
         _generation = (int)(Environment.TickCount64 & 0x7FFFFFFF);
@@ -74,6 +80,10 @@ public sealed class PdfDocumentState : IDisposable
             Infrastructure.Logging.Logger.Log($"[PdfDocumentState] T{tid} Calling FPDF_CloseDocument: handle=0x{_document.ToString("X")}");
             Pdfium.FPDF_CloseDocument(_document);
             _document = IntPtr.Zero;
+            if (_pinnedMemory.IsAllocated)
+            {
+                _pinnedMemory.Free();
+            }
             _disposed = true;
             Infrastructure.Logging.Logger.Log($"[PdfDocumentState] T{tid} Dispose complete");
         }

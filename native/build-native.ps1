@@ -5,43 +5,105 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Continue"  # Don't treat stderr as terminating errors
 
+$targets = @(
+    "..\..\bin\Debug\net8.0-windows10.0.19041.0\win-x64",
+    "..\..\bin\Release\net8.0-windows10.0.19041.0\win-x64",
+    "..\..\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\AppX",
+    "..\..\bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\AppX"
+)
+
+# ── 1. Build deckcraft_ffi.dll (DeckCraft PPTX renderer) ──────────────────────
 Write-Host ""
 Write-Host "  Building deckcraft_ffi.dll (DeckCraft PPTX renderer)..." -ForegroundColor Cyan
 Write-Host ""
 
 Push-Location "$PSScriptRoot\deckcraft_ffi"
-
 try {
-    # First-time setup: ensure the MSVC target is available (ignore output/errors)
     $null = rustup target add x86_64-pc-windows-msvc 2>&1
 
     Write-Host "  Running cargo build --release..." -ForegroundColor Gray
     cargo build --release 2>&1 | ForEach-Object { Write-Host "     $_" -ForegroundColor Gray }
     if ($LASTEXITCODE -ne 0) { 
-        throw "cargo build failed with exit code $LASTEXITCODE" 
+        throw "cargo build failed for deckcraft_ffi with exit code $LASTEXITCODE" 
     }
 
     $dll = "target\release\deckcraft_ffi.dll"
     if (-not (Test-Path $dll)) { throw "DLL not found after build: $dll" }
 
-    # Copy to all known QuickView output locations
-    $targets = @(
-        "..\..\bin\Debug\net8.0-windows10.0.19041.0\win-x64",
-        "..\..\bin\Release\net8.0-windows10.0.19041.0\win-x64",
-        "..\..\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\AppX",
-        "..\..\bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\AppX"
-    )
-
     foreach ($dir in $targets) {
         if (Test-Path $dir) {
             Copy-Item $dll -Destination $dir -Force
-            Write-Host "  Copied → $dir" -ForegroundColor Green
+            Write-Host "  Copied deckcraft_ffi.dll → $dir" -ForegroundColor Green
         }
     }
 
     $size = [math]::Round((Get-Item $dll).Length / 1MB, 1)
     Write-Host ""
     Write-Host "  ✓ deckcraft_ffi.dll  ($size MB)" -ForegroundColor Green
+    Write-Host ""
+}
+finally {
+    Pop-Location
+}
+
+# ── 2. Build wordcraft_ffi.dll (WordCraft DOCX renderer) ──────────────────────
+Write-Host ""
+Write-Host "  Building wordcraft_ffi.dll (WordCraft DOCX renderer)..." -ForegroundColor Cyan
+Write-Host ""
+
+Push-Location "$PSScriptRoot\wordcraft_ffi"
+try {
+    Write-Host "  Running cargo build --release..." -ForegroundColor Gray
+    cargo build --release 2>&1 | ForEach-Object { Write-Host "     $_" -ForegroundColor Gray }
+    if ($LASTEXITCODE -ne 0) { 
+        throw "cargo build failed for wordcraft_ffi with exit code $LASTEXITCODE" 
+    }
+
+    $dll = "target\release\wordcraft_ffi.dll"
+    if (-not (Test-Path $dll)) { throw "DLL not found after build: $dll" }
+
+    foreach ($dir in $targets) {
+        if (Test-Path $dir) {
+            Copy-Item $dll -Destination $dir -Force
+            Write-Host "  Copied wordcraft_ffi.dll → $dir" -ForegroundColor Green
+        }
+    }
+
+    $size = [math]::Round((Get-Item $dll).Length / 1MB, 1)
+    Write-Host ""
+    Write-Host "  ✓ wordcraft_ffi.dll  ($size MB)" -ForegroundColor Green
+    Write-Host ""
+}
+finally {
+    Pop-Location
+}
+
+# ── 3. Build gridcraft_ffi.dll (GridCraft XLSX renderer) ──────────────────────
+Write-Host ""
+Write-Host "  Building gridcraft_ffi.dll (GridCraft XLSX renderer)..." -ForegroundColor Cyan
+Write-Host ""
+
+Push-Location "$PSScriptRoot\gridcraft_ffi"
+try {
+    Write-Host "  Running cargo build --release..." -ForegroundColor Gray
+    cargo build --release 2>&1 | ForEach-Object { Write-Host "     $_" -ForegroundColor Gray }
+    if ($LASTEXITCODE -ne 0) { 
+        throw "cargo build failed for gridcraft_ffi with exit code $LASTEXITCODE" 
+    }
+
+    $dll = "target\release\gridcraft_ffi.dll"
+    if (-not (Test-Path $dll)) { throw "DLL not found after build: $dll" }
+
+    foreach ($dir in $targets) {
+        if (Test-Path $dir) {
+            Copy-Item $dll -Destination $dir -Force
+            Write-Host "  Copied gridcraft_ffi.dll → $dir" -ForegroundColor Green
+        }
+    }
+
+    $size = [math]::Round((Get-Item $dll).Length / 1MB, 1)
+    Write-Host ""
+    Write-Host "  ✓ gridcraft_ffi.dll  ($size MB)" -ForegroundColor Green
     Write-Host ""
 }
 finally {

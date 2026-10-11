@@ -24,6 +24,13 @@ public interface IPdfViewerService
         Func<Task<string?>>? passwordPrompt = null,
         CancellationToken ct = default);
 
+    /// <summary>
+    /// Opens a PDF document from in-memory bytes.
+    /// </summary>
+    Task<PdfLoadResult> LoadDocumentFromBytesAsync(
+        byte[] bytes,
+        CancellationToken ct = default);
+
     /// <summary>Closes the document and releases all resources.</summary>
     void CloseDocument();
 

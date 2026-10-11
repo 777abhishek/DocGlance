@@ -110,6 +110,76 @@ public static class PdfRenderer
         }, ct);
     }
 
+    public static async Task<PdfOpenResult> OpenDocumentFromBytesAsync(byte[] bytes, CancellationToken ct = default, string? password = null)
+    {
+        if (bytes == null || bytes.Length == 0)
+            return new PdfOpenResult(null, "PDF bytes are empty");
+
+        return await Task.Run(() =>
+        {
+            EnsureInitialized();
+            lock (Pdfium.Gate)
+            {
+                if (ct.IsCancellationRequested) return new PdfOpenResult(null, null);
+
+                unsafe
+                {
+                    fixed (byte* pData = bytes)
+                    {
+                        IntPtr doc = Pdfium.FPDF_LoadMemDocument((IntPtr)pData, bytes.Length, password);
+                        if (doc == IntPtr.Zero)
+                        {
+                            uint lastError = Pdfium.FPDF_GetLastError();
+                            bool needsPassword = (lastError == Pdfium.ErrPassword);
+                            return new PdfOpenResult(null, Pdfium.DescribeLastError(), needsPassword);
+                        }
+
+                        if (ct.IsCancellationRequested)
+                        {
+                            Pdfium.FPDF_CloseDocument(doc);
+                            return new PdfOpenResult(null, null);
+                        }
+
+                        int pageCount = Pdfium.FPDF_GetPageCount(doc);
+                        var pageSizes = new List<(double Width, double Height)>(pageCount);
+
+                        for (int i = 0; i < pageCount; i++)
+                        {
+                            if (Pdfium.FPDF_GetPageSizeByIndexF(doc, i, out var size) != 0 && size.Width > 0 && size.Height > 0)
+                            {
+                                pageSizes.Add((size.Width, size.Height));
+                            }
+                            else
+                            {
+                                IntPtr page = Pdfium.FPDF_LoadPage(doc, i);
+                                if (page != IntPtr.Zero)
+                                {
+                                    try
+                                    {
+                                        pageSizes.Add((Pdfium.FPDF_GetPageWidthF(page), Pdfium.FPDF_GetPageHeightF(page)));
+                                    }
+                                    finally
+                                    {
+                                        Pdfium.FPDF_ClosePage(page);
+                                    }
+                                }
+                                else
+                                {
+                                    pageSizes.Add((612, 792));
+                                }
+                            }
+                        }
+
+                        // Store pinned bytes or copy if needed? Wait! Note that FPDF_LoadMemDocument expects the memory buffer to remain valid!
+                        // We must keep the memory buffer pinned/alive for the lifetime of PdfDocumentState.
+                        var state = new PdfDocumentState(doc, pageCount, pageSizes, bytes);
+                        return new PdfOpenResult(state, null);
+                    }
+                }
+            }
+        }, ct);
+    }
+
     public static async Task<WriteableBitmap?> RenderPageAsync(
         PdfDocumentState state, int pageIndex, float dpi, CancellationToken ct = default)
     {

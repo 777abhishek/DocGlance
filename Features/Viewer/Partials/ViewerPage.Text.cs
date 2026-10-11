@@ -229,16 +229,35 @@ public sealed partial class ViewerPage
 
     internal void ShowPdfViewer()
     {
-        PlainTextViewerGrid.Visibility  = Visibility.Collapsed;
-        TextViewerScroll.Visibility     = Visibility.Collapsed;
-        DocumentScrollViewer.Visibility = Visibility.Visible;
-        MarkdownViewerHost.Visibility   = Visibility.Collapsed;
-        ZoomPill.Visibility             = Visibility.Visible;
+        PlainTextViewerGrid.Visibility   = Visibility.Collapsed;
+        TextViewerScroll.Visibility      = Visibility.Collapsed;
+        DocumentScrollViewer.Visibility  = Visibility.Visible;
+        MarkdownViewerHost.Visibility    = Visibility.Collapsed;
+        SpreadsheetViewerHost.Visibility = Visibility.Collapsed;
+        ZoomPill.Visibility              = Visibility.Visible;
 
-        Toolbar.WordWrapVisibility  = Visibility.Collapsed;
-        Toolbar.SidebarButtonVisibility = Visibility.Visible;
+        Toolbar.WordWrapVisibility       = Visibility.Collapsed;
+        Toolbar.SidebarButtonVisibility  = Visibility.Visible;
         Toolbar.FitWidthButtonVisibility = Visibility.Visible;
-        Toolbar.FitPageButtonVisibility = Visibility.Visible;
+        Toolbar.FitPageButtonVisibility  = Visibility.Visible;
+    }
+
+    internal void ShowSpreadsheetViewer()
+    {
+        PlainTextViewerGrid.Visibility   = Visibility.Collapsed;
+        TextViewerScroll.Visibility      = Visibility.Collapsed;
+        DocumentScrollViewer.Visibility  = Visibility.Collapsed;
+        MarkdownViewerHost.Visibility    = Visibility.Collapsed;
+        SpreadsheetViewerHost.Visibility = Visibility.Visible;
+        ZoomPill.Visibility              = Visibility.Collapsed;
+
+        Toolbar.WordWrapVisibility       = Visibility.Collapsed;
+        Toolbar.SidebarButtonVisibility  = Visibility.Collapsed;
+        Toolbar.FitWidthButtonVisibility = Visibility.Collapsed;
+        Toolbar.FitPageButtonVisibility  = Visibility.Collapsed;
+        SidebarCard.Visibility           = Visibility.Collapsed;
+        SidebarColumn.Width              = new GridLength(0);
+        ViewModel.SidebarOpen            = false;
     }
 
     private bool IsDarkTheme() =>

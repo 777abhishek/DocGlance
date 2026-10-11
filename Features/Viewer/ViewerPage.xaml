@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:models="using:QuickView.Core.Models"
     xmlns:components="using:QuickView.Features.Viewer.Components"
+    xmlns:spreadsheet="using:QuickView.Features.Viewer.Spreadsheet"
 >
 
     <Page.Transitions>
@@ -387,6 +388,12 @@
                 <Grid x:Name="MarkdownViewerHost"
                     Visibility="Collapsed"
                     Padding="0"/>
+
+                <!-- ── SPREADSHEET viewer — native Win2D cell grid ── -->
+                <Grid x:Name="SpreadsheetViewerHost"
+                    Visibility="Collapsed">
+                    <spreadsheet:SpreadsheetViewer x:Name="SpreadsheetViewerControl"/>
+                </Grid>
 
                 <Border x:Name="FindBar"
                     Visibility="Collapsed"

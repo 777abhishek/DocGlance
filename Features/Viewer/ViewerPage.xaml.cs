@@ -118,6 +118,9 @@ public sealed partial class ViewerPage : Page
             _currentRenderer = null;
             _currentRenderedElement = null;
         }
+
+        // Clean up spreadsheet viewer
+        try { SpreadsheetViewerControl?.Cleanup(); } catch { }
         
         // Service owns document lifecycle — just clear our reference
         _pdfState = null;

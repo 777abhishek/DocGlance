@@ -70,6 +70,8 @@ public sealed partial class ViewerPage
             await LoadPdfAsync(doc.FilePath ?? string.Empty, ct);
         else if (ext == ".pptx" || ext == ".ppt" || ext == ".pptm" || ext == ".ppsx")
             await LoadPptxAsync(doc.FilePath ?? string.Empty, ct);
+        else if (ext == ".xlsx" || ext == ".xlsm" || ext == ".xltx" || ext == ".xltm")
+            await LoadXlsxAsync(doc.FilePath ?? string.Empty, ct);
         else if (IsCodeFile(ext))
             await LoadCodeFileAsync(doc.FilePath ?? string.Empty, ct);
         else if (IsTextFile(ext))
@@ -762,6 +764,63 @@ public sealed partial class ViewerPage
             {
                 Logger.Error($"LoadSlideThumbnails: slide {i}", ex);
             }
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // SPREADSHEET (GridCraft XLSX — native Win2D grid viewer)
+    // ══════════════════════════════════════════════════════════════════════════
+
+    private QuickView.Rendering.Document.SpreadsheetDocument? _spreadsheetDocument;
+
+    private async Task LoadXlsxAsync(string filePath, CancellationToken ct)
+    {
+        ShowLoading(true);
+        try
+        {
+            // Clean up any previous state (PPTX slides, PDF doc, etc.)
+            ClearPptxCache();
+            _pdfState = null;
+            Thumbnails.Clear();
+
+            if (!QuickView.Rendering.Document.GridCraftNative.IsAvailable)
+            {
+                ShowErrorCard("GridCraft XLSX renderer not available.\nPlease ensure gridcraft_ffi.dll is present.");
+                return;
+            }
+
+            _spreadsheetDocument?.Dispose();
+            _spreadsheetDocument = await QuickView.Rendering.Document.SpreadsheetDocument.OpenAsync(filePath, ct);
+
+            if (_spreadsheetDocument == null)
+            {
+                ShowErrorCard("Cannot open spreadsheet — file may be corrupt or in an unsupported format.");
+                return;
+            }
+
+            // Switch the viewer area to the native spreadsheet grid
+            ShowSpreadsheetViewer();
+
+            // Toolbar: show page info as sheet count
+            int sheetCount = _spreadsheetDocument.SheetCount;
+            _total = sheetCount;
+            _page  = 1;
+            Toolbar.UpdatePageInfo(1, sheetCount);
+            ViewModel.TotalPages   = sheetCount;
+            ViewModel.CurrentPage  = 1;
+
+            // Hand off to the Win2D cell-grid control
+            await SpreadsheetViewerControl.LoadDocumentAsync(_spreadsheetDocument, ct);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            Logger.Error($"LoadXlsxAsync: {filePath}", ex);
+            ShowErrorCard($"Cannot open spreadsheet: {ex.Message}");
+        }
+        finally
+        {
+            ShowLoading(false);
         }
     }
 }

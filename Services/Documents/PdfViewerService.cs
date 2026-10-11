@@ -77,6 +77,39 @@ public sealed class PdfViewerService : IPdfViewerService, IDisposable
         }
     }
 
+    public async Task<PdfLoadResult> LoadDocumentFromBytesAsync(
+        byte[] bytes,
+        CancellationToken ct = default)
+    {
+        CloseDocument();
+
+        try
+        {
+            var openResult = await PdfRenderer.OpenDocumentFromBytesAsync(bytes, ct);
+
+            if (ct.IsCancellationRequested)
+                return PdfLoadResult.Error("Operation cancelled");
+
+            if (!openResult.Ok || openResult.Document == null)
+            {
+                return PdfLoadResult.Error(openResult.Error ?? "Cannot open PDF from memory");
+            }
+
+            _document = openResult.Document;
+            _pageCount = openResult.Document.PageCount;
+
+            return PdfLoadResult.Ok(_document, _pageCount);
+        }
+        catch (OperationCanceledException)
+        {
+            return PdfLoadResult.Error("Operation cancelled");
+        }
+        catch (Exception ex)
+        {
+            return PdfLoadResult.Error($"Failed to load PDF from memory: {ex.Message}");
+        }
+    }
+
     public void CloseDocument()
     {
         _prefetchCts?.Cancel();

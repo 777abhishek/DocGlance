@@ -1,0 +1,79 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="QuickView.Features.Viewer.Spreadsheet.SpreadsheetViewer"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid x:Name="RootGrid">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Sheet canvas area -->
+        <Grid Grid.Row="0" x:Name="CanvasHost">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="26"/>  <!-- col headers -->
+                <RowDefinition Height="*"/>   <!-- cell area  -->
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="50"/>  <!-- row numbers -->
+                <ColumnDefinition Width="*"/>   <!-- data area   -->
+            </Grid.ColumnDefinitions>
+
+            <!-- Corner (top-left) -->
+            <Border Grid.Row="0" Grid.Column="0" x:Name="CornerCell"
+                    Background="{ThemeResource SystemFillColorSolidNeutralBackgroundBrush}"
+                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                    BorderThickness="0,0,1,1"/>
+
+            <!-- Column header host -->
+            <ScrollViewer Grid.Row="0" Grid.Column="1"
+                x:Name="ColHeaderScroll"
+                HorizontalScrollBarVisibility="Hidden"
+                VerticalScrollBarVisibility="Disabled"
+                HorizontalScrollMode="Enabled"
+                VerticalScrollMode="Disabled">
+                <!-- CanvasControl injected at runtime -->
+                <Grid x:Name="ColHeaderCanvasHost" Height="26"/>
+            </ScrollViewer>
+
+            <!-- Row header host -->
+            <ScrollViewer Grid.Row="1" Grid.Column="0"
+                x:Name="RowHeaderScroll"
+                HorizontalScrollBarVisibility="Disabled"
+                VerticalScrollBarVisibility="Hidden"
+                HorizontalScrollMode="Disabled"
+                VerticalScrollMode="Enabled">
+                <!-- CanvasControl injected at runtime -->
+                <Grid x:Name="RowHeaderCanvasHost" Width="50"/>
+            </ScrollViewer>
+
+            <!-- Main cell scroll area -->
+            <ScrollViewer Grid.Row="1" Grid.Column="1"
+                x:Name="CellScroll"
+                HorizontalScrollBarVisibility="Auto"
+                VerticalScrollBarVisibility="Auto"
+                HorizontalScrollMode="Enabled"
+                VerticalScrollMode="Enabled"
+                ViewChanged="CellScroll_ViewChanged">
+                <!-- CanvasControl injected at runtime -->
+                <Grid x:Name="CellCanvasHost"/>
+            </ScrollViewer>
+        </Grid>
+
+        <!-- Sheet tab bar -->
+        <Border Grid.Row="1"
+            Background="{ThemeResource SystemFillColorSolidNeutralBackgroundBrush}"
+            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+            BorderThickness="0,1,0,0"
+            Height="34">
+            <ScrollViewer HorizontalScrollBarVisibility="Hidden"
+                VerticalScrollBarVisibility="Disabled"
+                HorizontalScrollMode="Enabled"
+                VerticalScrollMode="Disabled">
+                <StackPanel x:Name="TabBar" Orientation="Horizontal" Spacing="0" Padding="4,4,4,0"/>
+            </ScrollViewer>
+        </Border>
+    </Grid>
+</UserControl>
