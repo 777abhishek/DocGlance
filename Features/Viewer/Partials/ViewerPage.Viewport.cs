@@ -256,8 +256,12 @@ public sealed partial class ViewerPage
 
             Infrastructure.Logging.Logger.Log($"[Render] zoom={zoom:F2}, scrollY={scrollY:F0}, vpH={vpH:F0}, display={display:F2}");
 
-            // Render DPI: screen DPI × displayScale (zoom is handled by ScrollViewer)
-            float dpi = (float)(96.0 * display);
+            // Render DPI: base DPI × display scale × zoom factor
+            // At 100% zoom on 125% display: 96 × 1.25 × 1.0 = 120 DPI
+            // At 150% zoom on 125% display: 96 × 1.25 × 1.5 = 180 DPI
+            // At 200% zoom on 125% display: 96 × 1.25 × 2.0 = 240 DPI
+            // This gives crisp rendering at all zoom levels
+            float dpi = (float)(96.0 * display * zoom);
 
             // Strictly visible pages (no buffer) — highest priority
             var strictVisible = GetVisiblePageRange(scrollY, vpH, 0);
@@ -362,10 +366,14 @@ public sealed partial class ViewerPage
             double pageH = ptH * PtToLp;
             double pageY = GetPageTopLp(pageIndex);   // O(1) via cached array
 
-            int renderW = Math.Max(1, (int)Math.Round(pageW * display));
-            int renderH = Math.Max(1, (int)Math.Round(pageH * display));
+            // For crisp high-DPI rendering, calculate render size from DPI (which already includes display scale)
+            // Page size in points × (DPI / 72 points per inch) = pixel size
+            // At 125% display: 595pt × (120 DPI / 72) = 992px
+            // This gives us crisp 1:1 pixel mapping on high-DPI displays
+            int renderW = Math.Max(1, (int)Math.Round(ptW * dpi / 72.0));
+            int renderH = Math.Max(1, (int)Math.Round(ptH * dpi / 72.0));
 
-            Infrastructure.Logging.Logger.Log($"[RenderSingle] Page {pageIndex}: size={renderW}x{renderH}, pageY={pageY:F0}");
+            Infrastructure.Logging.Logger.Log($"[RenderSingle] Page {pageIndex}: size={renderW}x{renderH} px at {dpi:F0} DPI, pageY={pageY:F0}");
             Infrastructure.Logging.Logger.Log($"[RenderSingle] Calling RenderFullPage for page {pageIndex}");
 
             var pixelBuffer = await Task.Run(() =>
