@@ -84,4 +84,20 @@
     <Content Remove="QuickView.Tests\**\*" />
   </ItemGroup>
 
+  <!-- Native Rust DLLs — copied from build-native.ps1 output for publish support -->
+  <ItemGroup>
+    <Content Include="native\deckcraft_ffi\target\release\deckcraft_ffi.dll" Condition="Exists('native\deckcraft_ffi\target\release\deckcraft_ffi.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>deckcraft_ffi.dll</Link>
+    </Content>
+    <Content Include="native\wordcraft_ffi\target\release\wordcraft_ffi.dll" Condition="Exists('native\wordcraft_ffi\target\release\wordcraft_ffi.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>wordcraft_ffi.dll</Link>
+    </Content>
+    <Content Include="native\gridcraft_ffi\target\release\gridcraft_ffi.dll" Condition="Exists('native\gridcraft_ffi\target\release\gridcraft_ffi.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>gridcraft_ffi.dll</Link>
+    </Content>
+  </ItemGroup>
+
 </Project>
