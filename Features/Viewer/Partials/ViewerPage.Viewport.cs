@@ -141,32 +141,54 @@ public sealed partial class ViewerPage
 
     private void OnViewportViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
     {
-        if (_viewportState == null || _pdfState == null) return;
-
-        float zoom = DocumentScrollViewer.ZoomFactor;
-        _viewportState.ZoomFactor       = zoom;
-        _viewportState.ViewportWidthPx  = (int)DocumentScrollViewer.ViewportWidth;
-        _viewportState.ViewportHeightPx = (int)DocumentScrollViewer.ViewportHeight;
-        _viewportState.ScrollXPt        = DocumentScrollViewer.HorizontalOffset * LpToPt;
-        _viewportState.ScrollYPt        = DocumentScrollViewer.VerticalOffset   * LpToPt;
-
-        UpdateCurrentPageFromScroll();
-
-        // Improvement 3: Only trigger a cache-clearing re-render once zoom settles
-        // (!IsIntermediate). During pinch/wheel intermediate frames we still render
-        // new pages that scrolled into view, but we never clear the existing cache
-        // mid-gesture — this prevents the blank-page flicker during zoom.
-        bool zoomSettled = !e.IsIntermediate &&
-            Math.Abs(zoom - _lastRenderZoom) > _lastRenderZoom * 0.15f;
-
-        if (zoomSettled)
+        try
         {
-            ClearPdfPageCache();
-            _lastRenderZoom = zoom;
-        }
+            Infrastructure.Logging.Logger.Log($"[Viewport] OnViewportViewChanged fired - IsIntermediate={e.IsIntermediate}");
+            
+            if (_viewportState == null || _pdfState == null)
+            {
+                Infrastructure.Logging.Logger.Log("[Viewport] Skipping - viewport or pdf state is null");
+                return;
+            }
 
-        if (!e.IsIntermediate || zoomSettled)
-            _ = RenderPagesAsync();
+            float zoom = DocumentScrollViewer.ZoomFactor;
+            _viewportState.ZoomFactor       = zoom;
+            _viewportState.ViewportWidthPx  = (int)DocumentScrollViewer.ViewportWidth;
+            _viewportState.ViewportHeightPx = (int)DocumentScrollViewer.ViewportHeight;
+            _viewportState.ScrollXPt        = DocumentScrollViewer.HorizontalOffset * LpToPt;
+            _viewportState.ScrollYPt        = DocumentScrollViewer.VerticalOffset   * LpToPt;
+
+            Infrastructure.Logging.Logger.Log($"[Viewport] Zoom={zoom:F2}, ScrollY={DocumentScrollViewer.VerticalOffset:F0}");
+
+            UpdateCurrentPageFromScroll();
+
+            // Improvement 3: Only trigger a cache-clearing re-render once zoom settles
+            // (!IsIntermediate). During pinch/wheel intermediate frames we still render
+            // new pages that scrolled into view, but we never clear the existing cache
+            // mid-gesture — this prevents the blank-page flicker during zoom.
+            bool zoomSettled = !e.IsIntermediate &&
+                Math.Abs(zoom - _lastRenderZoom) > _lastRenderZoom * 0.15f;
+
+            if (zoomSettled)
+            {
+                Infrastructure.Logging.Logger.Log($"[Viewport] Zoom settled, clearing cache");
+                ClearPdfPageCache();
+                _lastRenderZoom = zoom;
+            }
+
+            if (!e.IsIntermediate || zoomSettled)
+            {
+                Infrastructure.Logging.Logger.Log($"[Viewport] Triggering RenderPagesAsync");
+                _ = RenderPagesAsync();
+            }
+            
+            Infrastructure.Logging.Logger.Log("[Viewport] OnViewportViewChanged completed");
+        }
+        catch (Exception ex)
+        {
+            Infrastructure.Logging.Logger.Error($"[Viewport] OnViewportViewChanged crashed", ex);
+            throw; // Re-throw to see full crash in Windows Error Reporting
+        }
     }
 
     // ── Page tracking ─────────────────────────────────────────────────────────
@@ -209,20 +231,30 @@ public sealed partial class ViewerPage
 
     private async Task RenderPagesAsync()
     {
-        if (_pdfState == null || _viewportState == null) return;
-
-        // Cancel any in-flight render
-        _renderCts?.Cancel();
-        _renderCts?.Dispose();
-        _renderCts = new CancellationTokenSource();
-        var ct = _renderCts.Token;
-
         try
         {
+            Infrastructure.Logging.Logger.Log("[Render] RenderPagesAsync started");
+            
+            if (_pdfState == null || _viewportState == null)
+            {
+                Infrastructure.Logging.Logger.Log("[Render] Skipping - null state");
+                return;
+            }
+
+            // Cancel any in-flight render
+            _renderCts?.Cancel();
+            _renderCts?.Dispose();
+            _renderCts = new CancellationTokenSource();
+            var ct = _renderCts.Token;
+
+            Infrastructure.Logging.Logger.Log("[Render] Calculating render parameters");
+            
             float  zoom    = DocumentScrollViewer.ZoomFactor;
             double scrollY = DocumentScrollViewer.VerticalOffset;
             double vpH     = DocumentScrollViewer.ViewportHeight;
             double display = Math.Max(1.0, XamlRoot?.RasterizationScale ?? 1.0);
+
+            Infrastructure.Logging.Logger.Log($"[Render] zoom={zoom:F2}, scrollY={scrollY:F0}, vpH={vpH:F0}, display={display:F2}");
 
             // Render DPI: screen DPI × displayScale (zoom is handled by ScrollViewer)
             float dpi = (float)(96.0 * display);
@@ -235,10 +267,15 @@ public sealed partial class ViewerPage
             int firstVisible = withBuffer.First;
             int lastVisible  = withBuffer.Last;
 
+            Infrastructure.Logging.Logger.Log($"[Render] Visible range: {strictVisible.First}-{strictVisible.Last}, with buffer: {firstVisible}-{lastVisible}");
+
             // Evict pages far from viewport
             var toEvict = _pdfPageCache.Keys
                 .Where(k => k < firstVisible - bufferPages || k > lastVisible + bufferPages)
                 .ToList();
+                
+            Infrastructure.Logging.Logger.Log($"[Render] Evicting {toEvict.Count} pages");
+            
             foreach (int k in toEvict)
             {
                 if (_pdfPageCache.TryGetValue(k, out var old))
@@ -261,12 +298,21 @@ public sealed partial class ViewerPage
                 .Where(i => !_pdfPageCache.ContainsKey(i) && !visibleToRender.Contains(i))
                 .ToList();
 
+            Infrastructure.Logging.Logger.Log($"[Render] Rendering {visibleToRender.Count} visible pages, {bufferToRender.Count} buffer pages");
+
             // Render strictly-visible pages first
             foreach (int pageIndex in visibleToRender)
             {
-                if (ct.IsCancellationRequested) return;
+                if (ct.IsCancellationRequested)
+                {
+                    Infrastructure.Logging.Logger.Log("[Render] Cancelled during visible page render");
+                    return;
+                }
+                Infrastructure.Logging.Logger.Log($"[Render] Rendering visible page {pageIndex}");
                 await RenderSinglePageAsync(_pdfState, pageIndex, dpi, display, ct);
             }
+
+            Infrastructure.Logging.Logger.Log("[Render] Starting buffer page render");
 
             // Render buffer pages concurrently (Improvement 1: SemaphoreSlim parallelism)
             var bufferTasks = bufferToRender.Select(pageIndex =>
@@ -276,17 +322,24 @@ public sealed partial class ViewerPage
                     await _renderSemaphore.WaitAsync(ct);
                     try
                     {
+                        Infrastructure.Logging.Logger.Log($"[Render] Rendering buffer page {pageIndex}");
                         await RenderSinglePageAsync(_pdfState, pageIndex, dpi, display, ct);
                     }
                     finally { _renderSemaphore.Release(); }
                 }, ct));
 
             await Task.WhenAll(bufferTasks);
+            
+            Infrastructure.Logging.Logger.Log("[Render] RenderPagesAsync completed successfully");
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException)
+        {
+            Infrastructure.Logging.Logger.Log("[Render] RenderPagesAsync cancelled");
+        }
         catch (Exception ex)
         {
-            Infrastructure.Logging.Logger.Error("RenderPagesAsync failed", ex);
+            Infrastructure.Logging.Logger.Error("[Render] RenderPagesAsync failed", ex);
+            throw; // Re-throw to see crash
         }
     }
 
@@ -294,74 +347,108 @@ public sealed partial class ViewerPage
     private async Task RenderSinglePageAsync(
         PdfDocumentState pdfState, int pageIndex, float dpi, double display, CancellationToken ct)
     {
-        if (ct.IsCancellationRequested) return;
-
-        var (ptW, ptH) = GetRotatedPageSize(pageIndex);
-        double pageW = ptW * PtToLp;
-        double pageH = ptH * PtToLp;
-        double pageY = GetPageTopLp(pageIndex);   // O(1) via cached array
-
-        int renderW = Math.Max(1, (int)Math.Round(pageW * display));
-        int renderH = Math.Max(1, (int)Math.Round(pageH * display));
-
-        var pixelBuffer = await Task.Run(() =>
-            RenderFullPage(pdfState, pageIndex, dpi, renderW, renderH,
-                           (int)(_rotation % 360 / 90), ct), ct);
-
-        if (pixelBuffer == null || ct.IsCancellationRequested) return;
-
-        // WriteableBitmap must be created on the UI thread — dispatch if we're on a background thread
-        var bitmap = await CreateBitmapFromBufferAsync(pixelBuffer, renderW, renderH);
-        ArrayPool<byte>.Shared.Return(pixelBuffer);
-
-        if (bitmap == null || ct.IsCancellationRequested) return;
-
-        // Create Image on UI thread to avoid WinUI crash
-        bool success = false;
-        if (DispatcherQueue.HasThreadAccess)
+        try
         {
-            CreateImageOnUI();
-            success = true;
-        }
-        else
-        {
-            var tcs = new TaskCompletionSource<bool>();
-            DispatcherQueue.TryEnqueue(() =>
+            Infrastructure.Logging.Logger.Log($"[RenderSingle] Starting page {pageIndex}");
+            
+            if (ct.IsCancellationRequested)
             {
-                try
-                {
-                    CreateImageOnUI();
-                    tcs.SetResult(true);
-                }
-                catch (Exception ex)
-                {
-                    tcs.SetException(ex);
-                }
-            });
-            success = await tcs.Task;
-        }
-
-        void CreateImageOnUI()
-        {
-            if (!_pdfPageCache.TryGetValue(pageIndex, out var img))
-            {
-                img = new Image
-                {
-                    Stretch = Microsoft.UI.Xaml.Media.Stretch.Fill,
-                    Width   = pageW,
-                    Height  = pageH,
-                };
-                Canvas.SetLeft(img, 0);
-                Canvas.SetTop(img, pageY);
-                // Insert BEFORE SearchHighlightCanvas so highlights stay on top
-                int insertAt = Math.Max(0, PdfViewportCanvas.Children.Count - 1);
-                if (SearchHighlightCanvas != null)
-                    insertAt = Math.Max(0, PdfViewportCanvas.Children.IndexOf(SearchHighlightCanvas));
-                PdfViewportCanvas.Children.Insert(insertAt, img);
-                _pdfPageCache[pageIndex] = img;
+                Infrastructure.Logging.Logger.Log($"[RenderSingle] Cancelled before start - page {pageIndex}");
+                return;
             }
 
-            img.Source = bitmap;
+            var (ptW, ptH) = GetRotatedPageSize(pageIndex);
+            double pageW = ptW * PtToLp;
+            double pageH = ptH * PtToLp;
+            double pageY = GetPageTopLp(pageIndex);   // O(1) via cached array
+
+            int renderW = Math.Max(1, (int)Math.Round(pageW * display));
+            int renderH = Math.Max(1, (int)Math.Round(pageH * display));
+
+            Infrastructure.Logging.Logger.Log($"[RenderSingle] Page {pageIndex}: size={renderW}x{renderH}, pageY={pageY:F0}");
+            Infrastructure.Logging.Logger.Log($"[RenderSingle] Calling RenderFullPage for page {pageIndex}");
+
+            var pixelBuffer = await Task.Run(() =>
+                RenderFullPage(pdfState, pageIndex, dpi, renderW, renderH,
+                               (int)(_rotation % 360 / 90), ct), ct);
+
+            Infrastructure.Logging.Logger.Log($"[RenderSingle] RenderFullPage returned for page {pageIndex}, buffer={pixelBuffer != null}");
+
+            if (pixelBuffer == null || ct.IsCancellationRequested)
+            {
+                Infrastructure.Logging.Logger.Log($"[RenderSingle] Null buffer or cancelled - page {pageIndex}");
+                return;
+            }
+
+            // WriteableBitmap must be created on the UI thread — dispatch if we're on a background thread
+            Infrastructure.Logging.Logger.Log($"[RenderSingle] Creating bitmap from buffer - page {pageIndex}");
+            var bitmap = await CreateBitmapFromBufferAsync(pixelBuffer, renderW, renderH);
+            ArrayPool<byte>.Shared.Return(pixelBuffer);
+
+            Infrastructure.Logging.Logger.Log($"[RenderSingle] Bitmap created, returned buffer - page {pageIndex}");
+
+            if (bitmap == null || ct.IsCancellationRequested)
+            {
+                Infrastructure.Logging.Logger.Log($"[RenderSingle] Null bitmap or cancelled - page {pageIndex}");
+                return;
+            }
+
+            // Create Image on UI thread to avoid WinUI crash
+            Infrastructure.Logging.Logger.Log($"[RenderSingle] Creating Image control - page {pageIndex}");
+            bool success = false;
+            if (DispatcherQueue.HasThreadAccess)
+            {
+                CreateImageOnUI();
+                success = true;
+            }
+            else
+            {
+                var tcs = new TaskCompletionSource<bool>();
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    try
+                    {
+                        CreateImageOnUI();
+                        tcs.SetResult(true);
+                    }
+                    catch (Exception ex)
+                    {
+                        Infrastructure.Logging.Logger.Error($"[RenderSingle] CreateImageOnUI failed - page {pageIndex}", ex);
+                        tcs.SetException(ex);
+                    }
+                });
+                success = await tcs.Task;
+            }
+
+            Infrastructure.Logging.Logger.Log($"[RenderSingle] Completed successfully - page {pageIndex}");
+
+            void CreateImageOnUI()
+            {
+                if (!_pdfPageCache.TryGetValue(pageIndex, out var img))
+                {
+                    img = new Image
+                    {
+                        Stretch = Microsoft.UI.Xaml.Media.Stretch.Fill,
+                        Width   = pageW,
+                        Height  = pageH,
+                    };
+                    Canvas.SetLeft(img, 0);
+                    Canvas.SetTop(img, pageY);
+                    // Insert BEFORE SearchHighlightCanvas so highlights stay on top
+                    int insertAt = Math.Max(0, PdfViewportCanvas.Children.Count - 1);
+                    if (SearchHighlightCanvas != null)
+                        insertAt = Math.Max(0, PdfViewportCanvas.Children.IndexOf(SearchHighlightCanvas));
+                    PdfViewportCanvas.Children.Insert(insertAt, img);
+                    _pdfPageCache[pageIndex] = img;
+                }
+
+                img.Source = bitmap;
+            }
+        }
+        catch (Exception ex)
+        {
+            Infrastructure.Logging.Logger.Error($"[RenderSingle] Exception on page {pageIndex}", ex);
+            throw;
         }
     }
 

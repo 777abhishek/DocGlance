@@ -113,90 +113,172 @@ public static class PdfRenderer
     public static async Task<WriteableBitmap?> RenderPageAsync(
         PdfDocumentState state, int pageIndex, float dpi, CancellationToken ct = default)
     {
-        if (ct.IsCancellationRequested || state == null) return null;
+        var tid = Environment.CurrentManagedThreadId;
+        Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{tid} RenderPageAsync START: page={pageIndex}, dpi={dpi:F1}, state={state?.Handle.ToString() ?? "null"}");
+        
+        if (ct.IsCancellationRequested || state == null)
+        {
+            Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{tid} RenderPageAsync EARLY EXIT: cancelled={ct.IsCancellationRequested}, state_null={state == null}");
+            return null;
+        }
 
         var renderResult = await Task.Run(() =>
         {
-            if (ct.IsCancellationRequested) return default;
-            EnsureInitialized();
-
-            lock (Pdfium.Gate)
+            var innerTid = Environment.CurrentManagedThreadId;
+            Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{innerTid} Task.Run START: page={pageIndex}");
+            
+            if (ct.IsCancellationRequested)
             {
-                if (ct.IsCancellationRequested) return default;
-                IntPtr doc = state.Handle;
-                if (doc == IntPtr.Zero) return default;
+                Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{innerTid} Task.Run cancelled before init");
+                return default;
+            }
+            
+            try
+            {
+                EnsureInitialized();
+                Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{innerTid} PDFium initialized");
 
-                IntPtr page = Pdfium.FPDF_LoadPage(doc, pageIndex);
-                if (page == IntPtr.Zero) return default;
-
-                try
+                Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{innerTid} Acquiring Pdfium.Gate lock");
+                lock (Pdfium.Gate)
                 {
-                    float ptW = Pdfium.FPDF_GetPageWidthF(page);
-                    float ptH = Pdfium.FPDF_GetPageHeightF(page);
-
-                    int width  = (int)Math.Max(1, Math.Round(ptW * dpi / 96.0));
-                    int height = (int)Math.Max(1, Math.Round(ptH * dpi / 96.0));
-                    int stride = width * 4;
-                    int byteCount = stride * height;
-
-                    byte[] buffer = ArrayPool<byte>.Shared.Rent(byteCount);
-
-                    unsafe
+                    Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{innerTid} Lock acquired, checking cancellation");
+                    if (ct.IsCancellationRequested)
                     {
-                        fixed (byte* p = buffer)
+                        Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{innerTid} Cancelled after lock");
+                        return default;
+                    }
+                    
+                    IntPtr doc = state.Handle;
+                    Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{innerTid} Document handle: 0x{doc.ToString("X")}");
+                    if (doc == IntPtr.Zero)
+                    {
+                        Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{innerTid} ERROR: Document handle is null");
+                        return default;
+                    }
+
+                    Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{innerTid} Calling FPDF_LoadPage({pageIndex})");
+                    IntPtr page = Pdfium.FPDF_LoadPage(doc, pageIndex);
+                    Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{innerTid} Page handle: 0x{page.ToString("X")}");
+                    
+                    if (page == IntPtr.Zero)
+                    {
+                        Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{innerTid} ERROR: FPDF_LoadPage returned null");
+                        return default;
+                    }
+
+                    try
+                    {
+                        float ptW = Pdfium.FPDF_GetPageWidthF(page);
+                        float ptH = Pdfium.FPDF_GetPageHeightF(page);
+                        Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{innerTid} Page dimensions: {ptW:F1}pt × {ptH:F1}pt");
+
+                        int width  = (int)Math.Max(1, Math.Round(ptW * dpi / 96.0));
+                        int height = (int)Math.Max(1, Math.Round(ptH * dpi / 96.0));
+                        int stride = width * 4;
+                        int byteCount = stride * height;
+                        Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{innerTid} Render size: {width}×{height} px, {byteCount / 1024}KB");
+
+                        byte[] buffer = ArrayPool<byte>.Shared.Rent(byteCount);
+                        Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{innerTid} Buffer rented: {buffer.Length} bytes");
+
+                        unsafe
                         {
-                            IntPtr bitmap = Pdfium.FPDFBitmap_CreateEx(
-                                width, height, Pdfium.BitmapBgra, (IntPtr)p, stride);
-                            if (bitmap != IntPtr.Zero)
+                            fixed (byte* p = buffer)
                             {
-                                try
+                                Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{innerTid} Creating FPDFBitmap: {width}×{height}");
+                                IntPtr bitmap = Pdfium.FPDFBitmap_CreateEx(
+                                    width, height, Pdfium.BitmapBgra, (IntPtr)p, stride);
+                                Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{innerTid} Bitmap handle: 0x{bitmap.ToString("X")}");
+                                
+                                if (bitmap != IntPtr.Zero)
                                 {
-                                    Pdfium.FPDFBitmap_FillRect(bitmap, 0, 0, width, height, 0xFFFFFFFF);
-                                    Pdfium.FPDF_RenderPageBitmap(
-                                        bitmap, page, 0, 0, width, height, 0,
-                                        Pdfium.RenderAnnot | Pdfium.RenderLcdText);
+                                    try
+                                    {
+                                        Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{innerTid} Filling bitmap with white");
+                                        Pdfium.FPDFBitmap_FillRect(bitmap, 0, 0, width, height, 0xFFFFFFFF);
+                                        
+                                        Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{innerTid} Calling FPDF_RenderPageBitmap");
+                                        Pdfium.FPDF_RenderPageBitmap(
+                                            bitmap, page, 0, 0, width, height, 0,
+                                            Pdfium.RenderAnnot | Pdfium.RenderLcdText);
+                                        Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{innerTid} FPDF_RenderPageBitmap completed");
+                                    }
+                                    finally
+                                    {
+                                        Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{innerTid} Destroying bitmap");
+                                        Pdfium.FPDFBitmap_Destroy(bitmap);
+                                    }
                                 }
-                                finally
+                                else
                                 {
-                                    Pdfium.FPDFBitmap_Destroy(bitmap);
+                                    Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{innerTid} ERROR: FPDFBitmap_CreateEx returned null");
                                 }
                             }
                         }
-                    }
 
-                    return (Buffer: buffer, Width: width, Height: height, Stride: stride, ByteCount: byteCount);
-                }
-                finally
-                {
-                    Pdfium.FPDF_ClosePage(page);
+                        Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{innerTid} Render complete, returning buffer");
+                        return (Buffer: buffer, Width: width, Height: height, Stride: stride, ByteCount: byteCount);
+                    }
+                    finally
+                    {
+                        Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{innerTid} Closing page");
+                        Pdfium.FPDF_ClosePage(page);
+                        Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{innerTid} Page closed");
+                    }
                 }
             }
+            catch (Exception ex)
+            {
+                Infrastructure.Logging.Logger.Error($"[PdfRenderer] T{innerTid} EXCEPTION in Task.Run", ex);
+                throw;
+            }
         }, ct);
+
+        Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{tid} Task.Run returned, buffer={renderResult.Buffer != null}");
 
         if (renderResult.Buffer == null || ct.IsCancellationRequested)
         {
             if (renderResult.Buffer != null)
+            {
+                Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{tid} Returning buffer (cancelled)");
                 ArrayPool<byte>.Shared.Return(renderResult.Buffer);
+            }
             return null;
         }
 
         try
         {
+            Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{tid} Checking document handle validity");
             lock (Pdfium.Gate)
             {
-                if (state.Handle == IntPtr.Zero) return null;
+                if (state.Handle == IntPtr.Zero)
+                {
+                    Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{tid} ERROR: Document handle became null");
+                    return null;
+                }
             }
 
+            Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{tid} Creating WriteableBitmap: {renderResult.Width}×{renderResult.Height}");
             var writeableBmp = new WriteableBitmap(renderResult.Width, renderResult.Height);
+            
+            Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{tid} Writing pixels to WriteableBitmap");
             using (var stream = writeableBmp.PixelBuffer.AsStream())
             {
                 stream.Write(renderResult.Buffer, 0, renderResult.ByteCount);
             }
             writeableBmp.Invalidate();
+            
+            Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{tid} RenderPageAsync SUCCESS");
             return writeableBmp;
+        }
+        catch (Exception ex)
+        {
+            Infrastructure.Logging.Logger.Error($"[PdfRenderer] T{tid} EXCEPTION creating WriteableBitmap", ex);
+            throw;
         }
         finally
         {
+            Infrastructure.Logging.Logger.Log($"[PdfRenderer] T{tid} Returning buffer to pool");
             ArrayPool<byte>.Shared.Return(renderResult.Buffer);
         }
     }
