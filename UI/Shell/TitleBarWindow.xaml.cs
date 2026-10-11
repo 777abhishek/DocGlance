@@ -86,17 +86,22 @@ public sealed partial class TitleBarWindow : Window
 
     public void OpenDocument(DocumentItem doc)
     {
+        Infrastructure.Logging.Logger.Log($"[TitleBarWindow] OpenDocument called: Title={doc.Title}, FilePath={doc.FilePath}, FileType={doc.FileType}");
+        
         // If file already open in a tab, just focus it
         foreach (var kv in _tabData)
         {
             if (string.Equals(kv.Value.doc.FilePath, doc.FilePath,
                               StringComparison.OrdinalIgnoreCase))
             {
+                Infrastructure.Logging.Logger.Log($"[TitleBarWindow] File already open, focusing tab");
                 Tabs.SelectedItem = kv.Key;
                 return;
             }
         }
 
+        Infrastructure.Logging.Logger.Log($"[TitleBarWindow] Creating new tab for document");
+        
         // Persist to recent files and refresh the home page strip
         QuickView.Services.Storage.RecentFilesStore.Push(doc.FilePath);
         if (HomeFrame.Content is QuickView.Features.Home.HomePage home)
@@ -120,8 +125,10 @@ public sealed partial class TitleBarWindow : Window
         Tabs.TabItems.Add(tab);
         Tabs.SelectedItem = tab;    // triggers SelectionChanged → ShowViewer
 
+        Infrastructure.Logging.Logger.Log($"[TitleBarWindow] Calling viewer.LoadDocument");
         // Load document after tab is selected so ViewerPage is in the tree
         viewer.LoadDocument(doc);
+        Infrastructure.Logging.Logger.Log($"[TitleBarWindow] OpenDocument complete");
     }
 
     // ── Legacy NavigateTo — kept so old call sites compile ───────────────────

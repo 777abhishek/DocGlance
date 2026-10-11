@@ -143,11 +143,8 @@ public sealed partial class ViewerPage
     {
         try
         {
-            Infrastructure.Logging.Logger.Log($"[Viewport] OnViewportViewChanged fired - IsIntermediate={e.IsIntermediate}");
-            
             if (_viewportState == null || _pdfState == null)
             {
-                Infrastructure.Logging.Logger.Log("[Viewport] Skipping - viewport or pdf state is null");
                 return;
             }
 
@@ -157,8 +154,6 @@ public sealed partial class ViewerPage
             _viewportState.ViewportHeightPx = (int)DocumentScrollViewer.ViewportHeight;
             _viewportState.ScrollXPt        = DocumentScrollViewer.HorizontalOffset * LpToPt;
             _viewportState.ScrollYPt        = DocumentScrollViewer.VerticalOffset   * LpToPt;
-
-            Infrastructure.Logging.Logger.Log($"[Viewport] Zoom={zoom:F2}, ScrollY={DocumentScrollViewer.VerticalOffset:F0}");
 
             UpdateCurrentPageFromScroll();
 
@@ -171,23 +166,31 @@ public sealed partial class ViewerPage
 
             if (zoomSettled)
             {
-                Infrastructure.Logging.Logger.Log($"[Viewport] Zoom settled, clearing cache");
                 ClearPdfPageCache();
                 _lastRenderZoom = zoom;
             }
 
+            // Throttle rendering during scroll to prevent UI freeze
+            // Only render on final scroll position (!IsIntermediate) or zoom changes
             if (!e.IsIntermediate || zoomSettled)
             {
-                Infrastructure.Logging.Logger.Log($"[Viewport] Triggering RenderPagesAsync");
-                _ = RenderPagesAsync();
+                // Use Task.Run to ensure rendering never blocks UI thread
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await RenderPagesAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        Infrastructure.Logging.Logger.Error("[Viewport] Background render failed", ex);
+                    }
+                });
             }
-            
-            Infrastructure.Logging.Logger.Log("[Viewport] OnViewportViewChanged completed");
         }
         catch (Exception ex)
         {
             Infrastructure.Logging.Logger.Error($"[Viewport] OnViewportViewChanged crashed", ex);
-            throw; // Re-throw to see full crash in Windows Error Reporting
         }
     }
 

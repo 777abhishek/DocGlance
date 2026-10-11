@@ -51,7 +51,15 @@ public sealed partial class DocumentCard : UserControl
 
     private void CardButton_Click(object sender, RoutedEventArgs e)
     {
-        if (Document == null) return;
+        Infrastructure.Logging.Logger.Log($"[DocumentCard] CardButton_Click: Document={Document?.Title}, FilePath={Document?.FilePath}");
+        
+        if (Document == null)
+        {
+            Infrastructure.Logging.Logger.Log("[DocumentCard] Document is null, ignoring click");
+            return;
+        }
+        
+        Infrastructure.Logging.Logger.Log($"[DocumentCard] Calling TitleBarWindow.Current?.OpenDocument");
         global::QuickView.UI.Shell.TitleBarWindow.Current?.OpenDocument(Document);
     }
 
