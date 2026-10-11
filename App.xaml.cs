@@ -138,9 +138,6 @@ public partial class App : Application
         System.Diagnostics.Debug.WriteLine($"[App] Registered DOCX renderer for: {string.Join(", ", docxRenderer.SupportedExtensions)}");
         System.Diagnostics.Debug.WriteLine($"[App] Registered XLSX renderer for: {string.Join(", ", xlsxRenderer.SupportedExtensions)}");
         System.Diagnostics.Debug.WriteLine($"[App] Registered PPTX renderer for: {string.Join(", ", pptxRenderer.SupportedExtensions)}");
-        
-        // NOTE: HTML and Markdown removed - WebView2 uses 800MB+ memory
-        // These file types now render as plain text via TextFileReader
     }
 
     /// <summary>
