@@ -16,19 +16,17 @@ namespace QuickView.Features.Viewer;
 public sealed partial class ViewerPage
 {
     // ── Extension sets ────────────────────────────────────────────────────────
-    // Plain text → single TextBlock (~2MB RAM for 50k lines, full Unicode)
-    // Code files → RichTextBlock with syntax colours (capped at 2000 lines)
+    // ALL text-based files use the same lightweight TextBox viewer (no syntax highlighting)
+    // Simple, fast, memory-efficient — like Notepad
 
-    private static readonly HashSet<string> _plainTextExts = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> _textExts = new(StringComparer.OrdinalIgnoreCase)
     {
+        // Plain text
         ".txt", ".log", ".csv", ".tsv", ".ini", ".cfg", ".conf",
         ".env", ".toml", ".yaml", ".yml", ".properties", ".gitignore",
         ".editorconfig", ".htaccess",
-        ".md", ".markdown", ".mdx",   // no syntax to colour — plain is fine
-    };
-
-    private static readonly HashSet<string> _codeExts = new(StringComparer.OrdinalIgnoreCase)
-    {
+        ".md", ".markdown", ".mdx",
+        // Code files (no syntax highlighting - keeps it simple and fast)
         ".cs", ".vb", ".fs", ".csx",
         ".js", ".mjs", ".cjs", ".jsx",
         ".ts", ".tsx",
@@ -47,8 +45,8 @@ public sealed partial class ViewerPage
         ".r", ".lua", ".dart", ".ex", ".exs",
     };
 
-    internal static bool IsTextFile(string ext) => _plainTextExts.Contains(ext);
-    internal static bool IsCodeFile(string ext) => _codeExts.Contains(ext);
+    internal static bool IsTextFile(string ext) => _textExts.Contains(ext);
+    internal static bool IsCodeFile(string ext) => false;  // No longer using separate code viewer
 
     // ── State ─────────────────────────────────────────────────────────────────
 
@@ -57,9 +55,10 @@ public sealed partial class ViewerPage
     // Shared search state — one instance per active query, replaced on new search
     private SearchState? _textSearchState;
 
-    // ── Plain text viewer ─────────────────────────────────────────────────────
-    // Uses a single TextBlock.Text — no per-line XAML objects.
+    // ── Unified text viewer (TextBox - lightweight like Notepad) ─────────────
+    // Uses a single TextBox.Text — no per-line XAML objects.
     // RAM cost: ~2 bytes/char → ~2MB for a 1MB file regardless of line count.
+    // Fast, simple, memory-efficient for all text files including code.
 
     private async Task LoadTextFileAsync(string filePath, CancellationToken ct)
     {
@@ -67,7 +66,7 @@ public sealed partial class ViewerPage
         try
         {
             var loaded = await Task.Run(
-                () => Rendering.Text.TextFileReader.ReadCapped(filePath, 1_000_000), ct);
+                () => Rendering.Text.TextFileReader.ReadCapped(filePath, 5_000_000), ct);  // Increased to 5MB cap
 
             if (ct.IsCancellationRequested) return;
 
@@ -75,7 +74,7 @@ public sealed partial class ViewerPage
             int lineCount = loaded.LineCount;
             if (loaded.Truncated)
             {
-                raw += $"\n\n--- Truncated: showing first 1 MB of {loaded.FileBytes / 1_000_000} MB ---";
+                raw += $"\n\n--- Truncated: showing first 5 MB of {loaded.FileBytes / 1_000_000.0:F1} MB ---";
                 lineCount += 2;
             }
 
@@ -87,6 +86,8 @@ public sealed partial class ViewerPage
                     PlainTextBlock.FontFamily   = new FontFamily("Cascadia Code, Cascadia Mono, Consolas, Courier New");
                     PlainTextBlock.FontSize     = 13;
                     PlainTextBlock.TextWrapping = TextWrapping.NoWrap;
+                    PlainTextBlock.IsReadOnly   = true;
+                    PlainTextBlock.AcceptsReturn = true;
                     PlainTextBlock.Text         = raw;
 
                     LineNumberBlock.FontFamily  = new FontFamily("Cascadia Code, Cascadia Mono, Consolas, Courier New");
@@ -99,7 +100,7 @@ public sealed partial class ViewerPage
                     ClearTextHighlights();
 
                     ShowPlainViewer();
-                    Logger.Log($"[TextViewer] {lineCount} lines, {loaded.FileBytes / 1024} KB");
+                    Logger.Log($"[TextViewer] {lineCount:N0} lines, {loaded.FileBytes / 1024.0:F1} KB");
                 }
                 catch (Exception ex)
                 {
@@ -118,65 +119,6 @@ public sealed partial class ViewerPage
     }
 
 
-
-    private async Task LoadCodeFileAsync(string filePath, CancellationToken ct)
-    {
-        ShowLoading(true);
-        try
-        {
-            bool isDark = IsDarkTheme();
-            var result  = await Rendering.Code.CodeRenderer.RenderAsync(filePath, isDark, ct);
-            if (ct.IsCancellationRequested) return;
-
-            // If file exceeds 2000 lines the per-line XAML tree gets heavy.
-            // Fall back to the lean single-TextBlock path instead.
-            if (result.ExceededLineLimit)
-            {
-                Logger.Log($"[CodeViewer] Over line limit — switching to plain text viewer");
-                await LoadTextFileAsync(filePath, ct);
-                return;
-            }
-
-            DispatcherQueue.TryEnqueue(() =>
-            {
-                try
-                {
-                    TextViewerBlock.Blocks.Clear();
-                    foreach (var para in result.Paragraphs)
-                        TextViewerBlock.Blocks.Add(para);
-
-                    TextViewerBlock.FontFamily  = result.FontFamily;
-                    TextViewerBlock.FontSize     = result.FontSize;
-                    TextViewerBlock.TextWrapping = result.TextWrapping;
-                    TextViewerBlock.LineHeight   = result.LineHeight;
-
-                    CodeLineNumberBlock.FontSize   = result.FontSize;
-                    CodeLineNumberBlock.LineHeight = result.LineHeight;
-                    GenerateCodeLineNumbers(result.Paragraphs.Count);
-
-                    _currentTextFilePath = filePath;
-                    Toolbar.IsWordWrapChecked = result.TextWrapping == TextWrapping.Wrap;
-                    ClearTextHighlights();
-
-                    ShowCodeViewer();
-                    Logger.Log($"[CodeViewer] Loaded {result.Paragraphs.Count} lines");
-                }
-                catch (Exception ex)
-                {
-                    Logger.Log($"[CodeViewer] UI error: {ex.Message}");
-                    ShowErrorCard($"Cannot display code file\n{ex.Message}");
-                }
-                finally { ShowLoading(false); }
-            });
-        }
-        catch (Exception ex) when (!ct.IsCancellationRequested)
-        {
-            Logger.Log($"[CodeViewer] Error: {ex.Message}");
-            ShowErrorCard($"Cannot open code file\n{ex.Message}");
-            ShowLoading(false);
-        }
-    }
-
     // ── Visibility helpers ────────────────────────────────────────────────────
 
     private void ShowPlainViewer()
@@ -185,22 +127,7 @@ public sealed partial class ViewerPage
         TextViewerScroll.Visibility     = Visibility.Collapsed;
         DocumentScrollViewer.Visibility = Visibility.Collapsed;
         MarkdownViewerHost.Visibility   = Visibility.Collapsed;
-        ZoomPill.Visibility             = Visibility.Collapsed;
-
-        Toolbar.WordWrapVisibility  = Visibility.Visible;
-        Toolbar.SidebarButtonVisibility = Visibility.Collapsed;
-        SidebarCard.Visibility     = Visibility.Collapsed;
-        SidebarColumn.Width        = new GridLength(0);
-        Toolbar.FitWidthButtonVisibility = Visibility.Collapsed;
-        Toolbar.FitPageButtonVisibility = Visibility.Collapsed;
-    }
-
-    private void ShowCodeViewer()
-    {
-        PlainTextViewerGrid.Visibility  = Visibility.Collapsed;
-        TextViewerScroll.Visibility     = Visibility.Visible;
-        DocumentScrollViewer.Visibility = Visibility.Collapsed;
-        MarkdownViewerHost.Visibility   = Visibility.Collapsed;
+        SpreadsheetViewerHost.Visibility = Visibility.Collapsed;
         ZoomPill.Visibility             = Visibility.Collapsed;
 
         Toolbar.WordWrapVisibility  = Visibility.Visible;
@@ -274,42 +201,16 @@ public sealed partial class ViewerPage
         LineNumberBlock.Text = sb.ToString();
     }
 
-    private void GenerateCodeLineNumbers(int count)
-    {
-        var sb = new System.Text.StringBuilder();
-        for (int i = 1; i <= count; i++) { if (i > 1) sb.Append('\n'); sb.Append(i); }
-        CodeLineNumberBlock.Text = sb.ToString();
-    }
-
-    // no-op — kept because XAML TextViewerScroll references ViewChanged
-    private void TextViewerScroll_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e) { }
-
     // ── Word wrap ─────────────────────────────────────────────────────────────
 
     private void WordWrapButton_Click(object? sender, EventArgs e)
     {
         bool wrap = Toolbar.IsWordWrapChecked;
-        if (PlainTextViewerGrid.Visibility == Visibility.Visible)
-            PlainTextBlock.TextWrapping = wrap ? TextWrapping.Wrap : TextWrapping.NoWrap;
-        else
-            TextViewerBlock.TextWrapping = wrap ? TextWrapping.Wrap : TextWrapping.NoWrap;
+        PlainTextBlock.TextWrapping = wrap ? TextWrapping.Wrap : TextWrapping.NoWrap;
     }
 
     // ── Save ──────────────────────────────────────────────────────────────────
-    // M2: SaveButton and SaveAsButton removed from UI and code
-
-    private string GetCodeText()
-    {
-        var sb = new System.Text.StringBuilder();
-        foreach (var block in TextViewerBlock.Blocks)
-            if (block is Paragraph para)
-            {
-                foreach (var inline in para.Inlines)
-                    if (inline is Run r) sb.Append(r.Text);
-                sb.Append('\n');
-            }
-        return sb.ToString();
-    }
+    // Removed - not needed for read-only viewer
 
     // ── Search entry points (called from ViewerPage.Search.cs) ───────────────
 
@@ -323,21 +224,9 @@ public sealed partial class ViewerPage
             return;
         }
 
-        if (PlainTextViewerGrid.Visibility == Visibility.Visible)
-        {
-            _textSearchState = SearchHighlighter.FindInText(PlainTextBlock.Text, query, matchCase);
-            if (_textSearchState.HasHits)
-                SearchHighlighter.ApplyToTextBox(_textSearchState, PlainTextBlock);
-        }
-        else
-        {
-            _textSearchState = SearchHighlighter.FindInCode(TextViewerBlock, query, matchCase);
-            if (_textSearchState.HasHits)
-            {
-                SearchHighlighter.ClearRichText(TextViewerBlock);
-                SearchHighlighter.ApplyToRichText(_textSearchState, TextViewerBlock, TextViewerScroll);
-            }
-        }
+        _textSearchState = SearchHighlighter.FindInText(PlainTextBlock.Text, query, matchCase);
+        if (_textSearchState.HasHits)
+            SearchHighlighter.ApplyToTextBox(_textSearchState, PlainTextBlock);
 
         UpdateTextSearchCount();
         Logger.Log($"[Search] {_textSearchState.Count} matches for '{query}'");
@@ -349,14 +238,7 @@ public sealed partial class ViewerPage
         if (_textSearchState == null || !_textSearchState.HasHits) return;
         _textSearchState.Navigate(direction);
 
-        if (PlainTextViewerGrid.Visibility == Visibility.Visible)
-            SearchHighlighter.ApplyToTextBox(_textSearchState, PlainTextBlock);
-        else
-        {
-            SearchHighlighter.ClearRichText(TextViewerBlock);
-            SearchHighlighter.ApplyToRichText(_textSearchState, TextViewerBlock, TextViewerScroll);
-        }
-
+        SearchHighlighter.ApplyToTextBox(_textSearchState, PlainTextBlock);
         UpdateTextSearchCount();
     }
 
@@ -364,7 +246,6 @@ public sealed partial class ViewerPage
     {
         _textSearchState = null;
         if (PlainTextBlock != null) PlainTextBlock.SelectionLength = 0;
-        if (TextViewerBlock != null) SearchHighlighter.ClearRichText(TextViewerBlock);
         if (FindCount != null) FindCount.Text = "";
     }
 

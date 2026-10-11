@@ -140,6 +140,45 @@ public sealed partial class SpreadsheetViewer : UserControl
         await LoadSheetAsync(0, ct);
     }
 
+    /// <summary>
+    /// Selects a specific cell and switches to its sheet if necessary.
+    /// Used by search functionality to highlight search results.
+    /// </summary>
+    public async void SelectCell(int sheetIndex, int row, int col)
+    {
+        // Switch to the sheet if it's different from the active one
+        if (sheetIndex != _activeSheet && sheetIndex >= 0 && _doc != null && sheetIndex < _doc.SheetCount)
+        {
+            _activeSheet = sheetIndex;
+            UpdateTabStyles();
+            await LoadSheetAsync(sheetIndex);
+        }
+
+        // Select the cell
+        _selectedRow = row;
+        _selectedCol = col;
+
+        // Scroll to make the cell visible (with some padding)
+        if (_colX.Length > col + 1 && _rowY.Length > row + 1)
+        {
+            double cellX = _colX[col];
+            double cellY = _rowY[row];
+            double cellW = _colX[col + 1] - cellX;
+            double cellH = _rowY[row + 1] - cellY;
+
+            // Calculate scroll position to center the cell
+            double vpW = CellScroll.ViewportWidth > 0 ? CellScroll.ViewportWidth : 1200;
+            double vpH = CellScroll.ViewportHeight > 0 ? CellScroll.ViewportHeight : 800;
+
+            double scrollX = Math.Max(0, cellX - (vpW - cellW) / 2);
+            double scrollY = Math.Max(0, cellY - (vpH - cellH) / 2);
+
+            CellScroll.ChangeView(scrollX, scrollY, null, disableAnimation: false);
+        }
+
+        Invalidate();
+    }
+
     public void Cleanup()
     {
         _doc = null;

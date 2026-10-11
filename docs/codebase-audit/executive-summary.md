@@ -1,243 +1,45 @@
-# QuickView — Executive Summary
+# QuickView — Executive Summary (2026-10-11)
 
-> Audit date: 2026-10-01  
-> Read-only static analysis. No source files were modified.
+> Audit of HEAD `40cdfcd`. Baseline verified: build 0/0, 148/148 tests, `cargo check` clean. Read-only audit; no source modified.
 
----
+## Overall health: **moderate — solid core, leaky edges, stale docs**
 
-## Current State
+QuickView has matured substantially since the 2026-10-01 audit. The scary findings of that round are gone: WebView2 (and its XSS surface) is fully removed, the updater verifies SHA-256 **and** Authenticode, `pdfium.dll` loads from an explicit path, the scanner validates paths, and a real test project (148 tests, 1 s) exists. The PDF viewport pipeline — the app's heart — is now well-engineered: viewport-bounded page cache with eviction, DPI/pixel caps, pooled buffers, and a single process-wide PDFium lock.
 
-QuickView is a **WinUI 3 desktop document viewer** for PDF, code, text, Markdown, HTML, and Office files. It uses PDFium (native library via P/Invoke) for PDF rendering, WebView2 for HTML/Markdown, and custom syntax-colored RichTextBlock for code.
+The 2026-10-11 round found its problems at the **new edges**: the three Rust-backed renderers (GridCraft XLSX, DeckCraft PPTX, WordCraft DOCX) integrated in the last two days ship with lifecycle defects, a dead DOCX path, and zero test coverage; and the entire `docs/codebase-audit/` set (3,155 lines) describes a codebase that no longer exists.
 
-The project is a **single-project solution** (~15,000 lines of C# code) with a feature-based folder structure. The architecture combines partial MVVM (ViewModels exist but are mostly unused), procedural UI code-behind, and static service classes. There is **no dependency injection container**.
+## Top risks (all evidence in [findings.md](./findings.md))
 
-**Current architecture:**
-```
-Shell/ → Features/ → Rendering/ + Infrastructure/ (via static classes)
-```
+| # | Finding | One-line impact |
+|---|---|---|
+| 1 | **FIND-001** (High) | Every closed tab leaks its FPDF/GridCraft/DeckCraft native document; PDF→XLSX switch leaks too. |
+| 2 | **FIND-002** (High) | Disposing the three native wrappers mid-render frees handles still in use → crash/corruption on slow renders. |
+| 3 | **FIND-011** (High) | WordCraft DOCX renderer committed as "integrated" but never wired — `.docx` still shows an info card. |
+| 4 | **FIND-031/032** (High) | 15 tests assert a copy of a regex from deleted code; the new FFI layer has **no** tests. |
+| 5 | **FIND-023** (Med) | XLSX/PPTX loaders skip file-size validation → multi-GB file is fully slurped into memory. |
+| 6 | **FIND-018** (Med) | All nine Rust engine crates are unpinned `git` deps — `cargo update` silently moves the parsing core. |
 
-**Key technical decisions observed:**
-- Feature-based organisation: `Features/Home`, `Features/Viewer`, `Features/Browser`, `Features/Settings`
-- Partial class decomposition: `ViewerPage` split into 8 partials by concern (Pdf, Text, Search, Sidebar, Toolbar, Zoom, Helpers)
-- Security-first path handling: `PathValidator` rejects symlinks, junctions, UNC paths
-- Provider pattern for thumbnails: `IThumbnailProvider` implementations routed through `ThumbnailService`
-- Authenticode verification on installer downloads via `WinVerifyTrust`
-- HKCU-only registry writes (no elevation required for file associations)
-- SQLite index (EF Core) for scanned folders
-- Log path sanitisation to remove usernames
+## Biggest simplification opportunities (verified, not cosmetic)
 
-**Build status:** 0 errors, 0 warnings (verified)  
-**Deployment:** Inno Setup installer; unpackaged self-contained x64-only desktop app
+- **~350+ lines of dead render paths** (`RenderViewportAsync`, `RenderFullPageProgressive`, `RenderPageProgressiveAsync` + service member) and the unused `Markdig` package — FIND-014.
+- **`ServiceContainer` (DI) exists but is never `Configure()`d** — dead infrastructure; wire it or delete it (FIND-013).
+- **`Rendering/Office/*Renderer` info-card stubs** are now reachable only for legacy extensions (`.doc`, `.xls`, `.csv`, `.ppt`) — their role should be documented or folded into the registry fallback (FIND-016-related).
+- **`ViewerPage.Pdf.cs` (826 lines) coordinates three formats** — the proven `SpreadsheetViewer` extraction pattern should be applied to PPTX/PDF in Phase C, not before tests exist (FIND-012).
 
----
+## Release blockers (for any Store/installer release)
 
-## Main Architectural Problems
+1. FIND-001 + FIND-002 (native leaks/crashes — stability under normal tab usage).
+2. FIND-011 decision (either wire DOCX or remove the dead path and stop shipping `wordcraft_ffi.dll`).
+3. FIND-023 (size validation) — one-line guards.
+4. FIND-031 (delete false-confidence tests) and FIND-032 (minimum coverage for FFI layer).
 
-### 1. ViewerPage is a god class
-`ViewerPage` and its 8 partial files (~1,500+ lines combined) contain all PDF rendering logic, text/code loading, search state, sidebar management, zoom computation, and bookmark handling. This:
-- Makes unit testing impossible without a full XAML host
-- Violates single responsibility principle
-- Couples UI and business logic tightly
+## Recommended order of work
 
-**Evidence:** `Features/Viewer/ViewerPage.xaml.cs` + 8 partials declare `_pdfState`, `_doc`, `_page`, `_zoom` as `internal` shared state.
+**Phase A (now, ≤ half a day):** delete dead tests/files, add `.sln` + CI, write README, record baseline. → **Phase B (correctness/resources, ~2–3 days):** FIND-001, 002, 023, 005, 006, 007, 003 with regression tests. → **Phase C (structure, ~3–5 days):** DOCX decision, DI decision, dead-path removal, ViewerPage split *after* characterization tests. → **Phase D (perf):** measure first (FIND-027, 028). → **Phase E/F (tests + docs):** FFI coverage, doc reconciliation (mostly done in this audit). → **Phase G:** packaging + regression matrix, release decision.
 
-### 2. ViewerViewModel is inactive
-`ViewerViewModel` defines `Document`, `CurrentPage`, `TotalPages`, `Zoom` properties but `ViewerPage` maintains parallel `_doc`, `_page`, `_total`, `_zoom` fields in code-behind. The ViewModel is functionally dead — XAML does not bind to it.
+## Numbers
 
-### 3. No dependency injection
-All services are static classes: `Logger`, `BookmarkStore`, `ThumbnailService`, `FileIndexService`, `AppSettings`. This:
-- Prevents mock injection for testing
-- Creates hidden coupling
-- Makes runtime configuration impossible
-
-### 4. Business logic in UI code
-`ViewerPage.Pdf.cs`, `ViewerPage.Sidebar.cs`, `ViewerPage.Search.cs`, `ViewerPage.Zoom.cs` contain significant application logic (prefetch strategy, zoom anchoring, search debounce, bookmark management) that cannot be tested without WinUI XAML.
-
-### 5. HomePage is a large procedural class
-`HomePage.xaml.cs` (~500+ lines) directly manages scan state, filter/sort state, calls services, and contains file-type extension sets. There is no ViewModel.
-
-### 6. IFileRenderer returns UIElement
-The renderer interface (`IFileRenderer`) returns `UIElement?` — a WinUI presentation type — coupling the infrastructure layer directly to the UI framework. Renderers cannot be tested without constructing UI elements.
-
----
-
-## Main Security Concerns
-
-### High Severity (3 findings)
-
-**SEC-01 — HtmlRenderer loads arbitrary local file:// URIs in WebView2**
-- `HtmlRenderer.cs` navigates WebView2 to `file://` paths without disabling JavaScript
-- Malicious HTML files can execute scripts, access local files, exfiltrate data
-- **Mitigation:** Disable `IsScriptEnabled`, add `NavigationStarting` handler
-
-**SEC-02 — MarkdownRenderer custom parser susceptible to XSS**
-- Hand-rolled Markdown-to-HTML converter generates raw HTML with `javascript:` links and unescaped `href` attributes
-- Crafted `.md` files can execute arbitrary scripts in WebView2
-- **Mitigation:** Replace with `Markdig` library, add URL scheme validation, add CSP
-
-**SEC-03 — Update installer downloaded without SHA-256 verification**
-- Installer URL from GitHub API; no checksum verification before execution
-- `WinVerifyTrust` checks Authenticode but does not prevent tampered download if attacker has valid cert
-- **Mitigation:** Publish SHA-256 checksum, verify before launch
-
-### Medium Severity (5 findings)
-
-- **SEC-04:** `pdfium.dll` loaded by short name (DLL hijacking risk)
-- **SEC-05:** `FolderScanner` does not validate paths before indexing (symlinks bypass validation)
-- **SEC-06:** `BookmarkStore` writes full file paths without validation
-- **SEC-07:** `WinVerifyTrust` disables revocation checking
-- **SEC-08:** Markdown HTML output has no Content Security Policy
-
-### Low Severity (4 findings)
-
-- Path sanitisation only handles Windows-style paths
-- Installer written to shared `%TEMP%` directory
-- No input validation on registry values (benign)
-- WebView2 instances not disposed on tab close
-
-### Informational (4 findings)
-
-- File size limits are constants, not configurable
-- `AllowUnsafeBlocks` enabled project-wide
-- Documentation inconsistencies
-
-**Positive security findings:**
-- `PathValidator` explicitly rejects symlinks, junctions, UNC paths via `GetFileAttributes` (FILE_ATTRIBUTE_REPARSE_POINT check)
-- `FileSizeValidator` enforces per-type file size limits (500 MB for PDF, 1 GB general)
-- Log path sanitisation removes usernames from log output
-- Authenticode verification on downloaded installers
-- HKCU-only registry writes (no elevation)
-- No secrets found in source code or configuration
-
----
-
-## Main Maintainability Problems
-
-1. **Large god classes:** `ViewerPage` (~1,500 lines), `HomePage` (~500 lines), `TitleBarWindow` (~400+ lines)
-2. **Inactive ViewModels:** `ViewerViewModel` exists but is not used; ViewModel pattern partially implemented
-3. **Static service anti-pattern:** All services are static; cannot be mocked or injected
-4. **Tight UI-logic coupling:** Business logic embedded in code-behind; cannot be tested without XAML host
-5. **Custom Markdown parser:** 300+ lines of string manipulation prone to edge-case failures and XSS
-6. **No test suite:** No unit tests found; manual testing only
-7. **Static singleton:** `TitleBarWindow.Current` prevents multi-window support and testing
-8. **Mixed concerns in Models/**: PDF-specific types (`PdfLink`, `PdfSearchResult`) leaked into shared models namespace
-
----
-
-## Main Performance Concerns
-
-1. **Prefetch strategy not parameterised:** Hard-coded ±2 page prefetch; no runtime tuning for low-memory devices
-2. **Eviction based on page distance only:** Does not consider actual memory usage or rendered page sizes
-3. **Thumbnail loading synchronous in UI thread:** `HomePage` awaits thumbnail loads sequentially; could batch
-4. **No virtualization in thumbnail grid:** All thumbnails rendered at once; could cause memory pressure with large folders
-5. **WebView2 instances never disposed:** Process continues running after tab close; memory leak
-6. **Markdown rendering blocks UI thread:** Custom parser runs synchronously; should be moved to background
-7. **FolderScanner parallel directory enumeration:** Uses `Parallel.ForEach` without MaxDegreeOfParallelism; could saturate I/O on HDDs
-
-**Positive findings:**
-- PDF rendering uses `ArrayPool<byte>.Shared` for raster buffers (good)
-- TextFileReader caps at 1 MB with streaming (good)
-- SQLite index reduces repeated scans (good)
-- Thumbnail cache with LRU eviction at 500 MB (good)
-
----
-
-## Recommended Target Architecture
-
-**Pattern:** Pragmatic layered feature architecture within a single project (no separate assemblies).
-
-**Dependency direction:**
-```
-Presentation (Features/, Controls/)
-      ↓
-Application (Services/, Interfaces/)
-      ↓
-Domain (Models/, pure business rules)
-
-Infrastructure → Application interfaces (never upward to Presentation)
-Shared         → used by any layer (no upward dependencies)
-```
-
-**Key changes:**
-1. Activate `ViewerViewModel` to own page/zoom/doc state
-2. Extract `HomeViewModel` for scan/filter logic
-3. Extract `PdfViewerService` for rendering orchestration (prefetch, eviction, zoom)
-4. Change `IFileRenderer` to return DTOs instead of `UIElement`
-5. Introduce `Microsoft.Extensions.DependencyInjection` for service registration
-6. Convert static service classes to injectable instances
-7. Replace custom Markdown parser with `Markdig`
-8. Disable JavaScript in `HtmlRenderer` WebView2
-
-**Keep as single project:** No need for multiple `.csproj` files; enforce layering via folder conventions.
-
----
-
-## Top Priorities
-
-### Security (immediate)
-1. **Disable JavaScript in HtmlRenderer** (1 day, closes SEC-01)
-2. **Replace MarkdownRenderer with Markdig** (2 days, closes SEC-02)
-3. **Add SHA-256 installer verification** (1 day, closes SEC-03)
-4. **Restrict pdfium.dll loading to app directory** (1 day, closes SEC-04)
-5. **Apply PathValidator in FolderScanner** (0.5 days, closes SEC-05)
-
-### Architecture (short-term)
-1. **Extract HomeViewModel** (2-3 days) — enables testability, reduces procedural code
-2. **Activate ViewerViewModel** (3-4 days) — separates UI from state, enables testing
-3. **Extract PdfViewerService** (4-5 days) — isolates rendering logic
-
-### Architecture (medium-term)
-1. **Introduce dependency injection** (5-7 days) — eliminates static services, enables mocking
-2. **Fix IFileRenderer interface** (3-4 days) — decouples renderers from UI framework
-
----
-
-## Refactoring Risk
-
-**Low-risk quick wins (can be done independently):**
-- Security fixes (immediate)
-- HomeViewModel extraction
-- Markdown → Markdig replacement
-
-**Medium-risk foundational changes (require coordination):**
-- ViewerViewModel activation — touches all 8 ViewerPage partials
-- PdfViewerService extraction — core rendering flow
-- Dependency injection introduction — touches every service call site
-
-**Recommended sequence:**
-1. Security fixes first (high benefit, low risk, independent)
-2. HomeViewModel (validate ViewModel pattern works)
-3. ViewerViewModel (major state refactor)
-4. PdfViewerService (rendering logic extraction)
-5. Full DI introduction (after services extracted)
-
-**Rollback strategy:** Each phase in dedicated feature branch; phases are incrementally reversible (except full DI which is all-or-nothing).
-
----
-
-## Overall Observations
-
-**Strengths:**
-- Clean feature-based organisation
-- Explicit security validators for paths and file sizes
-- Provider pattern for thumbnails and renderers
-- Recent refactoring work has improved separation (Shared/ folder with formatters/validators)
-- No third-party analytics or telemetry
-- Build is clean (0 errors, 0 warnings)
-
-**Weaknesses:**
-- ViewModels defined but not used
-- Business logic embedded in UI code-behind
-- No dependency injection
-- Large god classes (ViewerPage, HomePage)
-- Custom Markdown parser with XSS vulnerability
-- HTML files loaded in WebView2 with JavaScript enabled
-- No unit tests
-
-**Maturity level:** Early-stage open-source project with solid foundations but incomplete MVVM implementation and missing test coverage. Security posture is **above average** for an open-source viewer (explicit path validation, Authenticode verification) but has **3 High-severity vulnerabilities** in the HTML/Markdown rendering pipeline that should be addressed immediately.
-
-**Recommended investment:**
-- **Security fixes:** 5-6 days (highest priority)
-- **ViewModel activation + service extraction:** 10-15 days (high impact on testability)
-- **Full DI introduction:** 5-7 days (enables long-term maintainability)
-- **Total refactoring effort:** 20-28 days (4-6 weeks)
+- ~16.4k LOC C# (113 files), ~2.4k XAML, ~1.4k Rust across 3 cdylib crates.
+- ViewerPage family: 9 files, ~3.4k lines (largest single class family).
+- Findings: **5 High, 15 Medium, 13 Low, 6 Informational/verified-healthy** (one register, deduplicated).
+- Tests: 148 passing — but concentrated in ViewModels/formatters/PDF service; **zero** on the FFI layer added 2026-10-11.

@@ -1,252 +1,78 @@
-# QuickView — Codebase Overview
+# QuickView — Codebase Overview (verified 2026-10-11, HEAD `40cdfcd`)
 
-> Audit date: 2026-10-01  
-> Scope: full static analysis, no source files modified.
+Everything below was verified against source at audit time. Where a claim could not be verified it is marked **unverified**.
 
----
-
-## 1. Project Identity
+## 1. Project identity
 
 | Property | Value |
 |---|---|
-| Name | QuickView |
-| Type | WinUI 3 unpackaged desktop application |
-| Target framework | `net8.0-windows10.0.19041.0` |
-| Architecture | x64-only, self-contained |
-| Deployment | Inno Setup installer; no MSIX packaging |
-| Assembly version | 1.0.0.0 |
-| Informational version | 2026.09.28 |
+| Type | WinUI 3 desktop file viewer (packaged MSIX default; unpackaged EXE supported) |
+| TFM | `net8.0-windows10.0.19041.0`, x64 only, `PACKAGED` define, custom `Main` (PerMonitorV2 DPI) |
+| Native | 3 Rust `cdylib` crates: `deckcraft_ffi` (PPTX), `wordcraft_ffi` (DOCX, **unwired**), `gridcraft_ffi` (XLSX) |
+| PDF | Hand-written P/Invoke over `pdfium.dll` (`Rendering/Pdf/Pdfium.cs`); `PDFiumCore` NuGet used **only** to carry the DLL |
+| Key packages | WindowsAppSDK 2.4.0 · Win2D 1.4.0 · CommunityToolkit.Mvvm 8.4.2 · EF Core Sqlite 8.0.11 · Markdig 1.4.0 (**unused**, FIND-014) · PDFiumCore 97.0.4690 |
+| Size | ~16.4k LOC C# / 113 files · ~2.4k XAML · ~1.4k Rust |
 
----
-
-## 2. Project Structure
+## 2. Folder responsibilities (actual)
 
 ```
-QuickView/
-├── App.xaml / App.xaml.cs          — Application entry point, activation, renderer registration
-├── app.manifest                    — DPI awareness, long-path, scrolling settings
-├── QuickView.csproj                — Single project, x64, no trimming, AllowUnsafeBlocks=true
-│
-├── Shell/                          — Chrome-level window host
-│   └── TitleBarWindow.xaml[.cs]   — TabView shell, drag-and-drop, file picker, icon loading
-│
-├── Features/
-│   ├── Home/
-│   │   └── HomePage.xaml[.cs]     — Recent/All documents view, scan management, thumbnail loading
-│   ├── Viewer/
-│   │   ├── ViewerPage.xaml[.cs]   — Viewer shell, state, lifecycle
-│   │   ├── ViewerViewModel.cs     — CommunityToolkit.Mvvm ObservableObject (thin, data-binding only)
-│   │   └── Components/
-│   │       ├── ViewerPage.Pdf.cs      — PDF loading, rendering, placeholder layout, prefetch
-│   │       ├── ViewerPage.Text.cs     — Text/code/markdown viewers, visibility, search dispatch
-│   │       ├── ViewerPage.Search.cs   — PDF search UI, highlight canvas, scroll-to-hit
-│   │       ├── ViewerPage.Sidebar.cs  — Page navigation, outline TOC, bookmarks
-│   │       ├── ViewerPage.Toolbar.cs  — All toolbar button handlers
-│   │       ├── ViewerPage.Zoom.cs     — Zoom, fit-width/page, re-render at zoom, scroll anchoring
-│   │       ├── ViewerPage.Helpers.cs  — Static resource lookups
-│   │       └── DocumentInfoDialog.cs  — Builds the file info ContentDialog
-│   ├── Browser/
-│   │   ├── BrowserPage.xaml[.cs]  — Simple page wrapper
-│   │   └── BrowserViewModel.cs    — Folder scan via FolderScanner, cancel-on-navigate
-│   ├── Search/
-│   │   └── SearchHighlighter.cs   — Text/code search engine and highlight overlay
-│   └── Settings/
-│       └── SettingsPage.xaml[.cs] — Theme/preferences UI
-│
-├── Rendering/
-│   ├── RendererRegistry.cs         — ConcurrentDictionary ext → IFileRenderer
-│   ├── Pdf/
-│   │   ├── Pdfium.cs              — Full P/Invoke surface (~80 extern methods)
-│   │   ├── PdfDocumentState.cs    — IDisposable wrapper for native handle + page sizes
-│   │   ├── PdfRenderer.cs         — RasterBitmap rendering via ArrayPool
-│   │   ├── PdfOperationBase.cs    — Internal static helper (lock/load/cleanup patterns)
-│   │   ├── PdfTextService.cs      — Text extraction, search, char-index hit-testing
-│   │   ├── PdfLinkService.cs      — Web and annotation link extraction
-│   │   ├── PdfOutlineReader.cs    — PDF bookmark/TOC reader
-│   │   └── PdfAnnotationService.cs — Markup/ink annotation writing (PDFium)
-│   ├── Code/
-│   │   └── CodeRenderer.cs        — Syntax-coloured RichTextBlock paragraphs (single-color per line)
-│   ├── Text/
-│   │   └── TextFileReader.cs      — Capped streaming reader (1 MB default)
-│   ├── Web/
-│   │   ├── MarkdownRenderer.cs    — Custom MD→HTML converter, displays in WebView2
-│   │   └── HtmlRenderer.cs        — WebView2 file:// navigation for HTML files
-│   ├── Office/
-│   │   ├── DocxRenderer.cs        — DOCX info card (no full rendering)
-│   │   ├── XlsxRenderer.cs        — XLSX info card
-│   │   └── PptxRenderer.cs        — PPTX info card
-│   ├── Data/                       — (folder exists, not fully populated)
-│   └── Unsupported/
-│       └── UnsupportedRenderer.cs — Fallback "unsupported" card
-│
-├── Controls/
-│   ├── PdfTextSelectionOverlay.xaml[.cs] — Drag-select/copy overlay on PDF pages
-│   ├── PageThumbnailSidebar.xaml[.cs]    — Thumbnail list panel
-│   ├── DocumentCard.xaml[.cs]            — Grid-view card for home page
-│   ├── DocumentListItem.xaml[.cs]        — List-view row
-│   ├── ViewerInfoCard.cs                  — Unsupported file info card (code-only)
-│   └── PdfActionBar.xaml[.cs]            — (exists, extent unknown)
-│
-├── Models/
-│   ├── DocumentItem.cs     — Primary file representation, INotifyPropertyChanged
-│   ├── BookmarkItem.cs
-│   ├── OutlineItem.cs
-│   ├── PageThumbnailItem.cs
-│   ├── PdfLink.cs          — Link type/rect model
-│   ├── PdfSearchResult.cs  — Search hit + rect model
-│   └── FileTypeInfo.cs
-│
-├── Core/
-│   ├── Interfaces/
-│   │   ├── IFileRenderer.cs      — Renderer contract (returns UIElement)
-│   │   ├── IFileScanner.cs       — Scanner contract
-│   │   └── IThumbnailProvider.cs — Thumbnail provider contract
-│   ├── Constants/
-│   │   └── FileExtensions.cs
-│   └── Enums/
-│       ├── FileCategory.cs
-│       └── ViewMode.cs
-│
-├── FileSystem/
-│   ├── Index/
-│   │   ├── FileIndexContext.cs    — EF Core DbContext (SQLite, LocalAppData)
-│   │   ├── FileIndexRepository.cs
-│   │   └── FileIndexService.cs   — CRUD over indexed files / scanned folders
-│   ├── Scanner/
-│   │   ├── FolderScanner.cs      — Parallel directory scan, extension filter
-│   │   └── ScanOptions.cs
-│   └── Watcher/
-│       └── FileWatcherService.cs
-│
-├── Thumbnails/
-│   ├── ThumbnailService.cs        — Provider-routing orchestrator + semaphore
-│   ├── ThumbnailCache.cs          — Disk PNG cache with LRU-style eviction
-│   └── Providers/
-│       ├── PdfThumbnailProvider.cs    — WinRT Windows.Data.Pdf + Shell fallback
-│       ├── OfficeThumbnailProvider.cs — Shell thumbnail
-│       └── GenericThumbnailProvider.cs — Shell fallback for all types
-│
-├── Infrastructure/
-│   ├── Configuration/
-│   │   ├── AppSettings.cs        — Typed settings with auto-persistence via SettingsStore
-│   │   └── UserPreferences.cs
-│   ├── Logging/
-│   │   └── Logger.cs             — File-based logger, 5 MB rotation, path sanitisation
-│   ├── Registration/
-│   │   ├── AppRegistration.cs    — HKCU registry file-association writer (HKCU, no elevation)
-│   │   └── RegistrationHelper.cs — Async wrapper for AppRegistration
-│   ├── Storage/
-│   │   ├── SettingsStore.cs      — Atomic JSON settings (write-to-temp → rename)
-│   │   ├── BookmarkStore.cs      — In-memory + JSON bookmark persistence
-│   │   └── RecentFilesStore.cs   — Recent file paths list via SettingsStore
-│   └── Update/
-│       ├── UpdateService.cs      — GitHub Releases API checker + WinVerifyTrust installer verify
-│       └── UpdateBanner.xaml[.cs] — UI banner for update notifications
-│
-├── Shared/
-│   ├── Collections/
-│   │   └── IncrementalLoadingCollection.cs — ISupportIncrementalLoading wrapper
-│   ├── Detection/
-│   │   └── FileTypeDetector.cs   — MIME type, category, icon glyph
-│   ├── Formatters/
-│   │   ├── FileSizeFormatter.cs
-│   │   └── DateFormatter.cs
-│   ├── Threading/
-│   │   └── UIThreadHelper.cs     — DispatcherQueue extension methods
-│   └── Validation/
-│       ├── FileSizeValidator.cs  — Extension-specific size limits, calls PathValidator
-│       └── PathValidator.cs      — Symlink/junction/UNC rejection via GetFileAttributes
-│
-├── Resources/                    — XAML resource dictionaries
-├── Assets/                       — Icons, file-type icons
-├── installer/                    — Inno Setup script, manifest generator
-├── tools/                        — EmbedIcon build tool (excluded from compilation)
-├── build.ps1                     — Stop → build → embed icon → launch
-└── build-installer.ps1           — Produce installable .exe via Inno Setup
+Program.cs            entry: DPI awareness → single-instance redirect → Application.Start
+App.xaml.cs           renderer registration, activation args → OpenFilePath → TitleBarWindow
+UI/Shell              TitleBarWindow — tab shell, per-tab ViewerPage, tab tear-out disabled
+Features/Home         HomePage + HomeViewModel (scan/filter/sort), file index UI
+Features/Viewer       ViewerPage + 8 partials (Pdf/Viewport/Text/Search/Sidebar/Zoom/Toolbar/Helpers)
+  └ Spreadsheet/      SpreadsheetViewer — Win2D canvas grid control (XLSX)
+Features/Settings     SettingsPage
+Rendering/Pdf         Pdfium P/Invoke, PdfDocumentState, PdfRenderer, Text/Link/Annot/Outline/Metadata services
+Rendering/Document    GridCraft+WordCraft native wrappers, SheetData (JSON), SpreadsheetDocument, DocxDocument(dead)
+Rendering/Presentation DeckCraft wrapper, PptxDocument, PptxViewerControl
+Rendering/{Code,Text,Office,Unsupported}  code highlighter, capped text reader, registry info-card renderers
+Services/Documents    IPdfViewerService + PdfViewerService (per-tab PDF lifecycle)
+Services/FileSystem   FolderScanner (validated), FileWatcherService, EF Core SQLite index
+Services/{Thumbnails,Storage,Registration,Updates}  thumbnail cache+providers, bookmarks/recents/settings, HKCU assoc., updater
+Infrastructure        Logger (async queue), AppSettings, ServiceContainer (DI — unused)
+Core / Common         models, interfaces, validators (Path/FileSize), formatters, detectors
+QuickView.Tests       xUnit + FluentAssertions, 148 tests, references main project, uses real pdfium.dll
+native/               3 Rust crates + build-native.ps1 (cargo build → copy to 4 bin layouts)
 ```
 
----
+## 3. Primary execution paths (file:line)
 
-## 3. Dependency Graph (actual, verified from imports)
+**Launch:** `Program.Main` (DPI first, `Program.cs:70-105`) → `App.OnLaunched` (`App.xaml.cs:73-105`) → `RegisterRenderers` (126-144: Office info-card renderers into static `RendererRegistry`) → `TitleBarWindow` → activation/command-line file arg → `OpenFilePath` (`App.xaml.cs:223-251`, validates via `FileSizeValidator`) → `TitleBarWindow.OpenDocument` (`UI/Shell/TitleBarWindow.xaml.cs:96-149`, per-tab `ViewerPage`).
 
-```
-App.xaml.cs
-  └─→ Shell.TitleBarWindow
-        └─→ Features.Home.HomePage
-              └─→ FileSystem.Index.FileIndexService  (EF Core SQLite)
-              └─→ FileSystem.Scanner.FolderScanner
-              └─→ Thumbnails.ThumbnailService
-              └─→ Infrastructure.Storage.RecentFilesStore
-        └─→ Features.Viewer.ViewerPage (partial)
-              └─→ Rendering.Pdf.*        (PDFium native)
-              └─→ Rendering.Code.CodeRenderer
-              └─→ Rendering.Text.TextFileReader
-              └─→ Rendering.Web.MarkdownRenderer  (WebView2)
-              └─→ Rendering.RendererRegistry
-              └─→ Features.Search.SearchHighlighter
-              └─→ Controls.PdfTextSelectionOverlay
-              └─→ Infrastructure.Storage.BookmarkStore
-        └─→ Infrastructure.Update.UpdateService (HttpClient → GitHub API)
-  └─→ Infrastructure.Registration.RegistrationHelper (HKCU registry)
-  └─→ Shared.Validation.FileSizeValidator
-        └─→ Shared.Validation.PathValidator
-              └─→ kernel32.dll (GetFileAttributes P/Invoke)
-```
+**Document dispatch:** `ViewerPage.LoadDocumentAsync` (`Partials/ViewerPage.Pdf.cs:32-91`): `.pdf`→`PdfViewerService.LoadDocumentAsync`→`PdfRenderer.OpenDocumentAsync` (Gate-locked FPDF open, page-size pre-cache) · `.pptx/.ppt/...`→`LoadPptxAsync` (own `PptxDocument`, slide viewport) · `.xlsx/...`→`LoadXlsxAsync` (own `SpreadsheetDocument` → `SpreadsheetViewer` UserControl) · code/text→Text paths · else→`RendererRegistry`→info card. **Note `.docx` lands in the registry→info-card branch (FIND-011).**
 
----
+**PDF render:** scroll/zoom → `RenderPagesAsync` (`Partials/ViewerPage.Viewport.cs:225-346`, UI-thread only, cancels prior `_renderCts`, DPI = min(192, 96·scale·min(zoom,2))) → evict cache beyond visible±2 → visible pages sequentially, buffer pages via semaphore'd `Task.Run` → `RenderFullPage` (536-603, all FPDF calls under `Pdfium.Gate`, ArrayPool buffer, ≤2600 px) → `CreateBitmapFromBufferAsync` (UI-thread WriteableBitmap) → Image inserted into `PdfViewportCanvas`, cached in `_pdfPageCache`.
 
-## 4. Third-Party Dependencies
+**Tab close:** `TitleBarWindow.CloseTab` (256-275) → `ViewerPage.CancelLoad` (`ViewerPage.xaml.cs:101-128`) — cancels CTSs, cleans renderer element, nulls `_pdfState` — **but frees nothing native (FIND-001)**.
 
-| Package | Version | Purpose |
-|---|---|---|
-| `Microsoft.WindowsAppSDK` | 2.4.0 | WinUI 3 framework + WinRT APIs |
-| `Microsoft.EntityFrameworkCore.Sqlite` | 8.0.11 | File index persistence |
-| `Microsoft.Graphics.Win2D` | 1.4.0 | Declared but usage not confirmed in reviewed files |
-| `CommunityToolkit.Mvvm` | 8.4.2 | `ObservableObject`, `[ObservableProperty]` |
-| `PDFiumCore` | 97.0.4690 | Native pdfium.dll (PDF rendering) |
+## 4. Resource ownership map
 
-**Native DLLs loaded at runtime:**
-- `pdfium.dll` — loaded by P/Invoke in `Pdfium.cs` (DLL name only, no explicit path)
-- `kernel32.dll` — `GetFileAttributes` in `PathValidator.cs`
-- `shell32.dll` — `SHChangeNotify` in `AppRegistration.cs`
-- `user32.dll` — `LoadImage`, `SendMessage` in `TitleBarWindow.xaml.cs`
-- `wintrust.dll` — `WinVerifyTrust` in `UpdateService.cs`
-- WebView2 runtime — used by `MarkdownRenderer` and `HtmlRenderer`
+| Resource | Created | Released | Gap |
+|---|---|---|---|
+| FPDF document | `PdfRenderer.OpenDocumentAsync:63` (service-owned) | `PdfViewerService.CloseDocument:113` — called only on next same-service load | **Never on tab close** (FIND-001) |
+| Pinned byte[] (mem-loaded PDFs) | `PdfDocumentState.ctor:46` | `PdfDocumentState.Dispose:83` | same gap |
+| `Box<GcDocument>` (XLSX) | `gc_open_xlsx` via `SpreadsheetDocument.OpenAsync` | `Dispose` → `gc_free_document` — only on next XLSX load | **Tab close leak** (FIND-001) |
+| `Box<DcDocument>` (PPTX) | `dc_open_pptx` via `PptxDocument.OpenAsync` | same pattern | **Tab close leak** (FIND-001) |
+| FPDF page/bitmap | `RenderFullPage` / `RenderPageAsync` | `finally` blocks — verified complete | none |
+| Rust pixel/JSON buffers | `wc_render_page`/`gc_get_sheet_data_json` etc. | C# `finally` → `*_free_*` — verified paired | Dispose race (FIND-002) |
+| Page Images (`_pdfPageCache`) | `RenderSinglePageAsync` | eviction in `RenderPagesAsync:275-289` | minor race (FIND-004) |
+| Thumbnail disk cache | `ThumbnailCache` | 500 MB LRU eviction (verified) | LastAccessTime reliance (FIND-030) |
 
----
+## 5. Threading model (verified)
 
-## 5. Application Flow
+- UI thread: WinUI `DispatcherQueue` + `DispatcherQueueSynchronizationContext` installed in `Program.cs:98-104`; all canvas/cache mutations marshaled (verified in Viewport.cs).
+- PDFium: single process-wide `Pdfium.Gate`; every FPDF call site audited is inside it (one stale comment claims otherwise — FIND under PDF-003/findings register).
+- Rust FFI: **no lock** — wrappers rely on C# `SemaphoreSlim` per document; fine per-document, but Dispose races (FIND-002).
+- Logger: dedicated background thread, bounded queue.
 
-### Launch sequence
-1. `App()` constructor: initialise global exception handlers, subscribe to re-activation.
-2. `OnLaunched()`: register renderers → create `TitleBarWindow` → start update check (background) → handle activation args or command-line path.
-3. `TitleBarWindow()`: add Home tab → navigate `HomeFrame` to `HomePage` → start `UpdateBanner`.
-4. `HomePage.Page_Loaded()`: load recent files → initialise SQLite index → load cached scan.
+## 6. Contradictions between docs and code (top)
 
-### File open sequence
-1. Path validated by `FileSizeValidator.IsFileValidAndSafe` (path security + size limit).
-2. `DocumentItem.FromFileInfo` creates the model.
-3. `TitleBarWindow.OpenDocument` adds a new `TabViewItem` + `ViewerPage`.
-4. `ViewerPage.LoadDocumentAsync` dispatches to the correct renderer (PDF / text / code / MD / registry).
-
-### PDF rendering sequence
-1. `PdfRenderer.OpenDocumentAsync` → PDFium lock → `FPDF_LoadDocument` → pre-cache page sizes.
-2. Placeholder `Border` nodes created for all pages (instant).
-3. First page rendered at 96 DPI (preview) then 192 DPI (full quality).
-4. `PrefetchPagesAroundAsync` renders ±2 pages in background.
-5. Eviction evicts pages >±6 from viewport.
-6. On zoom: `ReRenderVisiblePagesAsync` re-rasterises at `effectiveDpi = RenderDpi × (zoom/NaturalZoom)`.
-
----
-
-## 6. Key Design Decisions Observed
-
-- **Partial class decomposition of ViewerPage**: the viewer is split into 8 partial files by concern (Pdf, Text, Search, Sidebar, Toolbar, Zoom, Helpers). This reduces individual file sizes but ViewerPage still has one large shared state scope.
-- **No DI container**: all dependencies resolved via static classes. `App.xaml.cs` manually registers renderers.
-- **Provider pattern for thumbnails**: `ThumbnailService` routes through `IThumbnailProvider` implementations. Good extensibility point.
-- **Renderer registry**: `RendererRegistry` maps extensions to `IFileRenderer`. Renderers registered at startup in `App.xaml.cs`.
-- **Security-first path handling**: `PathValidator` rejects symlinks, junctions, and UNC paths. `FileSizeValidator` enforces per-type size limits.
-- **Log path sanitisation**: `Logger` regex-strips `C:\Users\<username>` from log lines.
-- **Authenticode verification on installer download**: `UpdateService` calls `WinVerifyTrust` before executing a downloaded installer.
-- **HKCU-only registry writes**: file associations registered without elevation.
-- **SQLite index**: `FileIndexContext` (EF Core) stores indexed files and scanned folders in LocalAppData.
+| Old doc claim | Reality at `40cdfcd` |
+|---|---|
+| "0 unit tests" | 148 passing |
+| "No dependency injection" | Container exists, never configured (FIND-013) |
+| "WebView2 renders HTML/MD; SEC-01/02 critical" | WebView2 fully removed; renderers deleted |
+| "ViewerPage ~1,500 lines / 8 partials" | ~3.4k lines / 9 files incl. Viewport (774) |
+| Roadmap "Phase 5: replace Markdown parser with Markdig" | Markdig referenced but unused; no HTML/MD rendering at all |
+| Tree.md structure | Missing Spreadsheet/, Rendering/Document|Presentation, 2 native crates, several models; lists deleted `.agents/`/`.kiro/` |

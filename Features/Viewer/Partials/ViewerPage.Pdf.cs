@@ -72,9 +72,7 @@ public sealed partial class ViewerPage
             await LoadPptxAsync(doc.FilePath ?? string.Empty, ct);
         else if (ext == ".xlsx" || ext == ".xlsm" || ext == ".xltx" || ext == ".xltm")
             await LoadXlsxAsync(doc.FilePath ?? string.Empty, ct);
-        else if (IsCodeFile(ext))
-            await LoadCodeFileAsync(doc.FilePath ?? string.Empty, ct);
-        else if (IsTextFile(ext))
+        else if (IsTextFile(ext))  // All text-based files now use the same lightweight viewer
             await LoadTextFileAsync(doc.FilePath ?? string.Empty, ct);
         else
         {

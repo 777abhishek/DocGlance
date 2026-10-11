@@ -48,6 +48,14 @@ public sealed partial class ViewerPage
             return;
         }
 
+        // Route to spreadsheet viewer search if active
+        if (IsSpreadsheetViewerActive())
+        {
+            bool matchCase = MatchCaseButton?.IsChecked ?? false;
+            SearchInSpreadsheet(query, matchCase);
+            return;
+        }
+
         // Cancel any in-flight search and pending debounce
         _searchDebounceCts?.Cancel();
         _searchDebounceCts?.Dispose();
@@ -213,6 +221,13 @@ public sealed partial class ViewerPage
             return;
         }
 
+        // Route to spreadsheet navigation if active
+        if (IsSpreadsheetViewerActive())
+        {
+            NavigateSpreadsheetSearchHit(direction);
+            return;
+        }
+
         if (_searchResults.Count == 0) return;
 
         _activeSearchIndex =
@@ -296,4 +311,9 @@ public sealed partial class ViewerPage
     private bool IsTextViewerActive() =>
         (PlainTextViewerGrid?.Visibility == Visibility.Visible) ||
         (TextViewerScroll?.Visibility    == Visibility.Visible);
+
+    // ── Helper: true when spreadsheet viewer is active ────────────────────────
+
+    private bool IsSpreadsheetViewerActive() =>
+        SpreadsheetViewerHost?.Visibility == Visibility.Visible;
 }
