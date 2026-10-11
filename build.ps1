@@ -1,4 +1,4 @@
-﻿# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
 #  QuickView build + launch script
 #
 #  Supports both build modes:
@@ -69,7 +69,7 @@ if ($procs) {
 }
 
 # ── 1b. Kill stale build processes ────────────────────────────────────────────
-$lockProcs = @("MSBuild","dotnet") |
+$lockProcs = @("MSBuild","dotnet","Microsoft.UI.Xaml.Markup.Compiler*") |
     ForEach-Object { Get-Process -Name $_ -ErrorAction SilentlyContinue } |
     Where-Object   { $_ -ne $null }
 if ($lockProcs) {
@@ -78,13 +78,13 @@ if ($lockProcs) {
     Start-Sleep -Milliseconds 800
 }
 
-# Delete locked intermediate XAML DLL
-$objPath = if ($Unpackaged) { "x64\$Configuration" } else { "$Configuration" }
-$lockedDll = "$PSScriptRoot\obj\$objPath\net8.0-windows10.0.19041.0\intermediatexaml\QuickView.dll"
-if (Test-Path $lockedDll) {
-    try   { Remove-Item $lockedDll -Force; Write-Info "Removed locked intermediate DLL" }
-    catch { Write-Info "Could not remove locked DLL (still locked?) — trying anyway" }
-}
+# Delete locked intermediate XAML DLLs
+Get-ChildItem -Path "$PSScriptRoot\obj" -Recurse -Filter "QuickView.dll" -ErrorAction SilentlyContinue |
+    Where-Object { $_.FullName -like "*intermediatexaml*" } |
+    ForEach-Object {
+        try   { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue; Write-Info "Removed intermediate DLL: $($_.Name)" }
+        catch { }
+    }
 
 # ── 2. Build native libraries ────────────────────────────────────────────────
 if (-not $NoBuild) {
@@ -127,12 +127,11 @@ if (-not $NoBuild) {
 
     Write-Info "Log → $LogFile"
 
-    # Run build, tee to log and capture exit code
     $startTime = Get-Date
     $output = & dotnet @buildArgs 2>&1
+    $exitCode  = $LASTEXITCODE
     $output | Set-Content -Path $LogFile -Force -Encoding UTF8
     $output | ForEach-Object { Write-Host "  $_" }
-    $exitCode  = $LASTEXITCODE
     $elapsed   = [math]::Round(((Get-Date) - $startTime).TotalSeconds, 1)
 
     # Parse summary from log

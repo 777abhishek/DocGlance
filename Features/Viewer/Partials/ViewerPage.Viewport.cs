@@ -134,7 +134,8 @@ public sealed partial class ViewerPage
     private (double W, double H) GetRotatedPageSize(int i)
     {
         var (w, h) = _pdfState!.GetPageSize(i);
-        return (_rotation is 90 or 270) ? (h, w) : (w, h);
+        int rot = ((int)Math.Round(_rotation) % 360 + 360) % 360;
+        return (rot == 90 || rot == 270) ? (h, w) : (w, h);
     }
 
     // ── Scroll / zoom handler ─────────────────────────────────────────────────
@@ -174,18 +175,7 @@ public sealed partial class ViewerPage
             // Only render on final scroll position (!IsIntermediate) or zoom changes
             if (!e.IsIntermediate || zoomSettled)
             {
-                // Use Task.Run to ensure rendering never blocks UI thread
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        await RenderPagesAsync();
-                    }
-                    catch (Exception ex)
-                    {
-                        Infrastructure.Logging.Logger.Error("[Viewport] Background render failed", ex);
-                    }
-                });
+                _ = RenderPagesAsync();
             }
         }
         catch (Exception ex)
@@ -234,6 +224,13 @@ public sealed partial class ViewerPage
 
     private async Task RenderPagesAsync()
     {
+        // Must start on UI thread to access ScrollViewer properties and manipulate canvas safely
+        if (!DispatcherQueue.HasThreadAccess)
+        {
+            DispatcherQueue.TryEnqueue(() => _ = RenderPagesAsync());
+            return;
+        }
+
         try
         {
             Infrastructure.Logging.Logger.Log("[Render] RenderPagesAsync started");
@@ -244,7 +241,7 @@ public sealed partial class ViewerPage
                 return;
             }
 
-            // Cancel any in-flight render
+            // Cancel any in-flight render (safe on UI thread)
             _renderCts?.Cancel();
             _renderCts?.Dispose();
             _renderCts = new CancellationTokenSource();
@@ -259,12 +256,10 @@ public sealed partial class ViewerPage
 
             Infrastructure.Logging.Logger.Log($"[Render] zoom={zoom:F2}, scrollY={scrollY:F0}, vpH={vpH:F0}, display={display:F2}");
 
-            // Render DPI: base DPI × display scale × zoom factor
-            // At 100% zoom on 125% display: 96 × 1.25 × 1.0 = 120 DPI
-            // At 150% zoom on 125% display: 96 × 1.25 × 1.5 = 180 DPI
-            // At 200% zoom on 125% display: 96 × 1.25 × 2.0 = 240 DPI
-            // This gives crisp rendering at all zoom levels
-            float dpi = (float)(96.0 * display * zoom);
+            // Cap render DPI to avoid massive memory usage / OOM at high zoom on 4K displays
+            // Max 192 DPI gives crisp text up to 200% scaling while capping memory usage per page
+            const float MaxDpi = 192.0f;
+            float dpi = Math.Min(MaxDpi, (float)(96.0 * display * Math.Min(zoom, 2.0f)));
 
             // Strictly visible pages (no buffer) — highest priority
             var strictVisible = GetVisiblePageRange(scrollY, vpH, 0);
@@ -371,17 +366,27 @@ public sealed partial class ViewerPage
 
             // For crisp high-DPI rendering, calculate render size from DPI (which already includes display scale)
             // Page size in points × (DPI / 72 points per inch) = pixel size
-            // At 125% display: 595pt × (120 DPI / 72) = 992px
-            // This gives us crisp 1:1 pixel mapping on high-DPI displays
             int renderW = Math.Max(1, (int)Math.Round(ptW * dpi / 72.0));
             int renderH = Math.Max(1, (int)Math.Round(ptH * dpi / 72.0));
+
+            // Hard cap on pixel dimensions to guarantee no OOM (max ~2600 px = ~25 MB max buffer)
+            const int MaxPixelDimension = 2600;
+            if (renderW > MaxPixelDimension || renderH > MaxPixelDimension)
+            {
+                double scale = (double)MaxPixelDimension / Math.Max(renderW, renderH);
+                renderW = Math.Max(1, (int)(renderW * scale));
+                renderH = Math.Max(1, (int)(renderH * scale));
+            }
+
+            int rot = ((int)Math.Round(_rotation) % 360 + 360) % 360;
+            int rotateParam = rot / 90; // 0, 1, 2, or 3
 
             Infrastructure.Logging.Logger.Log($"[RenderSingle] Page {pageIndex}: size={renderW}x{renderH} px at {dpi:F0} DPI, pageY={pageY:F0}");
             Infrastructure.Logging.Logger.Log($"[RenderSingle] Calling RenderFullPage for page {pageIndex}");
 
             var pixelBuffer = await Task.Run(() =>
                 RenderFullPage(pdfState, pageIndex, dpi, renderW, renderH,
-                               (int)(_rotation % 360 / 90), ct), ct);
+                               rotateParam, ct), ct);
 
             Infrastructure.Logging.Logger.Log($"[RenderSingle] RenderFullPage returned for page {pageIndex}, buffer={pixelBuffer != null}");
 

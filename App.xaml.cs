@@ -153,17 +153,25 @@ public partial class App : Application
 
         string? filePath = null;
 
-        if (args.Kind == ExtendedActivationKind.File &&
-            args.Data is Windows.ApplicationModel.Activation.IFileActivatedEventArgs fileArgs)
+        if (args.Data is Windows.ApplicationModel.Activation.IFileActivatedEventArgs fileArgs)
         {
             filePath = fileArgs.Files.OfType<Windows.Storage.StorageFile>()
                                      .FirstOrDefault()?.Path;
         }
-        else if (args.Kind == ExtendedActivationKind.Launch &&
-                 args.Data is Windows.ApplicationModel.Activation.ILaunchActivatedEventArgs launchArgs)
+        else if (args.Data is Windows.ApplicationModel.Activation.ILaunchActivatedEventArgs launchArgs)
         {
-            // Shell passes the file path as the launch arguments string
             var raw = launchArgs.Arguments?.Trim().Trim('"');
+            if (!string.IsNullOrEmpty(raw) &&
+                !raw.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(raw, Environment.ProcessPath, StringComparison.OrdinalIgnoreCase) &&
+                File.Exists(raw))
+            {
+                filePath = raw;
+            }
+        }
+        else if (args.Data is Windows.ApplicationModel.Activation.ICommandLineActivatedEventArgs cmdArgs)
+        {
+            var raw = cmdArgs.Operation?.Arguments?.Trim().Trim('"');
             if (!string.IsNullOrEmpty(raw) &&
                 !raw.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(raw, Environment.ProcessPath, StringComparison.OrdinalIgnoreCase) &&

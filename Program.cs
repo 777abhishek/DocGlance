@@ -78,6 +78,23 @@ public static class Program
         // This mirrors exactly what the XAML-generated Main() does.
         WinRT.ComWrappersSupport.InitializeComWrappers();
 
+        // STEP 3 — Single-instancing: if an instance is already running,
+        // redirect the activation (e.g. file double-clicked in Explorer) to it and exit.
+        try
+        {
+            var mainInstance = Microsoft.Windows.AppLifecycle.AppInstance.FindOrRegisterForKey("QuickViewSingleInstance");
+            if (!mainInstance.IsCurrent)
+            {
+                var activatedArgs = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs();
+                mainInstance.RedirectActivationToAsync(activatedArgs).AsTask().Wait();
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[AppInstance] Single-instance redirection check failed: {ex.Message}");
+        }
+
         Microsoft.UI.Xaml.Application.Start(p =>
         {
             var syncCtx = new Microsoft.UI.Dispatching.DispatcherQueueSynchronizationContext(

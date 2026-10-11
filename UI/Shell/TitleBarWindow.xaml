@@ -44,13 +44,11 @@
             Grid.Row="0"
             TabWidthMode="Equal"
             CloseButtonOverlayMode="Always"
-            CanTearOutTabs="True"
+            CanTearOutTabs="False"
+            CanReorderTabs="True"
             SelectionChanged="Tabs_SelectionChanged"
             AddTabButtonClick="Tabs_AddTabButtonClick"
             TabCloseRequested="Tabs_TabCloseRequested"
-            TabTearOutWindowRequested="Tabs_TabTearOutWindowRequested"
-            TabTearOutRequested="Tabs_TabTearOutRequested"
-            ExternalTornOutTabsDropped="Tabs_ExternalTornOutTabsDropped"
             Background="Transparent">
 
             <!-- Left of tabs: app icon and name in title bar style -->

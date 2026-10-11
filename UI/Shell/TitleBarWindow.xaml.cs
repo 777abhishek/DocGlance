@@ -45,6 +45,15 @@ public sealed partial class TitleBarWindow : Window
         SetTitleBar(TitleBarDragArea);
         Title = "QuickView";
 
+        // Track active window
+        Activated += (s, e) =>
+        {
+            if (e.WindowActivationState != WindowActivationState.Deactivated)
+            {
+                Current = this;
+            }
+        };
+
         // Set the window icon
         SetWindowIcon();
         
@@ -75,7 +84,7 @@ public sealed partial class TitleBarWindow : Window
         _homeTab = new TabViewItem
         {
             Header          = "Home",
-            IsClosable      = true,  // Home tab now closeable like other tabs
+            IsClosable      = false, // Home tab is permanent
             IconSource      = new SymbolIconSource { Symbol = Symbol.Home },
         };
         Tabs.TabItems.Add(_homeTab);
@@ -96,6 +105,10 @@ public sealed partial class TitleBarWindow : Window
             {
                 Infrastructure.Logging.Logger.Log($"[TitleBarWindow] File already open, focusing tab");
                 Tabs.SelectedItem = kv.Key;
+                DocHost.Content = kv.Value.viewer;
+                DocHost.Visibility = Visibility.Visible;
+                HomeFrame.Visibility = Visibility.Collapsed;
+                Title = doc.Title + " — QuickView";
                 return;
             }
         }
@@ -123,10 +136,15 @@ public sealed partial class TitleBarWindow : Window
 
         _tabData[tab] = (viewer, doc);
         Tabs.TabItems.Add(tab);
-        Tabs.SelectedItem = tab;    // triggers SelectionChanged → ShowViewer
+        Tabs.SelectedItem = tab;
+
+        // Immediately attach viewer to content host and update shell
+        DocHost.Content = viewer;
+        DocHost.Visibility = Visibility.Visible;
+        HomeFrame.Visibility = Visibility.Collapsed;
+        Title = doc.Title + " — QuickView";
 
         Infrastructure.Logging.Logger.Log($"[TitleBarWindow] Calling viewer.LoadDocument");
-        // Load document after tab is selected so ViewerPage is in the tree
         viewer.LoadDocument(doc);
         Infrastructure.Logging.Logger.Log($"[TitleBarWindow] OpenDocument complete");
     }
@@ -421,23 +439,34 @@ public sealed partial class TitleBarWindow : Window
     private void Tabs_AddTabButtonClick(TabView sender, object args)
         => _ = OpenFilePicker();
 
-    // ── File picker (+ tab) ───────────────────────────────────────────────────
-
     private async System.Threading.Tasks.Task OpenFilePicker()
     {
-        var picker = new Windows.Storage.Pickers.FileOpenPicker();
-        picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
-        foreach (var ext in new[]
+        try
         {
-            ".pdf",".docx",".doc",".xlsx",".xls",".pptx",".ppt",
-            ".txt",".md",".json",".xml",".html",".css",".js",".ts",
-            ".cs",".py",".log",".csv",".rtf"
-        }) picker.FileTypeFilter.Add(ext);
+            var picker = new Windows.Storage.Pickers.FileOpenPicker();
+            picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
+            foreach (var ext in new[]
+            {
+                ".pdf",".docx",".doc",".xlsx",".xls",".pptx",".ppt",
+                ".txt",".md",".json",".xml",".html",".css",".js",".ts",
+                ".cs",".py",".log",".csv",".rtf",".png",".jpg",".jpeg"
+            }) picker.FileTypeFilter.Add(ext);
 
-        InitializeWithWindow.Initialize(picker, Hwnd);
-        var files = await picker.PickMultipleFilesAsync();
-        foreach (var file in files)
-            OpenDocument(await DocumentItemFromStorageFile(file));
+            InitializeWithWindow.Initialize(picker, Hwnd);
+            var files = await picker.PickMultipleFilesAsync();
+            if (files != null)
+            {
+                foreach (var file in files)
+                {
+                    var doc = await DocumentItemFromStorageFile(file);
+                    OpenDocument(doc);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Infrastructure.Logging.Logger.Error("OpenFilePicker failed", ex);
+        }
     }
 
     private static async System.Threading.Tasks.Task<DocumentItem>
