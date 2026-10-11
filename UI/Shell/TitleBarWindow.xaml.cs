@@ -191,32 +191,40 @@ public sealed partial class TitleBarWindow : Window
 
         bool isHome = ReferenceEquals(selected, _homeTab);
 
-        // Update window title to document name
-        if (!isHome && _tabData.TryGetValue(selected, out var selData))
-            Title = selData.doc.Title + " — QuickView";
-        else
-            Title = "QuickView";
+        // Update window title to document name (safely - check if window is still valid)
+        try
+        {
+            if (!isHome && _tabData.TryGetValue(selected, out var selData))
+                Title = selData.doc.Title + " — QuickView";
+            else
+                Title = "QuickView";
+        }
+        catch (Exception ex)
+        {
+            // Window may be closed during tab tear-out - ignore title update errors
+            Infrastructure.Logging.Logger.Log($"[Window] Title update failed (window closed?): {ex.Message}");
+        }
 
         // Home tab
-        HomeFrame.Visibility = isHome ? Visibility.Visible : Visibility.Collapsed;
-
-        // Document tab (in _tabData)
-        if (!isHome && _tabData.TryGetValue(selected, out var data))
+        if (isHome)
         {
-            DocHost.Content    = data.viewer;
+            HomeFrame.Visibility = Visibility.Visible;
+            DocHost.Visibility = Visibility.Collapsed;
+            DocHost.Content = null;
+        }
+        // Document tab (in _tabData)
+        else if (_tabData.TryGetValue(selected, out var data))
+        {
+            DocHost.Content = data.viewer;
             DocHost.Visibility = Visibility.Visible;
+            HomeFrame.Visibility = Visibility.Collapsed;
         }
         // Special tabs (Settings, etc.) - stored in _specialTabs
-        else if (!isHome && _specialTabs.TryGetValue(selected, out var content))
+        else if (_specialTabs.TryGetValue(selected, out var content))
         {
-            DocHost.Content    = content;
+            DocHost.Content = content;
             DocHost.Visibility = Visibility.Visible;
-        }
-        // Home tab selected
-        else if (isHome)
-        {
-            DocHost.Visibility = Visibility.Collapsed;
-            DocHost.Content    = null;
+            HomeFrame.Visibility = Visibility.Collapsed;
         }
     }
 

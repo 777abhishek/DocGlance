@@ -92,6 +92,9 @@
                         </NavigationThemeTransition>
                     </TransitionCollection>
                 </Frame.ContentTransitions>
+                <Frame.OpacityTransition>
+                    <ScalarTransition Duration="0:0:0.15" />
+                </Frame.OpacityTransition>
             </Frame>
 
             <!-- Document host — ViewerPage content is swapped in here -->
@@ -100,8 +103,13 @@
                 Visibility="Collapsed"
                 HorizontalContentAlignment="Stretch"
                 VerticalContentAlignment="Stretch">
+                <ContentControl.ContentTransitions>
+                    <TransitionCollection>
+                        <EntranceThemeTransition />
+                    </TransitionCollection>
+                </ContentControl.ContentTransitions>
                 <ContentControl.OpacityTransition>
-                    <ScalarTransition Duration="0:0:0.25" />
+                    <ScalarTransition Duration="0:0:0.15" />
                 </ContentControl.OpacityTransition>
             </ContentControl>
 

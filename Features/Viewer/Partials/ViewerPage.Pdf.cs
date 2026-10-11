@@ -93,14 +93,20 @@ public sealed partial class ViewerPage
         ShowLoading(true);
         try
         {
+            Infrastructure.Logging.Logger.Log($"[PDF] Starting LoadPdfAsync for: {filePath}");
+            
             // Clear any PPTX slides from canvas
             ClearPptxCache();
+            
+            Infrastructure.Logging.Logger.Log("[PDF] Calling PdfViewerService.LoadDocumentAsync");
             
             // Delegate PDF loading to service (Phase 2: LoadDocument extraction)
             var result = await _pdfService.LoadDocumentAsync(
                 filePath,
                 ShowPasswordDialogAsync, // UI callback for password prompt
                 ct);
+
+            Infrastructure.Logging.Logger.Log($"[PDF] LoadDocumentAsync result: Success={result.Success}, Error={result.ErrorMessage}");
 
             if (!result.Success)
             {
@@ -115,9 +121,12 @@ public sealed partial class ViewerPage
             
             if (_pdfState == null)
             {
+                Infrastructure.Logging.Logger.Log("[PDF] ERROR: _pdfState is null after successful load");
                 ShowErrorCard("Failed to load PDF document");
                 return;
             }
+
+            Infrastructure.Logging.Logger.Log($"[PDF] Document loaded: {_total} pages");
 
             Toolbar.UpdatePageInfo(_page, _total);
             _page = 1;
@@ -126,6 +135,8 @@ public sealed partial class ViewerPage
             ViewModel.TotalPages  = _total;
             ViewModel.CurrentPage = _page;
 
+            Infrastructure.Logging.Logger.Log("[PDF] Loading outline");
+            
             // Load outline from the open document
             _ = Task.Run(() => LoadOutline(_pdfState), ct);
 
@@ -145,6 +156,8 @@ public sealed partial class ViewerPage
                 ViewModel.SidebarOpen    = true;
             }
 
+            Infrastructure.Logging.Logger.Log("[PDF] Setting zoom");
+            
             // Apply 100% zoom
             _zoom = NaturalZoom;
             DocumentScrollViewer.ChangeView(null, null, (float)NaturalZoom, disableAnimation: true);
@@ -152,6 +165,8 @@ public sealed partial class ViewerPage
             ViewModel.NaturalZoom = NaturalZoom;
             ViewModel.Zoom        = _zoom;
 
+            Infrastructure.Logging.Logger.Log("[PDF] Creating thumbnail placeholders");
+            
             // Create thumbnail placeholders
             const double thumbLogicalW = 200.0;
             for (int i = 0; i < _total; i++)
@@ -168,20 +183,32 @@ public sealed partial class ViewerPage
                 });
             }
 
+            Infrastructure.Logging.Logger.Log("[PDF] Initializing viewport rendering");
+            
             // VIEWPORT RENDERING: Initialize viewport system
             InitializeViewportRendering();
+            
+            Infrastructure.Logging.Logger.Log("[PDF] Hiding loading indicator");
             
             ShowLoading(false);
             DocumentScrollViewer.UpdateLayout();
 
+            Infrastructure.Logging.Logger.Log("[PDF] Starting thumbnail prefetch");
+            
             // Background thumbnail rendering
             _ = PrefetchThumbnailsAroundAsync(0, _pdfState, ct);
+            
+            Infrastructure.Logging.Logger.Log("[PDF] LoadPdfAsync completed successfully");
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
+            Infrastructure.Logging.Logger.Error($"[PDF] LoadPdfAsync failed: {ex.Message}", ex);
             ShowErrorCard($"Cannot open PDF\n{ex.Message}");
         }
-        finally { ShowLoading(false); }
+        finally { 
+            ShowLoading(false); 
+            Infrastructure.Logging.Logger.Log("[PDF] LoadPdfAsync finally block executed");
+        }
     }
 
     // ── F5: Password dialog ───────────────────────────────────────────────────
