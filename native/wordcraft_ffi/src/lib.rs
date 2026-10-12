@@ -437,3 +437,64 @@ pub extern "C" fn wc_free_document(doc: *mut WcDocument) {
         drop(Box::from_raw(doc));
     }
 }
+
+// ── PDF Export ────────────────────────────────────────────────────────────────
+
+/// PDF buffer returned by wc_export_to_pdf.
+/// C# must call wc_free_pdf_buffer to release.
+#[repr(C)]
+pub struct WcPdfBuffer {
+    pub data: *mut u8,
+    pub len: usize,
+}
+
+impl WcPdfBuffer {
+    fn null() -> Self {
+        WcPdfBuffer {
+            data: std::ptr::null_mut(),
+            len: 0,
+        }
+    }
+}
+
+/// Export document to PDF.
+/// Returns WcPdfBuffer. C# MUST call wc_free_pdf_buffer after copying bytes.
+/// Returns WcPdfBuffer::null() on error.
+#[no_mangle]
+pub extern "C" fn wc_export_to_pdf(doc: *const WcDocument) -> WcPdfBuffer {
+    catch!(WcPdfBuffer::null(), {
+        if doc.is_null() {
+            return WcPdfBuffer::null();
+        }
+        let doc = unsafe { &*doc };
+
+        // Export to PDF using WordCraft's PDF engine with default options
+        let opts = wordcraft_pdf::PdfOptions::default();
+        let mut pdf_bytes = match wordcraft_pdf::export(&doc.doc, &opts) {
+            Ok(bytes) => bytes,
+            Err(_) => return WcPdfBuffer::null(),
+        };
+
+        if pdf_bytes.is_empty() {
+            return WcPdfBuffer::null();
+        }
+
+        pdf_bytes.shrink_to_fit();
+        let len = pdf_bytes.len();
+        let ptr = pdf_bytes.as_mut_ptr();
+        std::mem::forget(pdf_bytes); // C# now owns the buffer
+
+        WcPdfBuffer { data: ptr, len }
+    })
+}
+
+/// Free a PDF buffer returned by wc_export_to_pdf.
+#[no_mangle]
+pub extern "C" fn wc_free_pdf_buffer(buf: WcPdfBuffer) {
+    if buf.data.is_null() || buf.len == 0 {
+        return;
+    }
+    unsafe {
+        drop(Vec::from_raw_parts(buf.data, buf.len, buf.len));
+    }
+}

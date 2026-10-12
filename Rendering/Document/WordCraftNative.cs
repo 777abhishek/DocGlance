@@ -129,4 +129,31 @@ internal static partial class WordCraftNative
     /// </summary>
     [LibraryImport(Dll)]
     internal static partial void wc_free_document(WcDocumentHandle doc);
+
+    // ── PDF Export ────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// PDF buffer returned by wc_export_to_pdf.
+    /// C# MUST call wc_free_pdf_buffer after copying the bytes.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct WcPdfBuffer
+    {
+        public IntPtr Data;     // *mut u8 (heap-allocated Vec)
+        public nuint Len;       // byte count
+    }
+
+    /// <summary>
+    /// Export document to PDF.
+    /// Returns WcPdfBuffer. C# MUST call wc_free_pdf_buffer.
+    /// Returns null buffer on failure.
+    /// </summary>
+    [LibraryImport(Dll)]
+    internal static partial WcPdfBuffer wc_export_to_pdf(WcDocumentHandle doc);
+
+    /// <summary>
+    /// Free a PDF buffer returned by wc_export_to_pdf.
+    /// </summary>
+    [LibraryImport(Dll)]
+    internal static partial void wc_free_pdf_buffer(WcPdfBuffer buf);
 }

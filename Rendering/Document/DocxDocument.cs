@@ -285,4 +285,44 @@ public sealed class DocxDocument : IDisposable
         bmp.Invalidate();
         return bmp;
     }
+
+    /// <summary>
+    /// Export document to PDF.
+    /// Returns PDF bytes, or null on failure.
+    /// </summary>
+    public async Task<byte[]?> ExportToPdfAsync(CancellationToken ct = default)
+    {
+        await _renderLock.WaitAsync(ct);
+
+        try
+        {
+            return await Task.Run(() =>
+            {
+                WordCraftNative.WcPdfBuffer buf;
+                lock (_nativeGate)
+                {
+                    ObjectDisposedException.ThrowIf(_disposed, this);
+                    buf = WordCraftNative.wc_export_to_pdf(_handle);
+                }
+
+                if (buf.Data == IntPtr.Zero || buf.Len == 0)
+                    return null;
+
+                try
+                {
+                    var result = new byte[(int)buf.Len];
+                    Marshal.Copy(buf.Data, result, 0, (int)buf.Len);
+                    return result;
+                }
+                finally
+                {
+                    WordCraftNative.wc_free_pdf_buffer(buf);
+                }
+            }, ct);
+        }
+        finally
+        {
+            _renderLock.Release();
+        }
+    }
 }

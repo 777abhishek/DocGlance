@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <!--
     Copyright (c) Microsoft Corporation. All rights reserved.
     Licensed under the MIT License.
@@ -313,9 +313,13 @@
              No border, transparent background — blends with the Mica/Acrylic window backdrop.
              ════════════════════════════════════════════════════════════════ -->
         <Grid Grid.Column="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
 
-            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0">
-                <StackPanel Padding="16,14,16,24" Spacing="24">
+            <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" Padding="0">
+                <StackPanel Padding="16,14,16,16" Spacing="24">
 
                     <!-- ── Folders ────────────────────────────────────────── -->
                     <StackPanel Spacing="8">
@@ -334,29 +338,29 @@
                                 VerticalAlignment="Center"
                                 CharacterSpacing="80"/>
                             <Button
-                                x:Name="OpenFileButton"
+                                x:Name="AddFolderButton"
                                 Grid.Column="1"
                                 Padding="10,6"
                                 Margin="0,0,4,0"
                                 VerticalAlignment="Center"
-                                Click="OpenFile_Click"
-                                ToolTipService.ToolTip="Open a file directly">
-                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                    <FontIcon Glyph="&#xE8E5;" FontSize="13" VerticalAlignment="Center"/>
-                                    <TextBlock Text="Open" FontSize="13" VerticalAlignment="Center"/>
-                                </StackPanel>
-                            </Button>
-                            <Button
-                                x:Name="AddFolderButton"
-                                Grid.Column="2"
-                                Padding="10,6"
-                                VerticalAlignment="Center"
                                 Click="AddFolder_Click"
-                                Style="{StaticResource AccentButtonStyle}"
                                 ToolTipService.ToolTip="Add folder to scan">
                                 <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                                     <FontIcon Glyph="&#xE8B7;" FontSize="13" VerticalAlignment="Center"/>
                                     <TextBlock Text="Add" FontSize="13" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                            <Button
+                                x:Name="OpenFileButton"
+                                Grid.Column="2"
+                                Padding="10,6"
+                                VerticalAlignment="Center"
+                                Click="OpenFile_Click"
+                                Style="{StaticResource AccentButtonStyle}"
+                                ToolTipService.ToolTip="Open a file directly">
+                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <FontIcon Glyph="&#xE8E5;" FontSize="13" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Open" FontSize="13" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Button>
                         </Grid>
@@ -498,82 +502,30 @@
                             <ComboBoxItem>
                                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                     <FontIcon Glyph="&#xE8D2;" FontSize="13" VerticalAlignment="Center"/>
-                                    <TextBlock Text="Type" VerticalAlignment="Center"/>
+                                    <TextBlock Text="File Type" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </ComboBoxItem>
                         </ComboBox>
-
-                        <!-- A→Z / Z→A -->
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Button x:Name="SortAscButton"
-                                    Grid.Column="0"
-                                    HorizontalAlignment="Stretch"
-                                    Padding="0,8"
-                                    Margin="0,0,4,0"
-                                    Click="SortAsc_Click">
-                                <StackPanel Orientation="Horizontal" Spacing="6"
-                                            HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <FontIcon Glyph="&#xE74B;" FontSize="12" VerticalAlignment="Center"/>
-                                    <TextBlock Text="A → Z" FontSize="12" VerticalAlignment="Center"/>
-                                </StackPanel>
-                            </Button>
-                            <Button x:Name="SortDescButton"
-                                    Grid.Column="1"
-                                    HorizontalAlignment="Stretch"
-                                    Padding="0,8"
-                                    Margin="4,0,0,0"
-                                    Click="SortDesc_Click">
-                                <StackPanel Orientation="Horizontal" Spacing="6"
-                                            HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <FontIcon Glyph="&#xE74A;" FontSize="12" VerticalAlignment="Center"/>
-                                    <TextBlock Text="Z → A" FontSize="12" VerticalAlignment="Center"/>
-                                </StackPanel>
-                            </Button>
-                        </Grid>
-                    </StackPanel>
-
-                    <!-- ── Statistics ─────────────────────────────────────── -->
-                    <StackPanel Spacing="8">
-                        <TextBlock
-                            Text="STATISTICS"
-                            Style="{StaticResource CaptionTextBlockStyle}"
-                            FontWeight="SemiBold"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            CharacterSpacing="60"/>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="Total Files"
-                                       Style="{StaticResource BodyTextBlockStyle}"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                       VerticalAlignment="Center"/>
-                            <TextBlock x:Name="TotalFilesLabel" Grid.Column="1" Text="0"
-                                       Style="{StaticResource BodyStrongTextBlockStyle}"
-                                       VerticalAlignment="Center"/>
-                        </Grid>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="Total Size"
-                                       Style="{StaticResource BodyTextBlockStyle}"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                       VerticalAlignment="Center"/>
-                            <TextBlock x:Name="TotalSizeLabel" Grid.Column="1" Text="0 B"
-                                       Style="{StaticResource BodyStrongTextBlockStyle}"
-                                       VerticalAlignment="Center"/>
-                        </Grid>
                     </StackPanel>
 
                 </StackPanel>
             </ScrollViewer>
+
+            <!-- ── Tools Button (at bottom, outside scroll) ────────────── -->
+            <Button
+                Grid.Row="1"
+                x:Name="ToolsButton"
+                HorizontalAlignment="Stretch"
+                Padding="12,10"
+                Margin="16,8,16,16"
+                Click="Tools_Click"
+                Style="{StaticResource AccentButtonStyle}">
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xE90F;" FontSize="14" VerticalAlignment="Center"/>
+                    <TextBlock Text="Document Tools" FontSize="13" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+
         </Grid>
 
     </Grid>

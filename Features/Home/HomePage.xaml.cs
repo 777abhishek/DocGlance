@@ -188,9 +188,8 @@ public sealed partial class HomePage : Page
 
     private void SetSortDirectionUI(bool ascending)
     {
-        if (SortAscButton == null || SortDescButton == null) return;
-        SortAscButton.Style  = ascending ? (Style)Application.Current.Resources["AccentButtonStyle"] : null;
-        SortDescButton.Style = ascending ? null : (Style)Application.Current.Resources["AccentButtonStyle"];
+        // Sort direction is managed by HomeViewModel; the current UI exposes
+        // sort criteria through SortOptions rather than separate direction buttons.
     }
 
     private void FileTypeFilter_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -250,6 +249,36 @@ public sealed partial class HomePage : Page
             QuickView.UI.Shell.TitleBarWindow.Current?.OpenDocument(doc);
         }
         catch (Exception ex) { Logger.Error("OpenFile_Click", ex); }
+    }
+
+    private void Tools_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            // Get the window from the current page
+            var xamlRoot = this.XamlRoot;
+            if (xamlRoot == null)
+            {
+                System.Diagnostics.Debug.WriteLine("XamlRoot is null");
+                return;
+            }
+
+            // Try to find TitleBarWindow through visual tree
+            var window = QuickView.UI.Shell.TitleBarWindow.Current;
+            if (window != null)
+            {
+                System.Diagnostics.Debug.WriteLine("Found TitleBarWindow, calling OpenToolsPage");
+                window.OpenToolsPage();
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine("TitleBarWindow.Current is null");
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error in Tools_Click: {ex.Message}");
+        }
     }
 
 
@@ -391,9 +420,6 @@ public sealed partial class HomePage : Page
 
         if (DocumentCountLabel != null)
             DocumentCountLabel.Text = ViewModel.DocumentCountText;
-
-        if (TotalFilesLabel != null) TotalFilesLabel.Text = ViewModel.TotalFilesText;
-        if (TotalSizeLabel  != null) TotalSizeLabel.Text  = ViewModel.TotalSizeText;
 
         if (RescanButton != null)
             RescanButton.Visibility = hasFolders ? Visibility.Visible : Visibility.Collapsed;

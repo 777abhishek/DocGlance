@@ -198,9 +198,70 @@ public sealed partial class TitleBarWindow : Window
         Tabs.TabItems.Add(settingsTab);
         Tabs.SelectedItem = settingsTab;
         
-        // Show the settings frame in DocHost
         DocHost.Content = frame;
         DocHost.Visibility = Visibility.Visible;
+        HomeFrame.Visibility = Visibility.Collapsed;
+        Title = "Settings — QuickView";
+    }
+
+    public void OpenToolsPage()
+    {
+        System.Diagnostics.Debug.WriteLine("=== OpenToolsPage START ===");
+        
+        try
+        {
+            // Check if Tools tab already exists
+            System.Diagnostics.Debug.WriteLine($"Checking existing tabs. Total tabs: {Tabs.TabItems.Count}");
+            
+            foreach (var item in Tabs.TabItems)
+            {
+                if (item is TabViewItem tab && _specialTabs.ContainsKey(tab) && tab.Header as string == "Tools")
+                {
+                    System.Diagnostics.Debug.WriteLine("Tools tab already exists, activating it");
+                    Tabs.SelectedItem = tab;
+                    DocHost.Content = _specialTabs[tab];
+                    DocHost.Visibility = Visibility.Visible;
+                    HomeFrame.Visibility = Visibility.Collapsed;
+                    Title = "Document Tools — QuickView";
+                    System.Diagnostics.Debug.WriteLine("=== OpenToolsPage END (reused existing tab) ===");
+                    return;
+                }
+            }
+            
+            System.Diagnostics.Debug.WriteLine("Creating new Tools tab...");
+            var toolsPage = new Features.Tools.ToolsPage();
+            System.Diagnostics.Debug.WriteLine("ToolsPage instance created");
+            
+            var toolsTab = new TabViewItem
+            {
+                Header     = "Tools",
+                IsClosable = true,
+                IconSource = new FontIconSource { Glyph = "\uE90F", FontSize = 12 },
+            };
+            System.Diagnostics.Debug.WriteLine("TabViewItem created");
+            
+            // Store in special tabs dictionary
+            _specialTabs[toolsTab] = toolsPage;
+            System.Diagnostics.Debug.WriteLine("Added to _specialTabs dictionary");
+            
+            Tabs.TabItems.Add(toolsTab);
+            System.Diagnostics.Debug.WriteLine($"Added tab to Tabs. New count: {Tabs.TabItems.Count}");
+            
+            Tabs.SelectedItem = toolsTab;
+            System.Diagnostics.Debug.WriteLine("Set as selected tab");
+            
+            DocHost.Content = toolsPage;
+            DocHost.Visibility = Visibility.Visible;
+            HomeFrame.Visibility = Visibility.Collapsed;
+            Title = "Document Tools — QuickView";
+            System.Diagnostics.Debug.WriteLine("Updated UI visibility and title");
+            
+            System.Diagnostics.Debug.WriteLine("=== OpenToolsPage END (created new tab) ===");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"ERROR in OpenToolsPage: {ex}");
+        }
     }
 
     public void GoBack()

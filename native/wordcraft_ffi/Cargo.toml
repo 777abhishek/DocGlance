@@ -13,6 +13,7 @@ wordcraft-layout = { git = "https://github.com/storytold/wordcraft", branch = "m
 wordcraft-render = { git = "https://github.com/storytold/wordcraft", branch = "main" }
 wordcraft-doc    = { git = "https://github.com/storytold/wordcraft", branch = "main" }
 wordcraft-geom   = { git = "https://github.com/storytold/wordcraft", branch = "main" }
+wordcraft-pdf    = { git = "https://github.com/storytold/wordcraft", branch = "main" }
 regex            = { version = "1", default-features = false, features = ["std", "unicode"] }
 
 [profile.release]

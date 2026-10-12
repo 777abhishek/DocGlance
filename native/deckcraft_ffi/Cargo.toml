@@ -13,6 +13,7 @@ deckcraft-render = { git = "https://github.com/storytold/deckcraft", branch = "m
 deckcraft-model  = { git = "https://github.com/storytold/deckcraft", branch = "main" }
 deckcraft-fonts  = { git = "https://github.com/storytold/deckcraft", branch = "main" }
 deckcraft-geom   = { git = "https://github.com/storytold/deckcraft", branch = "main" }
+deckcraft-pdf    = { git = "https://github.com/storytold/deckcraft", branch = "main" }
 
 [profile.release]
 opt-level     = 3

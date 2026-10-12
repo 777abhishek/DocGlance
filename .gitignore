@@ -37,5 +37,6 @@ appsettings.Development.json
 native/deckcraft_ffi/target
 native/wordcraft_ffi/target
 native/gridcraft_ffi/target
+native/pdfcraft_ffi/target
 .agents
 docs

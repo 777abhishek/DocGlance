@@ -50,6 +50,9 @@ public sealed partial class ViewerPage : Page
     {
         InitializeComponent();
 
+        // Initialize Office text selection (drag-to-select and copy)
+        InitializeOfficeTextSelection();
+
         // Wire viewport-resize → reapply active fit mode + re-render (the
         // viewport may have grown — re-render pages.
         // UI-10 fix: debounce to avoid render storm during drag-resize
