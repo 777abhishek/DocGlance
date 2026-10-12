@@ -45,6 +45,10 @@ public sealed partial class ViewerPage
 
         // Clean up old viewport rendering
         CleanupViewportRendering();
+        DocumentScrollViewer.ViewChanged -= OnPptxViewportChanged;
+        DocumentScrollViewer.ViewChanged -= OnDocxViewportChanged;
+        ClearPptxCache();
+        ClearDocxCache();
         
         Thumbnails.Clear();
         ThumbnailList.ItemsSource = Thumbnails;
@@ -69,6 +73,8 @@ public sealed partial class ViewerPage
 
         if (ext == ".pdf")
             await LoadPdfAsync(doc.FilePath ?? string.Empty, ct);
+        else if (ext == ".docx" || ext == ".doc")
+            await LoadDocxAsync(doc.FilePath ?? string.Empty, ct);
         else if (ext == ".pptx" || ext == ".ppt" || ext == ".pptm" || ext == ".ppsx")
             await LoadPptxAsync(doc.FilePath ?? string.Empty, ct);
         else if (ext == ".xlsx" || ext == ".xlsm" || ext == ".xltx" || ext == ".xltm")
@@ -413,6 +419,7 @@ public sealed partial class ViewerPage
     // ══════════════════════════════════════════════════════════════════════════
     
     private QuickView.Rendering.Presentation.PptxDocument? _pptxDocument;
+    private QuickView.Rendering.Document.DocxDocument? _docxDocument;
     
     private async Task LoadPptxAsync(string filePath, CancellationToken ct)
     {
@@ -818,6 +825,279 @@ public sealed partial class ViewerPage
         finally
         {
             ShowLoading(false);
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // DOCX (WordCraft — native DOCX parser and renderer)
+    // ══════════════════════════════════════════════════════════════════════════
+
+    private readonly Dictionary<int, Image> _docxPageCache = new();
+
+    private async Task LoadDocxAsync(string filePath, CancellationToken ct)
+    {
+        ShowLoading(true);
+        try
+        {
+            // Clear the PDF viewport image
+            if (ViewportImage != null)
+                ViewportImage.Source = null;
+
+            // DOCX uses zoom-enabled scroll viewer like PPTX
+            DocumentScrollViewer.ZoomMode = ZoomMode.Enabled;
+            DocumentScrollViewer.ViewChanged -= OnPptxViewportChanged;
+            _pptxDocument?.Dispose();
+            _pptxDocument = null;
+            ClearPptxCache();
+
+            if (!QuickView.Rendering.Document.WordCraftNative.IsAvailable)
+            {
+                ShowErrorCard("WordCraft DOCX renderer not available.\nPlease ensure wordcraft_ffi.dll is present.");
+                return;
+            }
+
+            DocumentScrollViewer.ViewChanged -= OnDocxViewportChanged;
+            ClearDocxCache();
+            _docxDocument?.Dispose();
+            _docxDocument = await QuickView.Rendering.Document.DocxDocument.OpenAsync(filePath, ct);
+
+            if (_docxDocument == null)
+            {
+                ShowErrorCard("Cannot open document — file may be corrupt or encrypted.");
+                return;
+            }
+
+            // Each DOCX page is a page
+            _total = _docxDocument.PageCount;
+            _page = 1;
+            Toolbar.UpdatePageInfo(_page, _total);
+            ViewModel.TotalPages = _total;
+            ViewModel.CurrentPage = _page;
+
+            // Show sidebar with thumbnails
+            Toolbar.SidebarIsChecked = true;
+            SidebarCard.Visibility = Visibility.Visible;
+            SidebarColumn.Width = new Microsoft.UI.Xaml.GridLength(240);
+            ViewModel.SidebarOpen = true;
+
+            // Create thumbnail placeholders
+            Thumbnails.Clear();
+            for (int i = 0; i < _total; i++)
+            {
+                Thumbnails.Add(new PageThumbnailItem
+                {
+                    PageNumber = i + 1,
+                    PageLabel = $"{i + 1}",
+                    IsSelected = i == 0,
+                });
+            }
+
+            // Apply 100% zoom initially
+            _zoom = NaturalZoom;
+            _lastDocxRenderZoom = _zoom;
+            ZoomLabel.Text = "100%";
+            ViewModel.NaturalZoom = NaturalZoom;
+            ViewModel.Zoom = _zoom;
+
+            // Size canvas to fit all pages vertically
+            UpdateDocxCanvasSize();
+
+            // Force layout update
+            DocumentScrollViewer.UpdateLayout();
+
+            // Apply fit-width by default
+            ApplyFitWidth();
+
+            // Wait for zoom animation
+            await Task.Delay(100);
+            DocumentScrollViewer.UpdateLayout();
+
+            // Render visible pages
+            await RenderDocxViewportAsync();
+            DocumentScrollViewer.ViewChanged += OnDocxViewportChanged;
+
+            // Load thumbnails in background
+            LoadDocxThumbnails();
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            Logger.Error($"LoadDocxAsync: {filePath}", ex);
+            ShowErrorCard($"Cannot open document: {ex.Message}");
+        }
+        finally
+        {
+            ShowLoading(false);
+        }
+    }
+
+    private double _lastDocxRenderZoom = 1.0;
+
+    private void OnDocxViewportChanged(object? sender, ScrollViewerViewChangedEventArgs e)
+    {
+        if (_docxDocument == null) return;
+
+        float currentZoom = DocumentScrollViewer.ZoomFactor;
+        if (Math.Abs(currentZoom - _zoom) > 0.001)
+        {
+            _zoom = currentZoom;
+            double displayPct = Math.Round(_zoom / NaturalZoom * 100.0);
+            ZoomLabel.Text = $"{displayPct}%";
+            SyncToViewModel();
+        }
+
+        bool needsRerender = Math.Abs(_zoom - _lastDocxRenderZoom) > (_lastDocxRenderZoom * 0.25);
+        if (!e.IsIntermediate)
+        {
+            if (needsRerender)
+            {
+                ClearDocxCache();
+                _lastDocxRenderZoom = _zoom;
+            }
+
+            _ = RenderDocxViewportAsync();
+        }
+    }
+
+    private void UpdateDocxCanvasSize()
+    {
+        if (_docxDocument == null) return;
+
+        const double PtToLp = 96.0 / 72.0;
+        double totalHeight = 0;
+        double maxWidth = 0;
+
+        for (int i = 0; i < _docxDocument.PageCount; i++)
+        {
+            var (w, h) = _docxDocument.GetPageSize(i);
+            totalHeight += h * PtToLp + 12; // 12 layout-pixel gap between pages
+            if (w * PtToLp > maxWidth) maxWidth = w * PtToLp;
+        }
+
+        PdfViewportCanvas.Width = maxWidth;
+        PdfViewportCanvas.Height = totalHeight;
+    }
+
+    private async Task RenderDocxViewportAsync()
+    {
+        if (_docxDocument == null) return;
+
+        try
+        {
+            const double PtToLp = 96.0 / 72.0;
+            double scrollY = DocumentScrollViewer.VerticalOffset;
+            double viewHeight = DocumentScrollViewer.ViewportHeight;
+
+            // Calculate which pages are visible
+            double y = 0;
+            int firstPage = -1, lastPage = -1;
+
+            for (int i = 0; i < _docxDocument.PageCount; i++)
+            {
+                var (_, h) = _docxDocument.GetPageSize(i);
+                double pageBottom = y + h * PtToLp;
+
+                if (pageBottom >= scrollY && y <= scrollY + viewHeight)
+                {
+                    if (firstPage < 0) firstPage = i;
+                    lastPage = i;
+                }
+
+                y = pageBottom + 12;
+            }
+
+            if (firstPage < 0) return;
+
+            // Render visible pages + 1 buffer
+            int renderStart = Math.Max(0, firstPage - 1);
+            int renderEnd = Math.Min(_docxDocument.PageCount - 1, lastPage + 1);
+
+            y = 0;
+            for (int i = 0; i < _docxDocument.PageCount; i++)
+            {
+                var (widthPt, heightPt) = _docxDocument.GetPageSize(i);
+                double w = widthPt * PtToLp;
+                double h = heightPt * PtToLp;
+
+                if (i >= renderStart && i <= renderEnd && !_docxPageCache.ContainsKey(i))
+                {
+                    // Render above the display's pixel density for crisp text,
+                    // while capping resolution to keep page memory bounded.
+                    double renderScale = Math.Clamp(
+                        Math.Max(1.5, _zoom * DisplayScale * PtToLp * 1.25),
+                        1.5,
+                        4.0);
+                    var bmp = await _docxDocument.RenderPageAsync(i, renderScale);
+                    if (bmp == null) continue;
+
+                    var image = new Image
+                    {
+                        Source = bmp,
+                        Width = w,
+                        Height = h,
+                        Stretch = Microsoft.UI.Xaml.Media.Stretch.Fill,
+                    };
+
+                    Microsoft.UI.Xaml.Controls.Canvas.SetLeft(image, 0);
+                    Microsoft.UI.Xaml.Controls.Canvas.SetTop(image, y);
+
+                    PdfViewportCanvas.Children.Add(image);
+                    _docxPageCache[i] = image;
+                }
+
+                y += h + 12;
+            }
+
+            // Remove pages far from viewport
+            var toRemove = _docxPageCache.Keys.Where(idx =>
+                idx < renderStart - 2 || idx > renderEnd + 2).ToList();
+
+            foreach (int idx in toRemove)
+            {
+                if (_docxPageCache.TryGetValue(idx, out var img))
+                {
+                    PdfViewportCanvas.Children.Remove(img);
+                    if (img.Source is WriteableBitmap bmp)
+                        img.Source = null;
+                    _docxPageCache.Remove(idx);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"RenderDocxViewportAsync error", ex);
+        }
+    }
+
+    private void ClearDocxCache()
+    {
+        foreach (var img in _docxPageCache.Values)
+        {
+            PdfViewportCanvas.Children.Remove(img);
+            if (img.Source is WriteableBitmap bmp)
+                img.Source = null;
+        }
+        _docxPageCache.Clear();
+    }
+
+    private async void LoadDocxThumbnails()
+    {
+        if (_docxDocument == null) return;
+
+        for (int i = 0; i < _docxDocument.PageCount && i < 50; i++)
+        {
+            try
+            {
+                var thumb = await _docxDocument.RenderPageAsync(i, scale: 0.3, default);
+                if (thumb != null && i < Thumbnails.Count)
+                {
+                    Thumbnails[i].Thumbnail = thumb;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"LoadDocxThumbnails: page {i}", ex);
+            }
         }
     }
 }

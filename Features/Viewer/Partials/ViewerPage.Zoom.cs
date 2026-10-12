@@ -63,8 +63,8 @@ public sealed partial class ViewerPage
 
     /// <summary>
     /// Sets zoom. For PDF the ScrollViewer owns scaling (ZoomMode=Enabled,
-    /// canvas sized at zoom 1.0). For PPTX the canvas is sized at zoom 1.0 too
-    /// and the ScrollViewer scales it.
+    /// canvas sized at zoom 1.0). For PPTX and DOCX, the page canvas is also
+    /// sized at zoom 1.0 and scaled by the ScrollViewer.
     /// </summary>
     internal void SetZoom(double z)
     {
@@ -87,6 +87,13 @@ public sealed partial class ViewerPage
 
         // PPTX: same — ScrollViewer scales the pre-sized canvas
         if (_pptxDocument != null)
+        {
+            DocumentScrollViewer.ChangeView(null, null, (float)_zoom, disableAnimation: false);
+            return;
+        }
+
+        // DOCX uses the same page-sized canvas and ScrollViewer scaling as PPTX.
+        if (_docxDocument != null)
         {
             DocumentScrollViewer.ChangeView(null, null, (float)_zoom, disableAnimation: false);
         }
@@ -143,6 +150,22 @@ public sealed partial class ViewerPage
             QuickView.Infrastructure.Logging.Logger.Log($"ApplyFitWidth PPTX: widthLp={widthLp}, avail={avail}, targetZoom={targetZoom}");
             
             SetZoom(targetZoom);
+            return;
+        }
+
+        // DOCX page dimensions are reported in points by WordCraft.
+        if (_docxDocument != null)
+        {
+            const double PtToLp = 96.0 / 72.0;
+            var (ptW, _) = _docxDocument.GetPageSize(0);
+            if (ptW <= 0) return;
+
+            double widthLp = ptW * PtToLp;
+            const double sidePad = 28.0;
+            double avail = DocumentScrollViewer.ViewportWidth - sidePad * 2;
+            if (avail <= 0) return;
+
+            SetZoom(avail / widthLp);
         }
     }
 
