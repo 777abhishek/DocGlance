@@ -33,6 +33,7 @@ public sealed partial class TitleBarWindow : Window
 
     // The permanent "home" tab
     private TabViewItem? _homeTab;
+    private int _selectionChangeVersion;
 
     // ── HWND (for pickers in unpackaged apps) ─────────────────────────────────
     public IntPtr Hwnd => WindowNative.GetWindowHandle(this);
@@ -206,62 +207,48 @@ public sealed partial class TitleBarWindow : Window
 
     public void OpenToolsPage()
     {
-        System.Diagnostics.Debug.WriteLine("=== OpenToolsPage START ===");
-        
-        try
+        Logger.Log($"[TitleBarWindow] OpenToolsPage requested. Existing tabs: {Tabs.TabItems.Count}");
+
+        foreach (var item in Tabs.TabItems)
         {
-            // Check if Tools tab already exists
-            System.Diagnostics.Debug.WriteLine($"Checking existing tabs. Total tabs: {Tabs.TabItems.Count}");
-            
-            foreach (var item in Tabs.TabItems)
+            if (item is TabViewItem tab && _specialTabs.ContainsKey(tab) && tab.Header as string == "Tools")
             {
-                if (item is TabViewItem tab && _specialTabs.ContainsKey(tab) && tab.Header as string == "Tools")
-                {
-                    System.Diagnostics.Debug.WriteLine("Tools tab already exists, activating it");
-                    Tabs.SelectedItem = tab;
-                    DocHost.Content = _specialTabs[tab];
-                    DocHost.Visibility = Visibility.Visible;
-                    HomeFrame.Visibility = Visibility.Collapsed;
-                    Title = "Document Tools — QuickView";
-                    System.Diagnostics.Debug.WriteLine("=== OpenToolsPage END (reused existing tab) ===");
-                    return;
-                }
+                Logger.Log("[TitleBarWindow] Selecting existing Document Tools tab.");
+                Tabs.SelectedItem = tab;
+                ActivateToolsTab(tab);
+                return;
             }
-            
-            System.Diagnostics.Debug.WriteLine("Creating new Tools tab...");
-            var toolsPage = new Features.Tools.ToolsPage();
-            System.Diagnostics.Debug.WriteLine("ToolsPage instance created");
-            
-            var toolsTab = new TabViewItem
-            {
-                Header     = "Tools",
-                IsClosable = true,
-                IconSource = new FontIconSource { Glyph = "\uE90F", FontSize = 12 },
-            };
-            System.Diagnostics.Debug.WriteLine("TabViewItem created");
-            
-            // Store in special tabs dictionary
-            _specialTabs[toolsTab] = toolsPage;
-            System.Diagnostics.Debug.WriteLine("Added to _specialTabs dictionary");
-            
-            Tabs.TabItems.Add(toolsTab);
-            System.Diagnostics.Debug.WriteLine($"Added tab to Tabs. New count: {Tabs.TabItems.Count}");
-            
-            Tabs.SelectedItem = toolsTab;
-            System.Diagnostics.Debug.WriteLine("Set as selected tab");
-            
-            DocHost.Content = toolsPage;
-            DocHost.Visibility = Visibility.Visible;
-            HomeFrame.Visibility = Visibility.Collapsed;
-            Title = "Document Tools — QuickView";
-            System.Diagnostics.Debug.WriteLine("Updated UI visibility and title");
-            
-            System.Diagnostics.Debug.WriteLine("=== OpenToolsPage END (created new tab) ===");
         }
-        catch (Exception ex)
+
+        var toolsTab = new TabViewItem
         {
-            System.Diagnostics.Debug.WriteLine($"ERROR in OpenToolsPage: {ex}");
+            Header = "Tools",
+            IsClosable = true,
+            IconSource = new FontIconSource { Glyph = "\uE90F", FontSize = 12 },
+        };
+
+        _specialTabs[toolsTab] = new Features.Tools.ToolsPage();
+        Tabs.TabItems.Add(toolsTab);
+        Tabs.SelectedItem = toolsTab;
+        ActivateToolsTab(toolsTab);
+        Logger.Log($"[TitleBarWindow] Created and selected Document Tools tab. Total tabs: {Tabs.TabItems.Count}");
+    }
+
+    private void ActivateToolsTab(TabViewItem tab)
+    {
+        if (!_specialTabs.TryGetValue(tab, out var content))
+        {
+            Logger.Log("[TitleBarWindow] Document Tools activation failed: tab content is missing.");
+            return;
         }
+
+        DocHost.Content = content;
+        DocHost.Visibility = Visibility.Visible;
+        DocHost.Opacity = 1.0;
+        HomeFrame.Visibility = Visibility.Collapsed;
+        HomeFrame.Opacity = 0.0;
+        Title = "Document Tools — QuickView";
+        Logger.Log("[TitleBarWindow] Document Tools content activated.");
     }
 
     public void GoBack()
@@ -276,6 +263,7 @@ public sealed partial class TitleBarWindow : Window
     private async void Tabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (Tabs.SelectedItem is not TabViewItem selected) return;
+        var selectionVersion = ++_selectionChangeVersion;
 
         bool isHome = ReferenceEquals(selected, _homeTab);
 
@@ -301,6 +289,9 @@ public sealed partial class TitleBarWindow : Window
             {
                 DocHost.Opacity = 0.0;
                 await Task.Delay(150); // Wait for opacity transition
+                if (selectionVersion != _selectionChangeVersion ||
+                    !ReferenceEquals(Tabs.SelectedItem, selected))
+                    return;
                 DocHost.Visibility = Visibility.Collapsed;
                 DocHost.Content = null;
             }
@@ -317,6 +308,9 @@ public sealed partial class TitleBarWindow : Window
             {
                 HomeFrame.Opacity = 0.0;
                 await Task.Delay(150); // Wait for opacity transition
+                if (selectionVersion != _selectionChangeVersion ||
+                    !ReferenceEquals(Tabs.SelectedItem, selected))
+                    return;
                 HomeFrame.Visibility = Visibility.Collapsed;
             }
             

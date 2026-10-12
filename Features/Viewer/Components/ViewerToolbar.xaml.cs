@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using System;
+using QuickView.Infrastructure.Logging;
 
 namespace QuickView.Features.Viewer.Components;
 
@@ -99,6 +100,20 @@ public sealed partial class ViewerToolbar : UserControl
     private void CopyPathMenuItem_Click(object sender, RoutedEventArgs e) => CopyPathRequested?.Invoke(this, EventArgs.Empty);
     private void BookmarkMenuItem_Click(object sender, RoutedEventArgs e) => BookmarkRequested?.Invoke(this, EventArgs.Empty);
     private void SettingsMenuItem_Click(object sender, RoutedEventArgs e) => SettingsRequested?.Invoke(this, EventArgs.Empty);
+    private void ToolsMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        Logger.Log("[ViewerToolbar] Document Tools menu item clicked.");
+
+        var window = QuickView.UI.Shell.TitleBarWindow.Current;
+        if (window == null)
+        {
+            Logger.Log("[ViewerToolbar] Document Tools navigation failed: TitleBarWindow.Current is null.");
+            return;
+        }
+
+        Logger.Log("[ViewerToolbar] Opening Document Tools page.");
+        window.OpenToolsPage();
+    }
     private void WordWrapButton_Click(object sender, RoutedEventArgs e) => WordWrapRequested?.Invoke(this, EventArgs.Empty);
     
     private void PageNumber_Tapped(object sender, TappedRoutedEventArgs e)

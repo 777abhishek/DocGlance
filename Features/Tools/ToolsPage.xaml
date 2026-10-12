@@ -5,84 +5,129 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Background="Transparent">
 
+    <Page.Resources>
+        <Style TargetType="TextBox">
+            <Setter Property="MinHeight" Value="38"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="CornerRadius" Value="8"/>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="MinHeight" Value="38"/>
+            <Setter Property="CornerRadius" Value="8"/>
+        </Style>
+        <Style TargetType="ListViewItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Padding" Value="14,12"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="FontSize" Value="14"/>
+        </Style>
+    </Page.Resources>
+
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="240"/>
+            <ColumnDefinition Width="260"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <!-- LEFT SIDEBAR - Tool List -->
-        <Border Grid.Column="0" 
-                Background="{ThemeResource LayerFillColorDefaultBrush}"
+        <!-- Transparent navigation rail, matching the rest of the app shell. -->
+        <Border Grid.Column="0"
+                Margin="16,16,0,16"
+                Padding="16"
+                Background="Transparent"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="0,0,1,0">
-            <StackPanel Padding="12">
-                <TextBlock Text="DOCUMENT TOOLS" 
-                           FontSize="11" 
-                           FontWeight="SemiBold"
-                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                           Margin="12,8,0,12"
-                           CharacterSpacing="80"/>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Spacing="4" Margin="0,4,0,18">
+                    <TextBlock Text="DOCUMENT TOOLS" FontSize="12" FontWeight="SemiBold"
+                               CharacterSpacing="80"/>
+                    <TextBlock Text="Quick conversions" FontSize="12"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
                 
                 <ListView x:Name="ToolsList" 
+                          Grid.Row="1"
                           SelectionMode="Single" 
                           SelectedIndex="0"
                           SelectionChanged="ToolsList_SelectionChanged">
-                    <ListView.ItemContainerStyle>
-                        <Style TargetType="ListViewItem">
-                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                            <Setter Property="Padding" Value="12,10"/>
-                            <Setter Property="Margin" Value="0,0,0,4"/>
-                            <Setter Property="CornerRadius" Value="6"/>
-                        </Style>
-                    </ListView.ItemContainerStyle>
-                    
                     <!-- Word → PDF -->
                     <ListViewItem Tag="WordToPdf">
                         <StackPanel Orientation="Horizontal" Spacing="10">
-                            <FontIcon Glyph="&#xE8A5;" FontSize="16" Foreground="#256EFF" VerticalAlignment="Center"/>
+                            <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE8A5;" FontSize="18"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                      VerticalAlignment="Center"/>
                             <TextBlock Text="Word → PDF" FontSize="14" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </ListViewItem>
+                    <ListViewItem Tag="WordToPng">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE8A5;" FontSize="18"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <TextBlock Text="Word → PNG" FontSize="14"/>
                         </StackPanel>
                     </ListViewItem>
                     
                     <!-- PowerPoint → PDF -->
                     <ListViewItem Tag="PptToPdf">
                         <StackPanel Orientation="Horizontal" Spacing="10">
-                            <FontIcon Glyph="&#xE8FD;" FontSize="16" Foreground="#D24726" VerticalAlignment="Center"/>
+                            <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE8FD;" FontSize="18"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                      VerticalAlignment="Center"/>
                             <TextBlock Text="PowerPoint → PDF" FontSize="14" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </ListViewItem>
+                    <ListViewItem Tag="PptToPng">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE8FD;" FontSize="18"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <TextBlock Text="PowerPoint → PNG" FontSize="14"/>
                         </StackPanel>
                     </ListViewItem>
                     
                     <!-- Excel → CSV -->
                     <ListViewItem Tag="ExcelToCsv">
                         <StackPanel Orientation="Horizontal" Spacing="10">
-                            <FontIcon Glyph="&#xF1E8;" FontSize="16" Foreground="#217346" VerticalAlignment="Center"/>
+                            <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE8D2;" FontSize="18"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                      VerticalAlignment="Center"/>
                             <TextBlock Text="Excel → CSV" FontSize="14" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </ListViewItem>
+                    <ListViewItem Tag="ExcelToPdf">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE8D2;" FontSize="18"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <TextBlock Text="Excel → PDF" FontSize="14"/>
                         </StackPanel>
                     </ListViewItem>
                 </ListView>
 
-                <!-- Info at bottom -->
-                <StackPanel Spacing="6" Margin="12,24,12,12">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon Glyph="&#xE946;" FontSize="12" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
-                        <TextBlock Text="ArtCraft Libraries" FontSize="11" FontWeight="SemiBold"/>
-                    </StackPanel>
+                <StackPanel Grid.Row="2" Spacing="6" Margin="0,16,0,4">
+                    <TextBlock Text="Powered by ArtCraft Libraries" FontSize="11" FontWeight="SemiBold"/>
                     <TextBlock Text="Native Rust performance with C# FFI interop." 
                                TextWrapping="Wrap" 
                                FontSize="11"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                 </StackPanel>
-            </StackPanel>
+            </Grid>
         </Border>
 
-        <!-- RIGHT CONTENT AREA -->
-        <Grid Grid.Column="1" Padding="32,24">
+        <!-- Scrollable content area with the same transparent surface as Home. -->
+        <ScrollViewer Grid.Column="1"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+            <Grid Padding="40,28,40,40">
             
             <!-- Word → PDF -->
-            <StackPanel x:Name="WordToPdfPanel" Spacing="20" MaxWidth="600" HorizontalAlignment="Left" Visibility="Visible">
-                <TextBlock Text="Word → PDF" FontSize="24" FontWeight="SemiBold"/>
-                <TextBlock Text="Convert Word documents to PDF format using WordCraft." 
+            <StackPanel x:Name="WordToPdfPanel" Spacing="20" MaxWidth="720" HorizontalAlignment="Left" Visibility="Visible">
+                <TextBlock x:Name="WordToolTitle" Text="Word → PDF" FontSize="24" FontWeight="SemiBold"/>
+                <TextBlock x:Name="WordToolDescription" Text="Convert Word documents to PDF format using WordCraft."
                            FontSize="13"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                            TextWrapping="Wrap"/>
@@ -126,14 +171,19 @@
                             <ProgressRing x:Name="WordProgress" Width="20" Height="20" IsActive="False" Visibility="Collapsed"/>
                             <TextBlock x:Name="WordStatus" FontSize="13" VerticalAlignment="Center"/>
                         </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="OpenWordOutputButton" Content="Open file" Click="OpenWordOutput_Click" IsEnabled="False"/>
+                            <Button x:Name="ShowWordOutputButton" Content="Show in folder" Click="ShowWordOutput_Click" IsEnabled="False"/>
+                            <Button x:Name="CopyWordOutputButton" Content="Copy path" Click="CopyWordOutput_Click" IsEnabled="False"/>
+                        </StackPanel>
                     </StackPanel>
                 </StackPanel>
             </StackPanel>
 
             <!-- PowerPoint → PDF -->
-            <StackPanel x:Name="PptToPdfPanel" Spacing="20" MaxWidth="600" HorizontalAlignment="Left" Visibility="Collapsed">
-                <TextBlock Text="PowerPoint → PDF" FontSize="24" FontWeight="SemiBold"/>
-                <TextBlock Text="Convert PowerPoint presentations to PDF format using DeckCraft." 
+            <StackPanel x:Name="PptToPdfPanel" Spacing="20" MaxWidth="720" HorizontalAlignment="Left" Visibility="Collapsed">
+                <TextBlock x:Name="PptToolTitle" Text="PowerPoint → PDF" FontSize="24" FontWeight="SemiBold"/>
+                <TextBlock x:Name="PptToolDescription" Text="Convert PowerPoint presentations to PDF format using DeckCraft."
                            FontSize="13"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                            TextWrapping="Wrap"/>
@@ -177,14 +227,19 @@
                             <ProgressRing x:Name="PptProgress" Width="20" Height="20" IsActive="False" Visibility="Collapsed"/>
                             <TextBlock x:Name="PptStatus" FontSize="13" VerticalAlignment="Center"/>
                         </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="OpenPptOutputButton" Content="Open file" Click="OpenPptOutput_Click" IsEnabled="False"/>
+                            <Button x:Name="ShowPptOutputButton" Content="Show in folder" Click="ShowPptOutput_Click" IsEnabled="False"/>
+                            <Button x:Name="CopyPptOutputButton" Content="Copy path" Click="CopyPptOutput_Click" IsEnabled="False"/>
+                        </StackPanel>
                     </StackPanel>
                 </StackPanel>
             </StackPanel>
 
             <!-- Excel → CSV -->
-            <StackPanel x:Name="ExcelToCsvPanel" Spacing="20" MaxWidth="600" HorizontalAlignment="Left" Visibility="Collapsed">
-                <TextBlock Text="Excel → CSV" FontSize="24" FontWeight="SemiBold"/>
-                <TextBlock Text="Convert Excel spreadsheets to CSV format using GridCraft." 
+            <StackPanel x:Name="ExcelToCsvPanel" Spacing="20" MaxWidth="720" HorizontalAlignment="Left" Visibility="Collapsed">
+                <TextBlock x:Name="ExcelToolTitle" Text="Excel → CSV" FontSize="24" FontWeight="SemiBold"/>
+                <TextBlock x:Name="ExcelToolDescription" Text="Convert Excel spreadsheets to CSV format using GridCraft."
                            FontSize="13"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                            TextWrapping="Wrap"/>
@@ -228,10 +283,16 @@
                             <ProgressRing x:Name="ExcelProgress" Width="20" Height="20" IsActive="False" Visibility="Collapsed"/>
                             <TextBlock x:Name="ExcelStatus" FontSize="13" VerticalAlignment="Center"/>
                         </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="OpenExcelOutputButton" Content="Open file" Click="OpenExcelOutput_Click" IsEnabled="False"/>
+                            <Button x:Name="ShowExcelOutputButton" Content="Show in folder" Click="ShowExcelOutput_Click" IsEnabled="False"/>
+                            <Button x:Name="CopyExcelOutputButton" Content="Copy path" Click="CopyExcelOutput_Click" IsEnabled="False"/>
+                        </StackPanel>
                     </StackPanel>
                 </StackPanel>
             </StackPanel>
 
-        </Grid>
+            </Grid>
+        </ScrollViewer>
     </Grid>
 </Page>

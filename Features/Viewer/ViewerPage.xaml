@@ -393,7 +393,7 @@
                 <!-- ── PLAIN TEXT viewer — TextBox is the scroll host ── -->
                 <Grid x:Name="PlainTextViewerGrid"
                     Visibility="Collapsed"
-                    Background="{ThemeResource LayerFillColorDefaultBrush}">
+                    Background="Transparent">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
@@ -437,8 +437,9 @@
                 <ScrollViewer x:Name="TextViewerScroll"
                     Visibility="Collapsed"
                     HorizontalScrollBarVisibility="Auto"
-                    VerticalScrollBarVisibility="Auto">
-                    <Grid>
+                    VerticalScrollBarVisibility="Auto"
+                    Background="Transparent">
+                    <Grid Background="Transparent">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>

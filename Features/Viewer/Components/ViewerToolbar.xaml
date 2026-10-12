@@ -237,8 +237,6 @@
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 
-                        <MenuFlyoutSeparator/>
-
                         <MenuFlyoutItem
                             Text="Presentation mode"
                             Click="PresentationModeMenuItem_Click">
@@ -246,8 +244,6 @@
                                 <FontIcon Glyph="&#xE740;" FontSize="20"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
-
-                        <MenuFlyoutSeparator/>
 
                         <MenuFlyoutItem
                             Text="Print"
@@ -273,8 +269,6 @@
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 
-                        <MenuFlyoutSeparator/>
-
                         <MenuFlyoutItem
                             Text="Open with default app"
                             Click="OpenExternalButton_Click">
@@ -297,8 +291,6 @@
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 
-                        <MenuFlyoutSeparator/>
-
                         <MenuFlyoutItem
                             Text="Bookmark this page"
                             Click="BookmarkMenuItem_Click">
@@ -307,13 +299,19 @@
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 
-                        <MenuFlyoutSeparator/>
-
                         <MenuFlyoutItem
                             Text="Settings"
                             Click="SettingsMenuItem_Click">
                             <MenuFlyoutItem.Icon>
                                 <FontIcon Glyph="&#xE713;" FontSize="20"/>
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+
+                        <MenuFlyoutItem
+                            Text="Document Tools"
+                            Click="ToolsMenuItem_Click">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE90F;" FontSize="20"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 

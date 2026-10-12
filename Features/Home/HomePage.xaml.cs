@@ -253,34 +253,9 @@ public sealed partial class HomePage : Page
 
     private void Tools_Click(object sender, RoutedEventArgs e)
     {
-        try
-        {
-            // Get the window from the current page
-            var xamlRoot = this.XamlRoot;
-            if (xamlRoot == null)
-            {
-                System.Diagnostics.Debug.WriteLine("XamlRoot is null");
-                return;
-            }
-
-            // Try to find TitleBarWindow through visual tree
-            var window = QuickView.UI.Shell.TitleBarWindow.Current;
-            if (window != null)
-            {
-                System.Diagnostics.Debug.WriteLine("Found TitleBarWindow, calling OpenToolsPage");
-                window.OpenToolsPage();
-            }
-            else
-            {
-                System.Diagnostics.Debug.WriteLine("TitleBarWindow.Current is null");
-            }
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"Error in Tools_Click: {ex.Message}");
-        }
+        Logger.Log("[HomePage] Document Tools button clicked from filter section.");
+        QuickView.UI.Shell.TitleBarWindow.Current?.OpenToolsPage();
     }
-
 
     // ═════════════════════════════════════════════════════════════════════════
     // ADD / REMOVE / RESCAN FOLDERS

@@ -511,7 +511,6 @@
                 </StackPanel>
             </ScrollViewer>
 
-            <!-- ── Tools Button (at bottom, outside scroll) ────────────── -->
             <Button
                 Grid.Row="1"
                 x:Name="ToolsButton"

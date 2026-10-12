@@ -1,11 +1,20 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
+using System.IO.Compression;
 using System.IO;
+using System.Text;
 using System.Threading.Tasks;
+using System.Runtime.InteropServices.WindowsRuntime;
+using Windows.Graphics.Imaging;
+using Windows.Storage;
+using Windows.Storage.Streams;
 using Windows.Storage.Pickers;
+using Windows.ApplicationModel.DataTransfer;
+using Windows.System;
 using QuickView.Rendering.Document;
 using QuickView.Rendering.Presentation;
+using QuickView.Infrastructure.Logging;
 using WinRT.Interop;
 
 namespace QuickView.Features.Tools;
@@ -18,17 +27,27 @@ public sealed partial class ToolsPage : Page
     private string? _pptOutputFile;
     private string? _excelInputFile;
     private string? _excelOutputFile;
+    private string _selectedTool = "WordToPdf";
 
     public ToolsPage()
     {
-        System.Diagnostics.Debug.WriteLine("ToolsPage constructor called");
+        Logger.Log("[ToolsPage] Constructor started.");
         InitializeComponent();
         this.Loaded += ToolsPage_Loaded;
+        Logger.Log("[ToolsPage] XAML initialized and Loaded handler attached.");
     }
 
     private void ToolsPage_Loaded(object sender, RoutedEventArgs e)
     {
-        System.Diagnostics.Debug.WriteLine("ToolsPage Loaded event fired");
+        if (ToolsList.SelectedIndex < 0)
+            ToolsList.SelectedIndex = 0;
+
+        var tag = (ToolsList.SelectedItem as ListViewItem)?.Tag?.ToString();
+        _selectedTool = tag ?? "WordToPdf";
+        if (WordToolTitle is not null)
+            UpdateToolPresentation();
+        Logger.Log($"[ToolsPage] Loaded. SelectedIndex={ToolsList.SelectedIndex}, SelectedTool={tag ?? "<none>"}");
+        ShowToolPanel(tag);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -37,10 +56,21 @@ public sealed partial class ToolsPage : Page
 
     private void ToolsList_SelectionChanged(object sender, Microsoft.UI.Xaml.Controls.SelectionChangedEventArgs e)
     {
-        if (ToolsList.SelectedItem is not Microsoft.UI.Xaml.Controls.ListViewItem item)
-            return;
+        var tag = (ToolsList.SelectedItem as ListViewItem)?.Tag?.ToString();
+        _selectedTool = tag ?? "WordToPdf";
+        Logger.Log($"[ToolsPage] Tool selection changed: {tag ?? "<none>"}");
+        ShowToolPanel(tag);
+    }
 
-        var tag = item.Tag?.ToString();
+    private void ShowToolPanel(string? tag)
+    {
+        // SelectionChanged can fire while InitializeComponent is still
+        // creating the named panel controls.
+        if (WordToPdfPanel is null || PptToPdfPanel is null || ExcelToCsvPanel is null)
+        {
+            Logger.Log("[ToolsPage] Ignoring early tool selection before panels were initialized.");
+            return;
+        }
 
         // Hide all panels
         WordToPdfPanel.Visibility = Visibility.Collapsed;
@@ -51,15 +81,52 @@ public sealed partial class ToolsPage : Page
         switch (tag)
         {
             case "WordToPdf":
+            case "WordToPng":
                 WordToPdfPanel.Visibility = Visibility.Visible;
                 break;
             case "PptToPdf":
+            case "PptToPng":
                 PptToPdfPanel.Visibility = Visibility.Visible;
                 break;
             case "ExcelToCsv":
+            case "ExcelToPdf":
                 ExcelToCsvPanel.Visibility = Visibility.Visible;
                 break;
         }
+
+        UpdateToolPresentation();
+    }
+
+    private void UpdateToolPresentation()
+    {
+        if (WordToolTitle is null || PptToolTitle is null || ExcelToolTitle is null)
+            return;
+
+        bool wordPng = _selectedTool == "WordToPng";
+        bool pptPng = _selectedTool == "PptToPng";
+        bool excelPdf = _selectedTool == "ExcelToPdf";
+
+        WordToolTitle.Text = wordPng ? "Word → PNG (ZIP)" : "Word → PDF";
+        WordToolDescription.Text = wordPng
+            ? "Export every Word document page as a PNG inside a ZIP archive."
+            : "Convert Word documents to PDF format using WordCraft.";
+        ConvertWordButton.Content = wordPng ? "Export PNG ZIP" : "Convert to PDF";
+        WordOutputPath.PlaceholderText = wordPng ? "PNG ZIP will be saved here..." : "PDF will be saved here...";
+
+        PptToolTitle.Text = pptPng ? "PowerPoint → PNG (ZIP)" : "PowerPoint → PDF";
+        PptToolDescription.Text = pptPng
+            ? "Export every presentation slide as a PNG inside a ZIP archive."
+            : "PowerPoint to PDF export is not supported by DeckCraft yet.";
+        ConvertPptButton.Content = pptPng ? "Export PNG ZIP" : "PDF export unavailable";
+        ConvertPptButton.IsEnabled = pptPng && !string.IsNullOrEmpty(_pptInputFile) && !string.IsNullOrEmpty(_pptOutputFile);
+        PptOutputPath.PlaceholderText = pptPng ? "PNG ZIP will be saved here..." : "PDF export is unavailable...";
+
+        ExcelToolTitle.Text = excelPdf ? "Excel → PDF" : "Excel → CSV";
+        ExcelToolDescription.Text = excelPdf
+            ? "Export the workbook as a PDF using GridCraft."
+            : "Export workbook sheet data as a CSV file using GridCraft.";
+        ConvertExcelButton.Content = excelPdf ? "Export as PDF" : "Export as CSV";
+        ExcelOutputPath.PlaceholderText = excelPdf ? "PDF will be saved here..." : "CSV will be saved here...";
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -79,11 +146,8 @@ public sealed partial class ToolsPage : Page
         WordInputPath.Text = file.Path;
         
         // Auto-suggest output path
-        if (string.IsNullOrEmpty(_wordOutputFile))
-        {
-            _wordOutputFile = Path.ChangeExtension(file.Path, ".pdf");
-            WordOutputPath.Text = _wordOutputFile;
-        }
+        _wordOutputFile = Path.ChangeExtension(file.Path, _selectedTool == "WordToPng" ? ".zip" : ".pdf");
+        WordOutputPath.Text = _wordOutputFile;
 
         ConvertWordButton.IsEnabled = !string.IsNullOrEmpty(_wordInputFile) && !string.IsNullOrEmpty(_wordOutputFile);
     }
@@ -94,9 +158,11 @@ public sealed partial class ToolsPage : Page
         InitializeWithWindow.Initialize(picker, GetWindowHandle());
         
         if (!string.IsNullOrEmpty(_wordInputFile))
-            picker.SuggestedFileName = Path.GetFileNameWithoutExtension(_wordInputFile) + ".pdf";
+            picker.SuggestedFileName = Path.GetFileNameWithoutExtension(_wordInputFile) +
+                (_selectedTool == "WordToPng" ? ".zip" : ".pdf");
         
-        picker.FileTypeChoices.Add("PDF Document", new[] { ".pdf" });
+        var png = _selectedTool == "WordToPng";
+        picker.FileTypeChoices.Add(png ? "PNG Images (ZIP)" : "PDF Document", new[] { png ? ".zip" : ".pdf" });
 
         var file = await picker.PickSaveFileAsync();
         if (file == null) return;
@@ -126,15 +192,18 @@ public sealed partial class ToolsPage : Page
                 return;
             }
 
-            var pdfBytes = await doc.ExportToPdfAsync();
-            if (pdfBytes == null || pdfBytes.Length == 0)
+            if (_selectedTool == "WordToPng")
             {
-                WordStatus.Text = "❌ Conversion failed";
-                return;
+                await ExportWordPngZipAsync(doc, _wordOutputFile);
             }
-
-            await File.WriteAllBytesAsync(_wordOutputFile, pdfBytes);
+            else
+            {
+                var pdfBytes = await doc.ExportToPdfAsync();
+                if (pdfBytes == null || pdfBytes.Length == 0) { WordStatus.Text = "Conversion failed"; return; }
+                await File.WriteAllBytesAsync(_wordOutputFile, pdfBytes);
+            }
             WordStatus.Text = "✓ Converted successfully";
+            SetOutputActionsEnabled(OpenWordOutputButton, ShowWordOutputButton, CopyWordOutputButton, true);
         }
         catch (Exception ex)
         {
@@ -165,11 +234,8 @@ public sealed partial class ToolsPage : Page
         PptInputPath.Text = file.Path;
         
         // Auto-suggest output path
-        if (string.IsNullOrEmpty(_pptOutputFile))
-        {
-            _pptOutputFile = Path.ChangeExtension(file.Path, ".pdf");
-            PptOutputPath.Text = _pptOutputFile;
-        }
+        _pptOutputFile = Path.ChangeExtension(file.Path, _selectedTool == "PptToPng" ? ".zip" : ".pdf");
+        PptOutputPath.Text = _pptOutputFile;
 
         ConvertPptButton.IsEnabled = !string.IsNullOrEmpty(_pptInputFile) && !string.IsNullOrEmpty(_pptOutputFile);
     }
@@ -180,9 +246,11 @@ public sealed partial class ToolsPage : Page
         InitializeWithWindow.Initialize(picker, GetWindowHandle());
         
         if (!string.IsNullOrEmpty(_pptInputFile))
-            picker.SuggestedFileName = Path.GetFileNameWithoutExtension(_pptInputFile) + ".pdf";
+            picker.SuggestedFileName = Path.GetFileNameWithoutExtension(_pptInputFile) +
+                (_selectedTool == "PptToPng" ? ".zip" : ".pdf");
         
-        picker.FileTypeChoices.Add("PDF Document", new[] { ".pdf" });
+        var png = _selectedTool == "PptToPng";
+        picker.FileTypeChoices.Add(png ? "PNG Images (ZIP)" : "PDF Document", new[] { png ? ".zip" : ".pdf" });
 
         var file = await picker.PickSaveFileAsync();
         if (file == null) return;
@@ -212,7 +280,14 @@ public sealed partial class ToolsPage : Page
                 return;
             }
 
-            PptStatus.Text = "❌ PowerPoint to PDF export is not supported";
+            if (_selectedTool == "PptToPng")
+            {
+                await ExportPptPngZipAsync(pres, _pptOutputFile);
+                PptStatus.Text = "✓ Converted successfully";
+                SetOutputActionsEnabled(OpenPptOutputButton, ShowPptOutputButton, CopyPptOutputButton, true);
+            }
+            else
+                PptStatus.Text = "PowerPoint to PDF export is not supported";
         }
         catch (Exception ex)
         {
@@ -243,11 +318,8 @@ public sealed partial class ToolsPage : Page
         ExcelInputPath.Text = file.Path;
         
         // Auto-suggest output path
-        if (string.IsNullOrEmpty(_excelOutputFile))
-        {
-            _excelOutputFile = Path.ChangeExtension(file.Path, ".csv");
-            ExcelOutputPath.Text = _excelOutputFile;
-        }
+        _excelOutputFile = Path.ChangeExtension(file.Path, _selectedTool == "ExcelToPdf" ? ".pdf" : ".csv");
+        ExcelOutputPath.Text = _excelOutputFile;
 
         ConvertExcelButton.IsEnabled = !string.IsNullOrEmpty(_excelInputFile) && !string.IsNullOrEmpty(_excelOutputFile);
     }
@@ -258,9 +330,11 @@ public sealed partial class ToolsPage : Page
         InitializeWithWindow.Initialize(picker, GetWindowHandle());
         
         if (!string.IsNullOrEmpty(_excelInputFile))
-            picker.SuggestedFileName = Path.GetFileNameWithoutExtension(_excelInputFile) + ".csv";
+            picker.SuggestedFileName = Path.GetFileNameWithoutExtension(_excelInputFile) +
+                (_selectedTool == "ExcelToPdf" ? ".pdf" : ".csv");
         
-        picker.FileTypeChoices.Add("CSV File", new[] { ".csv" });
+        var pdf = _selectedTool == "ExcelToPdf";
+        picker.FileTypeChoices.Add(pdf ? "PDF Document" : "CSV File", new[] { pdf ? ".pdf" : ".csv" });
 
         var file = await picker.PickSaveFileAsync();
         if (file == null) return;
@@ -283,9 +357,27 @@ public sealed partial class ToolsPage : Page
 
         try
         {
-            // TODO: Implement Excel→CSV using GridCraft FFI
-            await Task.Delay(1000); // Simulate work
-            ExcelStatus.Text = "❌ Not implemented yet";
+            using var workbook = await SpreadsheetDocument.OpenAsync(_excelInputFile);
+            if (workbook == null) { ExcelStatus.Text = "Failed to open spreadsheet"; return; }
+            if (_selectedTool == "ExcelToPdf")
+            {
+                var pdf = await workbook.ExportToPdfAsync();
+                if (pdf == null) { ExcelStatus.Text = "PDF export failed"; return; }
+                await File.WriteAllBytesAsync(_excelOutputFile, pdf);
+            }
+            else
+            {
+                var csv = new StringBuilder();
+                for (var sheet = 0; sheet < workbook.SheetCount; sheet++)
+                {
+                    if (sheet > 0) csv.AppendLine();
+                    csv.AppendLine($"[{workbook.GetSheetName(sheet)}]");
+                    csv.AppendLine(workbook.ExtractSheetText(sheet).Replace("\r\n", "\n"));
+                }
+                await File.WriteAllTextAsync(_excelOutputFile, csv.ToString());
+            }
+            ExcelStatus.Text = "Converted successfully";
+            SetOutputActionsEnabled(OpenExcelOutputButton, ShowExcelOutputButton, CopyExcelOutputButton, true);
         }
         catch (Exception ex)
         {
@@ -307,5 +399,101 @@ public sealed partial class ToolsPage : Page
     {
         var window = UI.Shell.TitleBarWindow.Current;
         return window?.Hwnd ?? IntPtr.Zero;
+    }
+
+    private static void SetOutputActionsEnabled(Button open, Button folder, Button copy, bool enabled)
+    {
+        open.IsEnabled = enabled;
+        folder.IsEnabled = enabled;
+        copy.IsEnabled = enabled;
+    }
+
+    private async void OpenWordOutput_Click(object sender, RoutedEventArgs e) => await OpenOutputAsync(_wordOutputFile);
+    private async void ShowWordOutput_Click(object sender, RoutedEventArgs e) => await ShowOutputFolderAsync(_wordOutputFile);
+    private void CopyWordOutput_Click(object sender, RoutedEventArgs e) => CopyOutputPath(_wordOutputFile);
+    private async void OpenPptOutput_Click(object sender, RoutedEventArgs e) => await OpenOutputAsync(_pptOutputFile);
+    private async void ShowPptOutput_Click(object sender, RoutedEventArgs e) => await ShowOutputFolderAsync(_pptOutputFile);
+    private void CopyPptOutput_Click(object sender, RoutedEventArgs e) => CopyOutputPath(_pptOutputFile);
+    private async void OpenExcelOutput_Click(object sender, RoutedEventArgs e) => await OpenOutputAsync(_excelOutputFile);
+    private async void ShowExcelOutput_Click(object sender, RoutedEventArgs e) => await ShowOutputFolderAsync(_excelOutputFile);
+    private void CopyExcelOutput_Click(object sender, RoutedEventArgs e) => CopyOutputPath(_excelOutputFile);
+
+    private static async Task OpenOutputAsync(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return;
+        await Launcher.LaunchFileAsync(await StorageFile.GetFileFromPathAsync(path));
+    }
+
+    private static async Task ShowOutputFolderAsync(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return;
+        var file = await StorageFile.GetFileFromPathAsync(path);
+        var folder = await StorageFolder.GetFolderFromPathAsync(Path.GetDirectoryName(path)!);
+        var options = new FolderLauncherOptions();
+        options.ItemsToSelect.Add(file);
+        await Launcher.LaunchFolderAsync(folder, options);
+    }
+
+    private static void CopyOutputPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+        var package = new DataPackage();
+        package.SetText(path);
+        Clipboard.SetContent(package);
+        Clipboard.Flush();
+    }
+
+    private static async Task ExportWordPngZipAsync(DocxDocument document, string outputPath)
+    {
+        await using var output = File.Create(outputPath);
+        using var archive = new ZipArchive(output, ZipArchiveMode.Create);
+
+        for (var page = 0; page < document.PageCount; page++)
+        {
+            var bitmap = await document.RenderPageAsync(page, 2.0);
+            if (bitmap == null)
+                throw new InvalidOperationException($"Failed to render Word page {page + 1}.");
+
+            var png = await EncodeBitmapAsPngAsync(bitmap);
+            var entry = archive.CreateEntry($"page-{page + 1:000}.png", CompressionLevel.Fastest);
+            await using var entryStream = entry.Open();
+            await entryStream.WriteAsync(png);
+        }
+    }
+
+    private static async Task ExportPptPngZipAsync(PptxDocument presentation, string outputPath)
+    {
+        await using var output = File.Create(outputPath);
+        using var archive = new ZipArchive(output, ZipArchiveMode.Create);
+
+        for (var slide = 0; slide < presentation.SlideCount; slide++)
+        {
+            var bitmap = await presentation.RenderSlideAsync(slide, 2.0);
+            if (bitmap == null)
+                throw new InvalidOperationException($"Failed to render PowerPoint slide {slide + 1}.");
+
+            var png = await EncodeBitmapAsPngAsync(bitmap);
+            var entry = archive.CreateEntry($"slide-{slide + 1:000}.png", CompressionLevel.Fastest);
+            await using var entryStream = entry.Open();
+            await entryStream.WriteAsync(png);
+        }
+    }
+
+    private static async Task<byte[]> EncodeBitmapAsPngAsync(
+        Microsoft.UI.Xaml.Media.Imaging.WriteableBitmap bitmap)
+    {
+        using var stream = new InMemoryRandomAccessStream();
+        var encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, stream);
+        using var pixels = bitmap.PixelBuffer.AsStream();
+        var bytes = new byte[pixels.Length];
+        await pixels.ReadAsync(bytes, 0, bytes.Length);
+        encoder.SetPixelData(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied,
+            (uint)bitmap.PixelWidth, (uint)bitmap.PixelHeight, 96, 96, bytes);
+        await encoder.FlushAsync();
+        stream.Seek(0);
+        using var encoded = stream.AsStreamForRead();
+        using var result = new MemoryStream();
+        await encoded.CopyToAsync(result);
+        return result.ToArray();
     }
 }
