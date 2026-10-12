@@ -12,7 +12,7 @@
             <Setter Property="Width"           Value="28"/>
             <Setter Property="Height"          Value="28"/>
             <Setter Property="Padding"         Value="0"/>
-            <Setter Property="Background"      Value="#44000000"/>
+            <Setter Property="Background"      Value="{ThemeResource ControlFillColorDefaultBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="CornerRadius"    Value="14"/>
         </Style>
@@ -87,20 +87,6 @@
                                     </Rectangle>
                                 </Grid>
                             </Border>
-
-                            <!-- File type icon -->
-                            <Border Width="40" Height="40" CornerRadius="10"
-                                    Background="#28FFFFFF"
-                                    HorizontalAlignment="Left" VerticalAlignment="Top"
-                                    Margin="14,14,0,0">
-                                <FontIcon x:Name="FileTypeIcon"
-                                          FontFamily="Segoe Fluent Icons"
-                                          FontSize="22" Foreground="White"
-                                          HorizontalAlignment="Center"
-                                          VerticalAlignment="Center"/>
-                            </Border>
-
-                            <TextBlock x:Name="ExtensionText" Visibility="Collapsed"/>
 
                             <!-- Curved info panel -->
                             <Grid Height="100" VerticalAlignment="Bottom">
@@ -187,7 +173,7 @@
                 ToolTipService.ToolTip="More options">
                 <FontIcon Glyph="&#xE712;"
                           FontFamily="Segoe Fluent Icons"
-                          FontSize="14" Foreground="White"/>
+                          FontSize="14" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                 <Button.Flyout>
                     <MenuFlyout Placement="Bottom">
                         <MenuFlyoutItem Text="Open" Click="OpenMenuItem_Click">

@@ -42,6 +42,9 @@ public sealed partial class ViewerPage : Page
 
     public ObservableCollection<PageThumbnailItem> Thumbnails { get; } = new();
 
+    // ── UI-10: Resize debounce ───────────────────────────────────────────────
+    private DispatcherTimer? _resizeDebounceTimer;
+
     // ── Construction ─────────────────────────────────────────────────────────
     public ViewerPage()
     {
@@ -49,10 +52,21 @@ public sealed partial class ViewerPage : Page
 
         // Wire viewport-resize → reapply active fit mode + re-render (the
         // viewport may have grown — re-render pages.
+        // UI-10 fix: debounce to avoid render storm during drag-resize
         DocumentScrollViewer.SizeChanged += (_, _) =>
         {
-            ReapplyFitMode();
-            if (_pdfState != null) _ = RenderPagesAsync();
+            if (_resizeDebounceTimer == null)
+            {
+                _resizeDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+                _resizeDebounceTimer.Tick += (_, _) =>
+                {
+                    _resizeDebounceTimer?.Stop();
+                    ReapplyFitMode();
+                    if (_pdfState != null) _ = RenderPagesAsync();
+                };
+            }
+            _resizeDebounceTimer.Stop();
+            _resizeDebounceTimer.Start();
         };
 
         // Ctrl+Wheel zoom anchored at the cursor.
@@ -132,10 +146,13 @@ public sealed partial class ViewerPage : Page
 
     // ── Shared helpers ────────────────────────────────────────────────────────
 
+    // UI-04 fix: animate Opacity instead of toggling Visibility for smooth fade
     internal void ShowLoading(bool on)
     {
         LoadingRing.IsActive   = on;
         LoadingRing.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        LoadingOverlay.Opacity = on ? 1.0 : 0.0;
+        LoadingOverlay.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
         ViewModel.IsLoading    = on;
     }
 

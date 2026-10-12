@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
 using WinRT.Interop;
@@ -210,7 +211,8 @@ public sealed partial class TitleBarWindow : Window
 
     // ── Tab events ────────────────────────────────────────────────────────────
 
-    private void Tabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    // UI-01 fix: cross-fade between tabs instead of instant visibility swap
+    private async void Tabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (Tabs.SelectedItem is not TabViewItem selected) return;
 
@@ -233,23 +235,50 @@ public sealed partial class TitleBarWindow : Window
         // Home tab
         if (isHome)
         {
+            // Fade out current content
+            if (DocHost.Visibility == Visibility.Visible)
+            {
+                DocHost.Opacity = 0.0;
+                await Task.Delay(150); // Wait for opacity transition
+                DocHost.Visibility = Visibility.Collapsed;
+                DocHost.Content = null;
+            }
+            
+            // Fade in home
             HomeFrame.Visibility = Visibility.Visible;
-            DocHost.Visibility = Visibility.Collapsed;
-            DocHost.Content = null;
+            HomeFrame.Opacity = 1.0;
         }
         // Document tab (in _tabData)
         else if (_tabData.TryGetValue(selected, out var data))
         {
+            // Fade out home if visible
+            if (HomeFrame.Visibility == Visibility.Visible)
+            {
+                HomeFrame.Opacity = 0.0;
+                await Task.Delay(150); // Wait for opacity transition
+                HomeFrame.Visibility = Visibility.Collapsed;
+            }
+            
+            // Fade in document viewer
             DocHost.Content = data.viewer;
             DocHost.Visibility = Visibility.Visible;
-            HomeFrame.Visibility = Visibility.Collapsed;
+            DocHost.Opacity = 1.0;
         }
         // Special tabs (Settings, etc.) - stored in _specialTabs
         else if (_specialTabs.TryGetValue(selected, out var content))
         {
+            // Fade out home if visible
+            if (HomeFrame.Visibility == Visibility.Visible)
+            {
+                HomeFrame.Opacity = 0.0;
+                await Task.Delay(150); // Wait for opacity transition
+                HomeFrame.Visibility = Visibility.Collapsed;
+            }
+            
+            // Fade in special content
             DocHost.Content = content;
             DocHost.Visibility = Visibility.Visible;
-            HomeFrame.Visibility = Visibility.Collapsed;
+            DocHost.Opacity = 1.0;
         }
     }
 

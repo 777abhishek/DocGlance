@@ -13,10 +13,8 @@
         </Grid.ColumnDefinitions>
 
         <!-- Slide thumbnails sidebar -->
-        <Border Grid.Column="0"
-                Background="{ThemeResource LayerFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="0,0,1,0">
+        <Grid Grid.Column="0"
+              Background="{ThemeResource LayerFillColorDefaultBrush}">
             <ListView x:Name="ThumbnailList"
                       ItemClick="ThumbnailList_ItemClick"
                       IsItemClickEnabled="True"
@@ -36,7 +34,7 @@
                                         CornerRadius="4"
                                         BorderThickness="1"
                                         BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}"
-                                        Background="White">
+                                        Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
                                     <Image Source="{Binding Thumbnail}"
                                            Stretch="Uniform"
                                            HorizontalAlignment="Center"
@@ -52,7 +50,7 @@
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </ListView>
-        </Border>
+        </Grid>
 
         <!-- Main slide viewer -->
         <Grid Grid.Column="1">

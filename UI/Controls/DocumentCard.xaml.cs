@@ -70,11 +70,9 @@ public sealed partial class DocumentCard : UserControl
         FileNameText.Text  = string.IsNullOrWhiteSpace(doc.Title)    ? "Unnamed file" : doc.Title;
         FileSizeText.Text  = string.IsNullOrWhiteSpace(doc.FileSize) ? string.Empty   : doc.FileSize;
         ModifiedText.Text  = FormatDate(doc.LastWriteTime);
-        ExtensionText.Text = NormalizeExt(doc.FileType);
 
         var info = GetFileTypeInfo(doc.FileType);
         FileTypeDesc.Text   = info.Description;
-        FileTypeIcon.Glyph  = info.Icon;
         GradientStart.Color = info.StartColor;
         GradientEnd.Color   = info.EndColor;
 
@@ -89,7 +87,6 @@ public sealed partial class DocumentCard : UserControl
         FileTypeDesc.Text  = string.Empty;
         FileSizeText.Text  = string.Empty;
         ModifiedText.Text  = string.Empty;
-        ExtensionText.Text = string.Empty;
 
         ThumbnailImage.Source        = null;
         ThumbnailImage.Visibility    = Visibility.Collapsed;

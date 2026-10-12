@@ -83,6 +83,16 @@ public partial class App : Application
             m_window = new TitleBarWindow();
             App.AllWindows.Add((TitleBarWindow)m_window);
             m_window.Closed += (_, _) => App.AllWindows.Remove((TitleBarWindow)m_window);
+            
+            // UI-08: Apply backdrop setting from storage
+            var micaSetting = Services.Storage.SettingsStore.Load<bool?>("UseMicaBackdrop");
+            bool useMica = micaSetting ?? true;
+            if (useMica)
+            {
+                // Use DesktopAcrylic for gray appearance matching Windows 11 File Explorer
+                m_window.SystemBackdrop = new Microsoft.UI.Xaml.Media.DesktopAcrylicBackdrop();
+            }
+            
             m_window.Activate();
             Logger.Log("Window activated");
 

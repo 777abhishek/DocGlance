@@ -68,6 +68,8 @@
     <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="PDFiumCore" Version="97.0.4690" />
+    <!-- Workaround for MSIX build tools missing System.Security.Permissions in .NET 8 -->
+    <PackageReference Include="System.Security.Permissions" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>

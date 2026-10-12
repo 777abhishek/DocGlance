@@ -15,9 +15,7 @@
         <Grid 
             Grid.Row="0" 
             Height="48" 
-            Padding="16,0"
-            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-            BorderThickness="0,0,0,1">
+            Padding="16,0">
             <TextBlock 
                 Text="Pages" 
                 VerticalAlignment="Center"
@@ -73,7 +71,7 @@
                                             <FontIcon 
                                                 Glyph="&#xEA90;" 
                                                 FontSize="48"
-                                                Foreground="White"
+                                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                                 Opacity="0.3"
                                                 HorizontalAlignment="Center"
                                                 VerticalAlignment="Center" />

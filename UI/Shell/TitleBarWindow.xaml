@@ -12,7 +12,8 @@
     Title="QuickView">
 
     <Window.SystemBackdrop>
-        <MicaBackdrop/>
+        <!-- Use DesktopAcrylic for gray appearance matching Windows 11 File Explorer -->
+        <DesktopAcrylicBackdrop/>
     </Window.SystemBackdrop>
 
     <Grid x:Name="RootGrid" AllowDrop="True"
@@ -21,10 +22,15 @@
           Drop="RootGrid_Drop">
 
         <Grid.Resources>
-            <!-- Override TabView internal brushes so the strip is transparent → Mica shows through -->
-            <SolidColorBrush x:Key="TabViewBackground"                  Color="Transparent"/>
-            <SolidColorBrush x:Key="TabViewTopBorderBrush"              Color="Transparent"/>
-            <SolidColorBrush x:Key="TabViewShadowBrush"                 Color="Transparent"/>
+            <!-- Override TabView internal brushes so the strip is fully transparent → Mica shows through -->
+            <SolidColorBrush x:Key="TabViewBackground" Color="Transparent"/>
+            <SolidColorBrush x:Key="TabViewTopBorderBrush" Color="Transparent"/>
+            <SolidColorBrush x:Key="TabViewShadowBrush" Color="Transparent"/>
+            <!-- Fix dark mode: remove the black header area above tabs -->
+            <SolidColorBrush x:Key="TabViewItemHeaderBackground" Color="Transparent"/>
+            <SolidColorBrush x:Key="TabViewItemHeaderBackgroundSelected" Color="Transparent"/>
+            <SolidColorBrush x:Key="TabViewItemHeaderBackgroundPointerOver" Color="Transparent"/>
+            <SolidColorBrush x:Key="TabViewItemHeaderBackgroundPressed" Color="Transparent"/>
         </Grid.Resources>        <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>  <!-- TabView strip (= title bar) -->
             <RowDefinition Height="Auto"/>  <!-- Update notification banner -->
@@ -42,6 +48,7 @@
         <TabView
             x:Name="Tabs"
             Grid.Row="0"
+            Canvas.ZIndex="100"
             TabWidthMode="Equal"
             CloseButtonOverlayMode="Always"
             CanTearOutTabs="False"

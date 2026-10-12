@@ -210,8 +210,20 @@ public sealed partial class ViewerPage
                     {
                         Toolbar.UpdatePageInfo(_page, _total);
                         SyncToViewModel();
+                        
+                        // Update thumbnail selection and scroll into view
                         for (int t = 0; t < Thumbnails.Count; t++)
                             Thumbnails[t].IsSelected = t == captured;
+                        
+                        // Scroll thumbnail list to show current page
+                        _suppressThumbnailSync = true;
+                        if (captured >= 0 && captured < ThumbnailList.Items.Count)
+                        {
+                            ThumbnailList.SelectedIndex = captured;
+                            if (ThumbnailList.SelectedItem != null)
+                                ThumbnailList.ScrollIntoView(ThumbnailList.SelectedItem);
+                        }
+                        _suppressThumbnailSync = false;
                     });
                 }
                 break;
@@ -442,12 +454,21 @@ public sealed partial class ViewerPage
             {
                 if (!_pdfPageCache.TryGetValue(pageIndex, out var img))
                 {
+                    // UI-04: Start image transparent for fade-in
                     img = new Image
                     {
                         Stretch = Microsoft.UI.Xaml.Media.Stretch.Fill,
                         Width   = pageW,
                         Height  = pageH,
+                        Opacity = 0.0
                     };
+                    
+                    // UI-04: Add opacity transition for smooth fade-in
+                    img.OpacityTransition = new Microsoft.UI.Xaml.ScalarTransition
+                    {
+                        Duration = TimeSpan.FromMilliseconds(167)
+                    };
+                    
                     Canvas.SetLeft(img, 0);
                     Canvas.SetTop(img, pageY);
                     // Insert BEFORE SearchHighlightCanvas so highlights stay on top
@@ -459,6 +480,8 @@ public sealed partial class ViewerPage
                 }
 
                 img.Source = bitmap;
+                // UI-04: Fade in after setting source
+                img.Opacity = 1.0;
             }
         }
         catch (Exception ex)

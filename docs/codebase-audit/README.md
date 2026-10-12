@@ -18,7 +18,7 @@
 2. **[findings.md](./findings.md)** — canonical deduplicated register (all FIND-xxx IDs live here)
 3. **[codebase-overview.md](./codebase-overview.md)** — verified component map, call chains, ownership
 4. **[architecture-recommendation.md](./architecture-recommendation.md)** — target architecture and non-goals
-5. Specialist audits: [security-audit.md](./security-audit.md) · [performance-audit.md](./performance-audit.md) · [testing-strategy.md](./testing-strategy.md) · [technical-debt.md](./technical-debt.md)
+5. Specialist audits: [security-audit.md](./security-audit.md) · [performance-audit.md](./performance-audit.md) · [testing-strategy.md](./testing-strategy.md) · [technical-debt.md](./technical-debt.md) · [ui-ux-audit.md](./ui-ux-audit.md) (theme/layout/transitions/animations)
 6. Execution: [implementation-plan.md](./implementation-plan.md) → [IMPLEMENTATION-CHECKLIST.md](./IMPLEMENTATION-CHECKLIST.md) → [verification-matrix.md](./verification-matrix.md)
 7. Process: [agent-workflow.md](./agent-workflow.md) · [decision-log.md](./decision-log.md)
 8. Day-to-day: [QUICK-REFERENCE.md](./QUICK-REFERENCE.md) · [AUDIT-COMPLETE.md](./AUDIT-COMPLETE.md) (scope + gaps)

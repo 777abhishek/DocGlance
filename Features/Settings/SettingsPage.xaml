@@ -9,7 +9,8 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    mc:Ignorable="d">
+    mc:Ignorable="d"
+    Background="Transparent">
 
     <Page.Resources>
         <ResourceDictionary Source="ms-appx:///Microsoft.UI.Xaml/DensityStyles/Compact.xaml" />
@@ -50,7 +51,10 @@
                         <ComboBoxItem Content="Dark" />
                         <ComboBoxItem Content="Use system setting" IsSelected="True" />
                     </ComboBox>
-                    <ToggleSwitch Header="Enable Mica background" IsOn="True" />
+                    <ToggleSwitch x:Name="MicaToggle" 
+                                  Header="Enable Mica background" 
+                                  IsOn="True"
+                                  Toggled="MicaToggle_Toggled" />
                 </StackPanel>
             </Border>
 
@@ -64,7 +68,10 @@
                 CornerRadius="8">
                 <StackPanel Spacing="12">
                     <TextBlock FontSize="18" FontWeight="SemiBold" Text="Viewer" />
-                    <ToggleSwitch Header="Show page thumbnails" IsOn="True" />
+                    <ToggleSwitch x:Name="ThumbnailsToggle" 
+                                  Header="Show page thumbnails" 
+                                  IsOn="True"
+                                  Toggled="ThumbnailsToggle_Toggled" />
                     <Slider
                         HorizontalAlignment="Stretch"
                         Header="Default zoom level"

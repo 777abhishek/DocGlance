@@ -147,6 +147,207 @@
           </uap:FileTypeAssociation>
         </uap:Extension>
 
+        <!-- Text files -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="quickview-text">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.txt</uap:FileType>
+              <uap:FileType>.log</uap:FileType>
+              <uap:FileType>.ini</uap:FileType>
+              <uap:FileType>.cfg</uap:FileType>
+              <uap:FileType>.conf</uap:FileType>
+              <uap:FileType>.env</uap:FileType>
+              <uap:FileType>.properties</uap:FileType>
+              <uap:FileType>.gitignore</uap:FileType>
+              <uap:FileType>.editorconfig</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>Text Document</uap:DisplayName>
+            <uap:Logo>Assets\FileTypeIcons\Text.png</uap:Logo>
+            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
+        <!-- CSV/TSV files -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="quickview-csv">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.csv</uap:FileType>
+              <uap:FileType>.tsv</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>CSV File</uap:DisplayName>
+            <uap:Logo>Assets\FileTypeIcons\CSV.png</uap:Logo>
+            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
+        <!-- Markdown files -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="quickview-markdown">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.md</uap:FileType>
+              <uap:FileType>.markdown</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>Markdown Document</uap:DisplayName>
+            <uap:Logo>Assets\FileTypeIcons\Markdown.png</uap:Logo>
+            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
+        <!-- Rich Text files -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="quickview-rtf">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.rtf</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>Rich Text Document</uap:DisplayName>
+            <uap:Logo>Assets\FileTypeIcons\RichText.png</uap:Logo>
+            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
+        <!-- Code files - C# and .NET -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="quickview-code-csharp">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.cs</uap:FileType>
+              <uap:FileType>.vb</uap:FileType>
+              <uap:FileType>.fs</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>Code File</uap:DisplayName>
+            <uap:Logo>Assets\FileTypeIcons\Code.png</uap:Logo>
+            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
+        <!-- Code files - JavaScript/TypeScript -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="quickview-code-js">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.js</uap:FileType>
+              <uap:FileType>.mjs</uap:FileType>
+              <uap:FileType>.ts</uap:FileType>
+              <uap:FileType>.tsx</uap:FileType>
+              <uap:FileType>.jsx</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>JavaScript/TypeScript Code</uap:DisplayName>
+            <uap:Logo>Assets\FileTypeIcons\Code.png</uap:Logo>
+            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
+        <!-- Code files - Python -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="quickview-code-python">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.py</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>Python Code</uap:DisplayName>
+            <uap:Logo>Assets\FileTypeIcons\Code.png</uap:Logo>
+            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
+        <!-- Code files - Other languages -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="quickview-code-other">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.java</uap:FileType>
+              <uap:FileType>.kt</uap:FileType>
+              <uap:FileType>.cpp</uap:FileType>
+              <uap:FileType>.c</uap:FileType>
+              <uap:FileType>.h</uap:FileType>
+              <uap:FileType>.go</uap:FileType>
+              <uap:FileType>.rs</uap:FileType>
+              <uap:FileType>.swift</uap:FileType>
+              <uap:FileType>.rb</uap:FileType>
+              <uap:FileType>.php</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>Code File</uap:DisplayName>
+            <uap:Logo>Assets\FileTypeIcons\Code.png</uap:Logo>
+            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
+        <!-- Script files -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="quickview-scripts">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.sh</uap:FileType>
+              <uap:FileType>.ps1</uap:FileType>
+              <uap:FileType>.bat</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>Script File</uap:DisplayName>
+            <uap:Logo>Assets\FileTypeIcons\Code.png</uap:Logo>
+            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
+        <!-- Web files - HTML/CSS -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="quickview-web">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.html</uap:FileType>
+              <uap:FileType>.htm</uap:FileType>
+              <uap:FileType>.css</uap:FileType>
+              <uap:FileType>.scss</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>Web File</uap:DisplayName>
+            <uap:Logo>Assets\FileTypeIcons\Code.png</uap:Logo>
+            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
+        <!-- JSON files -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="quickview-json">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.json</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>JSON File</uap:DisplayName>
+            <uap:Logo>Assets\FileTypeIcons\JSON.png</uap:Logo>
+            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
+        <!-- XML files -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="quickview-xml">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.xml</uap:FileType>
+              <uap:FileType>.xaml</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>XML File</uap:DisplayName>
+            <uap:Logo>Assets\FileTypeIcons\XML.png</uap:Logo>
+            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
+        <!-- YAML/TOML files -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="quickview-config">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.yaml</uap:FileType>
+              <uap:FileType>.yml</uap:FileType>
+              <uap:FileType>.toml</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>Configuration File</uap:DisplayName>
+            <uap:Logo>Assets\FileTypeIcons\Text.png</uap:Logo>
+            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
+        <!-- SQL files -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="quickview-sql">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.sql</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>SQL File</uap:DisplayName>
+            <uap:Logo>Assets\FileTypeIcons\Code.png</uap:Logo>
+            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
       </Extensions>
     </Application>
   </Applications>

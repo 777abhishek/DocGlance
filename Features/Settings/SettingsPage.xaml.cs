@@ -1,6 +1,9 @@
 ﻿using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Composition.SystemBackdrops;
 using QuickView.Services.Registration;
+using QuickView.Services.Storage;
 using System;
 using System.Linq;
 using System.Reflection;
@@ -35,6 +38,9 @@ public sealed partial class SettingsPage : Page
             AppRegistration.SupportedExtensions
                 .OrderBy(x => x)
                 .Select(x => x));
+        
+        // UI-08: Load saved settings
+        LoadSettings();
 
 #if PACKAGED
         // In packaged builds, hide the manual registration UI entirely.
@@ -45,6 +51,41 @@ public sealed partial class SettingsPage : Page
 #else
         RefreshAssocStatus();
 #endif
+    }
+    
+    // ── UI-08: Settings persistence ───────────────────────────────────────────
+    
+    private void LoadSettings()
+    {
+        MicaToggle.IsOn = SettingsStore.Load<bool?>("UseMicaBackdrop") ?? true;
+        ThumbnailsToggle.IsOn = SettingsStore.Load<bool?>("ShowThumbnails") ?? true;
+    }
+    
+    private void MicaToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        bool useMica = MicaToggle.IsOn;
+        SettingsStore.Save("UseMicaBackdrop", useMica);
+        
+        // Update the window backdrop - need to find the TitleBarWindow
+        var window = Microsoft.UI.Xaml.Window.Current as UI.Shell.TitleBarWindow;
+        if (window != null)
+        {
+            if (useMica)
+            {
+                // Use DesktopAcrylic for gray appearance matching Windows 11 File Explorer
+                window.SystemBackdrop = new DesktopAcrylicBackdrop();
+            }
+            else
+            {
+                window.SystemBackdrop = null;
+            }
+        }
+    }
+    
+    private void ThumbnailsToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        bool showThumbnails = ThumbnailsToggle.IsOn;
+        SettingsStore.Save("ShowThumbnails", showThumbnails);
     }
 
     // ── Status display ────────────────────────────────────────────────────────
