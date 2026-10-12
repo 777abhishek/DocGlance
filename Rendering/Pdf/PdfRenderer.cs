@@ -31,6 +31,10 @@ public static class PdfRenderer
     public const float ScreenDpi    = 96f;
     public const float ThumbnailDpi = 96f;
     
+    // Maximum bytes for a single rendered page bitmap (100 MB)
+    // Prevents OOM from integer overflow or excessive dimensions
+    private const long MaxPixelByteSize = 100_000_000L;
+    
     /// <summary>
     /// Calculate render DPI based on zoom factor.
     /// Returns screen DPI × zoom (e.g., 96 at 1.0x, 144 at 1.5x, 192 at 2.0x)

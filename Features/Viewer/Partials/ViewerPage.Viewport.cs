@@ -35,6 +35,13 @@ public sealed partial class ViewerPage
 
     // Per-page Image controls on the canvas
     private readonly Dictionary<int, Image> _pdfPageCache = new();
+    // Per-page text selection overlays
+    private readonly Dictionary<int, UI.Controls.PdfTextSelectionOverlay> _pdfPageSelectionOverlays = new();
+    // FEAT-004: Memory budget tracking
+    private long _cachedBitmapBytes = 0L;
+    private readonly Dictionary<int, long> _pdfPageByteSize = new();
+    private const long MaxCacheBudgetBytes = 200_000_000L; // 200 MB budget
+    
     private CancellationTokenSource? _renderCts;
     private float _lastRenderZoom = -1f;
 
@@ -98,6 +105,17 @@ public sealed partial class ViewerPage
         }
         _pdfPageCache.Clear();
 
+        // Clear selection overlays
+        foreach (var overlay in _pdfPageSelectionOverlays.Values)
+        {
+            PdfViewportCanvas.Children.Remove(overlay);
+        }
+        _pdfPageSelectionOverlays.Clear();
+
+        // FEAT-004: Reset memory budget tracking
+        _cachedBitmapBytes = 0L;
+        _pdfPageByteSize.Clear();
+
         // Keep ViewportImage (hide it — not used for PDF page cache)
         ViewportImage.Source = null;
         ViewportImage.Visibility = Visibility.Collapsed;
@@ -158,23 +176,35 @@ public sealed partial class ViewerPage
 
             UpdateCurrentPageFromScroll();
 
-            // Improvement 3: Only trigger a cache-clearing re-render once zoom settles
-            // (!IsIntermediate). During pinch/wheel intermediate frames we still render
-            // new pages that scrolled into view, but we never clear the existing cache
-            // mid-gesture — this prevents the blank-page flicker during zoom.
-            bool zoomSettled = !e.IsIntermediate &&
-                Math.Abs(zoom - _lastRenderZoom) > _lastRenderZoom * 0.15f;
+            // BUGFIX: On zoom change, invalidate cached pages so they re-render at new DPI
+            // But don't clear them immediately - let old ones show until new ones are ready
+            bool zoomChanged = Math.Abs(zoom - _lastRenderZoom) > _lastRenderZoom * 0.15f;
 
-            if (zoomSettled)
+            if (!e.IsIntermediate)
             {
-                ClearPdfPageCache();
-                _lastRenderZoom = zoom;
-            }
-
-            // Throttle rendering during scroll to prevent UI freeze
-            // Only render on final scroll position (!IsIntermediate) or zoom changes
-            if (!e.IsIntermediate || zoomSettled)
-            {
+                if (zoomChanged)
+                {
+                    _lastRenderZoom = zoom;
+                    
+                    // Mark all cached pages as needing re-render by clearing cache tracking
+                    // but leave the images visible on canvas until new renders replace them
+                    var cachedPages = _pdfPageCache.Keys.ToList();
+                    foreach (var pageIndex in cachedPages)
+                    {
+                        // Remove from cache tracking so RenderPagesAsync will re-render
+                        _pdfPageCache.Remove(pageIndex);
+                        if (_pdfPageByteSize.TryGetValue(pageIndex, out long byteSize))
+                        {
+                            _cachedBitmapBytes -= byteSize;
+                            _pdfPageByteSize.Remove(pageIndex);
+                        }
+                        // Note: Images stay on canvas and visible until replaced
+                    }
+                    
+                    Infrastructure.Logging.Logger.Log($"[Viewport] Zoom changed to {zoom:F2}, invalidated {cachedPages.Count} cached pages for re-render");
+                }
+                
+                // Render visible pages at current zoom
                 _ = RenderPagesAsync();
             }
         }
@@ -253,10 +283,11 @@ public sealed partial class ViewerPage
 
             Infrastructure.Logging.Logger.Log($"[Render] zoom={zoom:F2}, scrollY={scrollY:F0}, vpH={vpH:F0}, display={display:F2}");
 
-            // Cap render DPI to avoid massive memory usage / OOM at high zoom on 4K displays
-            // Max 192 DPI gives crisp text up to 200% scaling while capping memory usage per page
-            const float MaxDpi = 192.0f;
-            float dpi = Math.Min(MaxDpi, (float)(96.0 * display * Math.Min(zoom, 2.0f)));
+            // Calculate render DPI from zoom × display scale (no artificial cap)
+            // Byte-size guards in RenderSinglePageAsync prevent OOM
+            float dpi = (float)(96.0 * display * zoom);
+            
+            Infrastructure.Logging.Logger.Log($"[Render] Calculated DPI: {dpi:F1} (zoom={zoom:F2} × display={display:F2})");
 
             // Strictly visible pages (no buffer) — highest priority
             var strictVisible = GetVisiblePageRange(scrollY, vpH, 0);
@@ -268,12 +299,13 @@ public sealed partial class ViewerPage
 
             Infrastructure.Logging.Logger.Log($"[Render] Visible range: {strictVisible.First}-{strictVisible.Last}, with buffer: {firstVisible}-{lastVisible}");
 
-            // Evict pages far from viewport
+            // FEAT-004: Byte-based eviction - evict pages far from viewport first
             var toEvict = _pdfPageCache.Keys
                 .Where(k => k < firstVisible - bufferPages || k > lastVisible + bufferPages)
+                .OrderByDescending(k => Math.Min(Math.Abs(k - firstVisible), Math.Abs(k - lastVisible))) // Farthest first
                 .ToList();
                 
-            Infrastructure.Logging.Logger.Log($"[Render] Evicting {toEvict.Count} pages");
+            Infrastructure.Logging.Logger.Log($"[Render] Evicting {toEvict.Count} pages outside buffer");
             
             foreach (int k in toEvict)
             {
@@ -282,11 +314,25 @@ public sealed partial class ViewerPage
                     PdfViewportCanvas.Children.Remove(old);
                     old.Source = null;
                     _pdfPageCache.Remove(k);
+                    
+                    // FEAT-004: Decrement byte count
+                    if (_pdfPageByteSize.TryGetValue(k, out long byteSize))
+                    {
+                        _cachedBitmapBytes -= byteSize;
+                        _pdfPageByteSize.Remove(k);
+                        Infrastructure.Logging.Logger.Log($"[Cache] Evicted page {k}, freed {byteSize / 1024}KB, new total: {_cachedBitmapBytes / 1024}KB");
+                    }
+                }
+                
+                // Also evict selection overlay
+                if (_pdfPageSelectionOverlays.TryGetValue(k, out var overlay))
+                {
+                    PdfViewportCanvas.Children.Remove(overlay);
+                    _pdfPageSelectionOverlays.Remove(k);
                 }
             }
 
-            // Improvement 5: Render priority — strictly visible pages first (sequential
-            // for smoothest first-paint), then buffer pages concurrently in background.
+            // FEAT-004: Check if we're over budget and need to evict more offscreen pages
             var visibleToRender = Enumerable
                 .Range(strictVisible.First, strictVisible.Last - strictVisible.First + 1)
                 .Where(i => !_pdfPageCache.ContainsKey(i))
@@ -296,6 +342,46 @@ public sealed partial class ViewerPage
                 .Range(firstVisible, lastVisible - firstVisible + 1)
                 .Where(i => !_pdfPageCache.ContainsKey(i) && !visibleToRender.Contains(i))
                 .ToList();
+
+            // FEAT-004: Estimate bytes needed for new pages (conservative estimate)
+            long estimatedNewBytes = (visibleToRender.Count + bufferToRender.Count) * 8_000_000L; // ~8MB per page estimate
+            
+            if (_cachedBitmapBytes + estimatedNewBytes > MaxCacheBudgetBytes)
+            {
+                Infrastructure.Logging.Logger.Log($"[Cache] Over budget: {_cachedBitmapBytes / 1024}KB + {estimatedNewBytes / 1024}KB > {MaxCacheBudgetBytes / 1024}KB, evicting offscreen pages");
+                
+                // Evict offscreen pages farthest from viewport until under budget
+                var offscreenPages = _pdfPageCache.Keys
+                    .Where(k => (k < strictVisible.First || k > strictVisible.Last))
+                    .OrderByDescending(k => Math.Min(Math.Abs(k - strictVisible.First), Math.Abs(k - strictVisible.Last)))
+                    .ToList();
+                
+                foreach (int k in offscreenPages)
+                {
+                    if (_cachedBitmapBytes + estimatedNewBytes <= MaxCacheBudgetBytes)
+                        break;
+                    
+                    if (_pdfPageCache.TryGetValue(k, out var old))
+                    {
+                        PdfViewportCanvas.Children.Remove(old);
+                        old.Source = null;
+                        _pdfPageCache.Remove(k);
+                        
+                        if (_pdfPageByteSize.TryGetValue(k, out long byteSize))
+                        {
+                            _cachedBitmapBytes -= byteSize;
+                            _pdfPageByteSize.Remove(k);
+                            Infrastructure.Logging.Logger.Log($"[Cache] Budget evicted page {k}, freed {byteSize / 1024}KB, new total: {_cachedBitmapBytes / 1024}KB");
+                        }
+                    }
+                    
+                    if (_pdfPageSelectionOverlays.TryGetValue(k, out var overlay))
+                    {
+                        PdfViewportCanvas.Children.Remove(overlay);
+                        _pdfPageSelectionOverlays.Remove(k);
+                    }
+                }
+            }
 
             Infrastructure.Logging.Logger.Log($"[Render] Rendering {visibleToRender.Count} visible pages, {bufferToRender.Count} buffer pages");
 
@@ -346,9 +432,12 @@ public sealed partial class ViewerPage
     private async Task RenderSinglePageAsync(
         PdfDocumentState pdfState, int pageIndex, float dpi, double display, CancellationToken ct)
     {
+        // Snapshot generation at the start to detect stale renders
+        int snapshotGeneration = pdfState.Generation;
+        
         try
         {
-            Infrastructure.Logging.Logger.Log($"[RenderSingle] Starting page {pageIndex}");
+            Infrastructure.Logging.Logger.Log($"[RenderSingle] Starting page {pageIndex}, gen={snapshotGeneration}");
             
             if (ct.IsCancellationRequested)
             {
@@ -366,13 +455,20 @@ public sealed partial class ViewerPage
             int renderW = Math.Max(1, (int)Math.Round(ptW * dpi / 72.0));
             int renderH = Math.Max(1, (int)Math.Round(ptH * dpi / 72.0));
 
-            // Hard cap on pixel dimensions to guarantee no OOM (max ~2600 px = ~25 MB max buffer)
-            const int MaxPixelDimension = 2600;
-            if (renderW > MaxPixelDimension || renderH > MaxPixelDimension)
+            // Validate byte count to prevent integer overflow and OOM
+            long byteCount = (long)renderW * renderH * 4;
+            const long MaxSafeBytesPerPage = 100_000_000L; // 100 MB safety limit per page
+            
+            if (byteCount > MaxSafeBytesPerPage)
             {
-                double scale = (double)MaxPixelDimension / Math.Max(renderW, renderH);
-                renderW = Math.Max(1, (int)(renderW * scale));
-                renderH = Math.Max(1, (int)(renderH * scale));
+                // Scale down proportionally to fit within budget
+                double scaleFactor = Math.Sqrt((double)MaxSafeBytesPerPage / byteCount);
+                int origW = renderW;
+                int origH = renderH;
+                renderW = Math.Max(1, (int)(renderW * scaleFactor));
+                renderH = Math.Max(1, (int)(renderH * scaleFactor));
+                byteCount = (long)renderW * renderH * 4;
+                Infrastructure.Logging.Logger.Log($"[RenderSingle] Page {pageIndex}: Scaled down to {renderW}x{renderH} (from {origW}x{origH}, {byteCount / 1024 / 1024}MB) to fit budget");
             }
 
             int rot = ((int)Math.Round(_rotation) % 360 + 360) % 360;
@@ -393,16 +489,39 @@ public sealed partial class ViewerPage
                 return;
             }
 
+            // Check if document generation is still current (not closed/replaced)
+            if (_pdfState == null || _pdfState.Generation != snapshotGeneration)
+            {
+                Infrastructure.Logging.Logger.Log($"[RenderSingle] Stale generation for page {pageIndex} - discarding result");
+                ArrayPool<byte>.Shared.Return(pixelBuffer);
+                return;
+            }
+
             // WriteableBitmap must be created on the UI thread — dispatch if we're on a background thread
             Infrastructure.Logging.Logger.Log($"[RenderSingle] Creating bitmap from buffer - page {pageIndex}");
-            var bitmap = await CreateBitmapFromBufferAsync(pixelBuffer, renderW, renderH);
-            ArrayPool<byte>.Shared.Return(pixelBuffer);
+            WriteableBitmap? bitmap = null;
+            try
+            {
+                bitmap = await CreateBitmapFromBufferAsync(pixelBuffer, renderW, renderH);
+            }
+            finally
+            {
+                // PDF-08 fix: Always return buffer even if bitmap creation throws
+                ArrayPool<byte>.Shared.Return(pixelBuffer);
+            }
 
             Infrastructure.Logging.Logger.Log($"[RenderSingle] Bitmap created, returned buffer - page {pageIndex}");
 
             if (bitmap == null || ct.IsCancellationRequested)
             {
                 Infrastructure.Logging.Logger.Log($"[RenderSingle] Null bitmap or cancelled - page {pageIndex}");
+                return;
+            }
+
+            // Final generation check before publishing to UI
+            if (_pdfState == null || _pdfState.Generation != snapshotGeneration)
+            {
+                Infrastructure.Logging.Logger.Log($"[RenderSingle] Stale generation at UI publish for page {pageIndex} - discarding");
                 return;
             }
 
@@ -437,9 +556,12 @@ public sealed partial class ViewerPage
 
             void CreateImageOnUI()
             {
-                if (!_pdfPageCache.TryGetValue(pageIndex, out var img))
+                // Check if image already exists
+                bool imageExists = _pdfPageCache.TryGetValue(pageIndex, out var img);
+                
+                if (!imageExists)
                 {
-                    // UI-04: Start image transparent for fade-in
+                    // Create new image
                     img = new Image
                     {
                         Stretch = Microsoft.UI.Xaml.Media.Stretch.Fill,
@@ -448,7 +570,6 @@ public sealed partial class ViewerPage
                         Opacity = 0.0
                     };
                     
-                    // UI-04: Add opacity transition for smooth fade-in
                     img.OpacityTransition = new Microsoft.UI.Xaml.ScalarTransition
                     {
                         Duration = TimeSpan.FromMilliseconds(167)
@@ -456,17 +577,84 @@ public sealed partial class ViewerPage
                     
                     Canvas.SetLeft(img, 0);
                     Canvas.SetTop(img, pageY);
-                    // Insert BEFORE SearchHighlightCanvas so highlights stay on top
+                    
                     int insertAt = Math.Max(0, PdfViewportCanvas.Children.Count - 1);
                     if (SearchHighlightCanvas != null)
                         insertAt = Math.Max(0, PdfViewportCanvas.Children.IndexOf(SearchHighlightCanvas));
                     PdfViewportCanvas.Children.Insert(insertAt, img);
                     _pdfPageCache[pageIndex] = img;
                 }
+                else
+                {
+                    // Update existing image with new size and position for zoom
+                    img.Width = pageW;
+                    img.Height = pageH;
+                    Canvas.SetTop(img, pageY);
+                }
 
+                // Set new bitmap source (replaces old low-res with new high-res)
                 img.Source = bitmap;
-                // UI-04: Fade in after setting source
                 img.Opacity = 1.0;
+
+                // FEAT-004: Track bitmap byte size
+                long byteSize = (long)renderW * renderH * 4;
+                if (!_pdfPageByteSize.ContainsKey(pageIndex))
+                {
+                    _pdfPageByteSize[pageIndex] = byteSize;
+                    _cachedBitmapBytes += byteSize;
+                    Infrastructure.Logging.Logger.Log($"[Cache] Page {pageIndex} cached: {byteSize / 1024}KB, total: {_cachedBitmapBytes / 1024}KB / {MaxCacheBudgetBytes / 1024}KB");
+                }
+                else
+                {
+                    // Update byte count when replacing with different resolution
+                    long oldSize = _pdfPageByteSize[pageIndex];
+                    _cachedBitmapBytes = _cachedBitmapBytes - oldSize + byteSize;
+                    _pdfPageByteSize[pageIndex] = byteSize;
+                    Infrastructure.Logging.Logger.Log($"[Cache] Page {pageIndex} re-rendered: {byteSize / 1024}KB (was {oldSize / 1024}KB), total: {_cachedBitmapBytes / 1024}KB");
+                }
+
+                // FEAT-002: Text selection overlay - DISABLED until drag system is fixed
+                // TODO: Current overlay stops after 1 word, needs proper multi-word drag support
+                // Will need to investigate:
+                // - Character box coordinates at different zoom levels
+                // - Pointer event capture across scroll operations
+                // - Selection painting across zoom changes
+                /*
+                if (!_pdfPageSelectionOverlays.TryGetValue(pageIndex, out var selectionOverlay))
+                {
+                    selectionOverlay = new UI.Controls.PdfTextSelectionOverlay
+                    {
+                        Width  = pageW,
+                        Height = pageH,
+                    };
+                    
+                    Canvas.SetLeft(selectionOverlay, 0);
+                    Canvas.SetTop(selectionOverlay, pageY);
+                    Canvas.SetZIndex(selectionOverlay, 100);
+                    
+                    int selectionInsertAt = PdfViewportCanvas.Children.IndexOf(img) + 1;
+                    if (SearchHighlightCanvas != null)
+                    {
+                        int highlightIndex = PdfViewportCanvas.Children.IndexOf(SearchHighlightCanvas);
+                        if (highlightIndex > 0)
+                            selectionInsertAt = Math.Min(selectionInsertAt, highlightIndex);
+                    }
+                    PdfViewportCanvas.Children.Insert(selectionInsertAt, selectionOverlay);
+                    _pdfPageSelectionOverlays[pageIndex] = selectionOverlay;
+                    
+                    selectionOverlay.SetPage(_pdfState, pageIndex, pageW, pageH);
+                    Infrastructure.Logging.Logger.Log($"[RenderSingle] Created selection overlay for page {pageIndex}");
+                }
+                else
+                {
+                    // Update overlay size and position for zoom
+                    selectionOverlay.Width = pageW;
+                    selectionOverlay.Height = pageH;
+                    Canvas.SetTop(selectionOverlay, pageY);
+                    // Refresh character boxes at new zoom
+                    selectionOverlay.SetPage(_pdfState, pageIndex, pageW, pageH);
+                }
+                */
             }
         }
         catch (Exception ex)

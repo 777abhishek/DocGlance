@@ -17,13 +17,14 @@ public static class PdfTextService
     public static async Task<IReadOnlyList<PdfSearchResult>> SearchAsync(
         PdfDocumentState state, string query,
         bool caseSensitive = false,
+        int rotationDegrees = 0,
         CancellationToken cancellationToken = default)
     {
         if (state == null || string.IsNullOrWhiteSpace(query))
             return Array.Empty<PdfSearchResult>();
 
         return await Task.Run(
-            () => SearchCore(state, query, caseSensitive, cancellationToken),
+            () => SearchCore(state, query, caseSensitive, rotationDegrees, cancellationToken),
             cancellationToken);
     }
 
@@ -106,10 +107,13 @@ public static class PdfTextService
     }
 
     private static IReadOnlyList<PdfSearchResult> SearchCore(
-        PdfDocumentState state, string query, bool caseSensitive, CancellationToken ct)
+        PdfDocumentState state, string query, bool caseSensitive, int rotationDegrees, CancellationToken ct)
     {
         var results = new List<PdfSearchResult>();
         Pdfium.EnsureInitialized();
+
+        // FEAT-003: Convert rotation degrees to PDFium rotation parameter (0, 1, 2, 3)
+        int rotateParam = (rotationDegrees / 90) % 4;
 
         lock (Pdfium.Gate)
         {
@@ -148,7 +152,8 @@ public static class PdfTextService
 
                                 int charIndex = Pdfium.FPDFText_GetSchResultIndex(search);
                                 int length    = Pdfium.FPDFText_GetSchCount(search);
-                                var rects = CollectRangeRects(textPage, page, pageW, pageH, charIndex, length);
+                                // FEAT-003: Pass rotation parameter to coordinate transform
+                                var rects = CollectRangeRects(textPage, page, pageW, pageH, charIndex, length, rotateParam);
                                 if (rects.Count > 0)
                                     results.Add(new PdfSearchResult(pageIndex, charIndex, length, rects));
                             }
@@ -219,7 +224,7 @@ public static class PdfTextService
 
     private static List<PdfSearchRect> CollectRangeRects(
         IntPtr textPage, IntPtr page, int pageW, int pageH,
-        int start, int count)
+        int start, int count, int rotateParam = 0)
     {
         var rects = new List<PdfSearchRect>();
         if (count <= 0) return rects;
@@ -229,8 +234,9 @@ public static class PdfTextService
         {
             Pdfium.FPDFText_GetRect(textPage, i, out double pLeft, out double pTop, out double pRight, out double pBottom);
 
-            Pdfium.FPDF_PageToDevice(page, 0, 0, pageW, pageH, 0, pLeft,  pTop,    out int x1, out int y1);
-            Pdfium.FPDF_PageToDevice(page, 0, 0, pageW, pageH, 0, pRight, pBottom, out int x2, out int y2);
+            // FEAT-003: Pass rotation parameter to FPDF_PageToDevice for correct coordinate transform
+            Pdfium.FPDF_PageToDevice(page, 0, 0, pageW, pageH, rotateParam, pLeft,  pTop,    out int x1, out int y1);
+            Pdfium.FPDF_PageToDevice(page, 0, 0, pageW, pageH, rotateParam, pRight, pBottom, out int x2, out int y2);
 
             double x = Math.Min(x1, x2);
             double y = Math.Min(y1, y2);

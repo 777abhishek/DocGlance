@@ -64,10 +64,23 @@ public sealed class PdfDocumentState : IDisposable
         return (612, 792);
     }
 
+    /// <summary>
+    /// Increments the generation counter to invalidate in-flight render operations.
+    /// Called on document close to reject stale results.
+    /// </summary>
+    public void IncrementGeneration()
+    {
+        System.Threading.Interlocked.Increment(ref _generation);
+        Infrastructure.Logging.Logger.Log($"[PdfDocumentState] Generation incremented to {_generation}");
+    }
+
     public void Dispose()
     {
         var tid = Environment.CurrentManagedThreadId;
         Infrastructure.Logging.Logger.Log($"[PdfDocumentState] T{tid} Dispose called: gen={_generation}, disposed={_disposed}");
+        
+        // Increment generation to invalidate any in-flight renders
+        IncrementGeneration();
         
         lock (Pdfium.Gate)
         {

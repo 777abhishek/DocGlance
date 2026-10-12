@@ -38,3 +38,4 @@ native/deckcraft_ffi/target
 native/wordcraft_ffi/target
 native/gridcraft_ffi/target
 .agents
+docs

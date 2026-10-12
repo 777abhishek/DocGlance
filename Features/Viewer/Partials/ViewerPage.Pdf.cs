@@ -208,8 +208,8 @@ public sealed partial class ViewerPage
 
             Infrastructure.Logging.Logger.Log("[PDF] Starting thumbnail prefetch");
             
-            // Background thumbnail rendering
-            _ = PrefetchThumbnailsAroundAsync(0, _pdfState, ct);
+            // BUGFIX: Render all thumbnails, not just first 5 pages
+            _ = PrefetchAllThumbnailsAsync(_pdfState, ct);
             
             Infrastructure.Logging.Logger.Log("[PDF] LoadPdfAsync completed successfully");
         }
@@ -263,6 +263,18 @@ public sealed partial class ViewerPage
     }
 
     // ── Thumbnail Rendering ───────────────────────────────────────────────────
+
+    private async Task PrefetchAllThumbnailsAsync(PdfDocumentState pdfState, CancellationToken ct)
+    {
+        if (SidebarCard.Visibility != Visibility.Visible) return;
+        
+        // Render all thumbnails in order
+        for (int pageIndex = 0; pageIndex < pdfState.PageCount; pageIndex++)
+        {
+            if (ct.IsCancellationRequested) return;
+            await RenderThumbnailAsync(pdfState, pageIndex, ct);
+        }
+    }
 
     private async Task PrefetchThumbnailsAroundAsync(
         int centerPage, PdfDocumentState pdfState, CancellationToken ct)

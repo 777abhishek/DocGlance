@@ -133,7 +133,10 @@ public sealed partial class ViewerPage
             }
 
             if (_pdfState == null) { SetSearchLoading(false); return; }
-            var results = await PdfTextService.SearchAsync(_pdfState, query, caseSensitive, ct);
+            
+            // FEAT-003: Pass rotation to search so rectangles are in correct coordinate space
+            int rotationDegrees = ((int)Math.Round(_rotation) % 360 + 360) % 360;
+            var results = await PdfTextService.SearchAsync(_pdfState, query, caseSensitive, rotationDegrees, ct);
             if (ct.IsCancellationRequested) return;
 
             _searchResults     = results;
@@ -189,9 +192,7 @@ public sealed partial class ViewerPage
 
         SearchHighlightCanvas.Children.Clear();
 
-        // Rects are in unrotated page space — skip rather than draw misplaced.
-        if (_rotation != 0) return;
-
+        // FEAT-003: Removed early return for rotation - highlights now work at any rotation
         var visiblePages = _viewportState.GetVisiblePages(_pdfState);
 
         for (int resultIndex = 0; resultIndex < _searchResults.Count; resultIndex++)
