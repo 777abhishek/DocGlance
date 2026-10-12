@@ -12,6 +12,7 @@
 
 use std::panic;
 use std::slice;
+use std::fmt::Write as FmtWrite;
 
 use wordcraft_doc::props::Rgb;
 use wordcraft_doc::{Document, Pos, StoryRef};
@@ -246,8 +247,8 @@ pub extern "C" fn wc_extract_page_text(
 }
 
 /// Search for `query` text across all pages.
-/// Returns a semicolon-separated list of matches: "pageIndex,minX,minY,width,height;..."
-/// Write results to `buf` (UTF-8). Returns bytes written.
+/// Returns semicolon-separated rectangles: "matchIndex,pageIndex,x,y,width,height;..."
+/// Write results to `buf` (UTF-8). Returns bytes written, or required capacity if too small.
 #[no_mangle]
 pub extern "C" fn wc_search_text(
     doc: *const WcDocument,
@@ -285,7 +286,8 @@ pub extern "C" fn wc_search_text(
             Err(_) => return 0,
         };
 
-        let mut results = Vec::new();
+        let mut results = String::new();
+        let mut match_index = 0usize;
 
         // Search body story paragraphs
         for path in doc.doc.para_paths(StoryRef::Body) {
@@ -332,40 +334,80 @@ pub extern "C" fn wc_search_text(
                     // Compute highlight rects per page
                     let rects = doc.layout.selection_rects(&doc.doc, &a_pos, &b_pos, 0);
 
+                    let mut match_rects = Vec::new();
                     for (page_idx, r) in rects {
                         let w = (r.w as f64).max(4.0);
                         let h = (r.h as f64).max(4.0);
-                        results.push(format!(
-                            "{},{:.2},{:.2},{:.2},{:.2}",
-                            page_idx, r.x, r.y, w, h
-                        ));
+                        match_rects.push((page_idx, r.x, r.y, w, h));
                     }
 
-                    if results.len() >= 20_000 {
+                    if !match_rects.is_empty() {
+                        for (page_idx, x, y, width, height) in match_rects {
+                            let _ = write!(
+                                results,
+                                "{},{},{:.2},{:.2},{:.2},{:.2};",
+                                match_index, page_idx, x, y, width, height
+                            );
+                        }
+                        match_index += 1;
+                    }
+
+                    if match_index >= 20_000 {
                         break;
                     }
                 }
-                if results.len() >= 20_000 {
+                if match_index >= 20_000 {
                     break;
                 }
             }
-            if results.len() >= 20_000 {
+            if match_index >= 20_000 {
                 break;
             }
         }
 
-        let result_str = results.join(";");
-        let bytes = result_str.as_bytes();
-        let copy = bytes.len().min(buf_len);
-        if copy == 0 {
-            return 0;
-        }
-
-        unsafe {
-            std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf, copy);
-        }
-        copy
+        copy_result_bytes(results.as_bytes(), buf, buf_len)
     })
+}
+
+fn copy_result_bytes(bytes: &[u8], buf: *mut u8, buf_len: usize) -> usize {
+    if bytes.len() > buf_len {
+        return bytes.len();
+    }
+    if bytes.is_empty() {
+        return 0;
+    }
+
+    unsafe {
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf, bytes.len());
+    }
+    bytes.len()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::copy_result_bytes;
+
+    #[test]
+    fn reports_required_capacity_without_writing_partial_utf8() {
+        let bytes = "résultat".as_bytes();
+        let mut output = [0xAA; 3];
+
+        let required = copy_result_bytes(bytes, output.as_mut_ptr(), output.len());
+
+        assert_eq!(required, bytes.len());
+        assert_eq!(output, [0xAA; 3]);
+    }
+
+    #[test]
+    fn writes_complete_search_result_when_capacity_is_sufficient() {
+        let bytes = b"0,2,10.00,20.00,30.00,8.00;";
+        let mut output = [0; 64];
+
+        let written = copy_result_bytes(bytes, output.as_mut_ptr(), output.len());
+
+        assert_eq!(written, bytes.len());
+        assert_eq!(&output[..written], bytes);
+    }
 }
 
 /// Free a WcImage pixel buffer.

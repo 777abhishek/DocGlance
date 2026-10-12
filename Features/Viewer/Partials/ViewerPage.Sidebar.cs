@@ -49,6 +49,17 @@ public sealed partial class ViewerPage
             return;
         }
 
+        if (_docxDocument != null)
+        {
+            double docxOffsetLp = GetDocxPageTopLp(pageNumber - 1);
+            DocumentScrollViewer.ChangeView(
+                null,
+                docxOffsetLp * DocumentScrollViewer.ZoomFactor,
+                null,
+                disableAnimation: false);
+            return;
+        }
+
         // PDF: scroll to page
         if (_pdfState == null) return;
         

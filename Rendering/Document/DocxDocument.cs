@@ -1,11 +1,14 @@
 using Microsoft.UI.Xaml.Media.Imaging;
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Globalization;
 
 namespace QuickView.Rendering.Document;
 
@@ -17,6 +20,7 @@ public sealed class DocxDocument : IDisposable
 {
     private WordCraftNative.WcDocumentHandle _handle;
     private readonly SemaphoreSlim _renderLock = new(1, 1);
+    private readonly object _nativeGate = new();
     private bool _disposed;
 
     private DocxDocument(WordCraftNative.WcDocumentHandle handle)
@@ -28,8 +32,11 @@ public sealed class DocxDocument : IDisposable
     {
         get
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-            return (int)WordCraftNative.wc_page_count(_handle);
+            lock (_nativeGate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                return (int)WordCraftNative.wc_page_count(_handle);
+            }
         }
     }
 
@@ -71,13 +78,15 @@ public sealed class DocxDocument : IDisposable
     /// </summary>
     public (double widthPt, double heightPt) GetPageSize(int index)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-
-        unsafe
+        lock (_nativeGate)
         {
-            double w, h;
-            WordCraftNative.wc_get_page_size(_handle, (uint)index, &w, &h);
-            return (w, h);
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            unsafe
+            {
+                double w, h;
+                WordCraftNative.wc_get_page_size(_handle, (uint)index, &w, &h);
+                return (w, h);
+            }
         }
     }
 
@@ -89,15 +98,17 @@ public sealed class DocxDocument : IDisposable
     /// </summary>
     public async Task<WriteableBitmap?> RenderPageAsync(int index, double scale, CancellationToken ct = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-
         await _renderLock.WaitAsync(ct);
 
         try
         {
             WordCraftNative.WcImage img = await Task.Run(() =>
             {
-                return WordCraftNative.wc_render_page(_handle, (uint)index, scale);
+                lock (_nativeGate)
+                {
+                    ObjectDisposedException.ThrowIf(_disposed, this);
+                    return WordCraftNative.wc_render_page(_handle, (uint)index, scale);
+                }
             }, ct);
 
             if (img.Pixels == IntPtr.Zero || img.Len == 0)
@@ -123,86 +134,117 @@ public sealed class DocxDocument : IDisposable
     /// </summary>
     public string ExtractPageText(int index)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-
         byte[] buf = new byte[65536];
 
-        unsafe
+        lock (_nativeGate)
         {
-            fixed (byte* ptr = buf)
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            unsafe
             {
-                var written = (int)WordCraftNative.wc_extract_page_text(_handle, (uint)index, ptr, (nuint)buf.Length);
-                return written > 0 ? Encoding.UTF8.GetString(buf, 0, written) : string.Empty;
+                fixed (byte* ptr = buf)
+                {
+                    var written = (int)WordCraftNative.wc_extract_page_text(_handle, (uint)index, ptr, (nuint)buf.Length);
+                    return written > 0 ? Encoding.UTF8.GetString(buf, 0, written) : string.Empty;
+                }
             }
         }
     }
 
     public record DocxMatch(int PageIndex, double X, double Y, double Width, double Height);
 
+    public sealed record DocxSearchMatch(int MatchIndex, IReadOnlyList<DocxMatch> Rects);
+
     /// <summary>
     /// Search for text across all pages and return bounding boxes in page points.
     /// </summary>
-    public System.Collections.Generic.List<DocxMatch> SearchText(string query, bool caseSensitive)
+    public IReadOnlyList<DocxSearchMatch> SearchText(string query, bool caseSensitive)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        if (string.IsNullOrEmpty(query)) return new();
+        if (string.IsNullOrWhiteSpace(query)) return Array.Empty<DocxSearchMatch>();
 
-        var queryBytes = Encoding.UTF8.GetBytes(query);
-        byte[] buf = new byte[65536];
+        byte[] queryBytes = Encoding.UTF8.GetBytes(query);
+        byte[] buffer = new byte[4096];
+        nuint written;
 
-        unsafe
+        while (true)
         {
-            fixed (byte* qPtr = queryBytes)
-            fixed (byte* bPtr = buf)
+            unsafe
             {
-                var written = (int)WordCraftNative.wc_search_text(
-                    _handle,
-                    qPtr,
-                    (nuint)queryBytes.Length,
-                    caseSensitive,
-                    bPtr,
-                    (nuint)buf.Length);
-
-                if (written == 0) return new();
-
-                var str = Encoding.UTF8.GetString(buf, 0, written);
-                var matches = new System.Collections.Generic.List<DocxMatch>();
-                var parts = str.Split(';', StringSplitOptions.RemoveEmptyEntries);
-                foreach (var part in parts)
+                lock (_nativeGate)
                 {
-                    var tokens = part.Split(',');
-                    if (tokens.Length >= 5 &&
-                        int.TryParse(tokens[0], out int page) &&
-                        double.TryParse(tokens[1], System.Globalization.CultureInfo.InvariantCulture, out double x) &&
-                        double.TryParse(tokens[2], System.Globalization.CultureInfo.InvariantCulture, out double y) &&
-                        double.TryParse(tokens[3], System.Globalization.CultureInfo.InvariantCulture, out double w) &&
-                        double.TryParse(tokens[4], System.Globalization.CultureInfo.InvariantCulture, out double h))
+                    ObjectDisposedException.ThrowIf(_disposed, this);
+                    fixed (byte* queryPtr = queryBytes)
+                    fixed (byte* bufferPtr = buffer)
                     {
-                        matches.Add(new DocxMatch(page, x, y, w, h));
-                    }
-                    else if (tokens.Length >= 3 &&
-                        int.TryParse(tokens[0], out int p))
-                    {
-                        matches.Add(new DocxMatch(p, 0, 0, 0, 0));
+                        written = WordCraftNative.wc_search_text(
+                            _handle,
+                            queryPtr,
+                            (nuint)queryBytes.Length,
+                            caseSensitive,
+                            bufferPtr,
+                            (nuint)buffer.Length);
                     }
                 }
-                return matches;
             }
+
+            if (written <= (nuint)buffer.Length)
+                break;
+            if (written > int.MaxValue)
+                throw new InvalidOperationException("DOCX search results exceed the supported buffer size.");
+
+            Array.Resize(ref buffer, (int)written);
         }
+
+        if (written == 0)
+            return Array.Empty<DocxSearchMatch>();
+
+        string serialized = Encoding.UTF8.GetString(buffer, 0, (int)written);
+        var matches = new List<(int MatchIndex, List<DocxMatch> Rects)>();
+        var matchIndices = new Dictionary<int, int>();
+
+        foreach (string entry in serialized.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            string[] parts = entry.Split(',');
+            if (parts.Length != 6 ||
+                !int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out int matchIndex) ||
+                !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out int page) ||
+                !double.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out double x) ||
+                !double.TryParse(parts[3], NumberStyles.Float, CultureInfo.InvariantCulture, out double y) ||
+                !double.TryParse(parts[4], NumberStyles.Float, CultureInfo.InvariantCulture, out double width) ||
+                !double.TryParse(parts[5], NumberStyles.Float, CultureInfo.InvariantCulture, out double height))
+            {
+                continue;
+            }
+
+            if (!matchIndices.TryGetValue(matchIndex, out int resultIndex))
+            {
+                resultIndex = matches.Count;
+                matchIndices.Add(matchIndex, resultIndex);
+                matches.Add((matchIndex, new List<DocxMatch>()));
+            }
+
+            if (width > 0 && height > 0)
+                matches[resultIndex].Rects.Add(new DocxMatch(page, x, y, width, height));
+        }
+
+        return matches
+            .Where(match => match.Rects.Count > 0)
+            .Select(match => new DocxSearchMatch(match.MatchIndex, match.Rects))
+            .ToArray();
     }
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
-
-        if (_handle.IsValid)
+        lock (_nativeGate)
         {
-            WordCraftNative.wc_free_document(_handle);
-            _handle = default;
-        }
+            if (_disposed) return;
+            _disposed = true;
 
-        _renderLock.Dispose();
+            if (_handle.IsValid)
+            {
+                WordCraftNative.wc_free_document(_handle);
+                _handle = default;
+            }
+        }
     }
 
     /// <summary>

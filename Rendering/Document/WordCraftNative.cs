@@ -105,8 +105,8 @@ internal static partial class WordCraftNative
 
     /// <summary>
     /// Search for text across all pages.
-    /// Returns semicolon-separated matches: "pageIndex,minX,minY,width,height;..."
-    /// Results written to `buf` (UTF-8). Returns bytes written.
+    /// Returns semicolon-separated rectangles: "matchIndex,pageIndex,x,y,width,height;..."
+    /// Results written to `buf` (UTF-8). Returns bytes written, or required capacity if too small.
     /// </summary>
     [LibraryImport(Dll)]
     internal static unsafe partial nuint wc_search_text(

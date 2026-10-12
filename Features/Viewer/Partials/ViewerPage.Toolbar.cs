@@ -118,6 +118,17 @@ public sealed partial class ViewerPage
 
     private async void CopyPageTextMenuItem_Click(object? sender, EventArgs e)
     {
+        if (_docxDocument != null)
+        {
+            string docxText = _docxDocument.ExtractPageText(_page - 1);
+            if (docxText.Length == 0) return;
+
+            var docxPackage = new Windows.ApplicationModel.DataTransfer.DataPackage();
+            docxPackage.SetText(docxText);
+            Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(docxPackage);
+            return;
+        }
+
         if (_pdfState == null) return;
         string text = await Rendering.Pdf.PdfTextService.ExtractTextAsync(_pdfState, _page - 1);
         if (text.Length == 0) return;

@@ -923,6 +923,9 @@ public sealed partial class ViewerPage
     // ══════════════════════════════════════════════════════════════════════════
 
     private readonly Dictionary<int, Image> _docxPageCache = new();
+    private double[] _docxPageTopLp = Array.Empty<double>();
+    private double[] _docxPageWidthLp = Array.Empty<double>();
+    private double[] _docxPageHeightLp = Array.Empty<double>();
 
     private async Task LoadDocxAsync(string filePath, CancellationToken ct)
     {
@@ -960,6 +963,9 @@ public sealed partial class ViewerPage
             // Each DOCX page is a page
             _total = _docxDocument.PageCount;
             _page = 1;
+            _docxSearchResults = Array.Empty<QuickView.Rendering.Document.DocxDocument.DocxSearchMatch>();
+            _activeDocxSearchIndex = -1;
+            SearchHighlightCanvas.Children.Clear();
             Toolbar.UpdatePageInfo(_page, _total);
             ViewModel.TotalPages = _total;
             ViewModel.CurrentPage = _page;
@@ -1004,6 +1010,7 @@ public sealed partial class ViewerPage
             DocumentScrollViewer.UpdateLayout();
 
             // Render visible pages
+            _lastDocxRenderZoom = _zoom;
             await RenderDocxViewportAsync();
             DocumentScrollViewer.ViewChanged += OnDocxViewportChanged;
 
@@ -1037,7 +1044,7 @@ public sealed partial class ViewerPage
             SyncToViewModel();
         }
 
-        bool needsRerender = Math.Abs(_zoom - _lastDocxRenderZoom) > (_lastDocxRenderZoom * 0.25);
+        bool needsRerender = Math.Abs(_zoom - _lastDocxRenderZoom) > (_lastDocxRenderZoom * 0.15);
         if (!e.IsIntermediate)
         {
             if (needsRerender)
@@ -1046,6 +1053,8 @@ public sealed partial class ViewerPage
                 _lastDocxRenderZoom = _zoom;
             }
 
+            UpdateCurrentPageFromDocxScroll();
+            DrawDocxSearchHighlights();
             _ = RenderDocxViewportAsync();
         }
     }
@@ -1055,18 +1064,95 @@ public sealed partial class ViewerPage
         if (_docxDocument == null) return;
 
         const double PtToLp = 96.0 / 72.0;
+        _docxPageTopLp = new double[_docxDocument.PageCount];
+        _docxPageWidthLp = new double[_docxDocument.PageCount];
+        _docxPageHeightLp = new double[_docxDocument.PageCount];
         double totalHeight = 0;
         double maxWidth = 0;
 
         for (int i = 0; i < _docxDocument.PageCount; i++)
         {
             var (w, h) = _docxDocument.GetPageSize(i);
-            totalHeight += h * PtToLp + 12; // 12 layout-pixel gap between pages
-            if (w * PtToLp > maxWidth) maxWidth = w * PtToLp;
+            _docxPageWidthLp[i] = w * PtToLp;
+            _docxPageHeightLp[i] = h * PtToLp;
+            _docxPageTopLp[i] = totalHeight;
+            totalHeight += _docxPageHeightLp[i];
+            if (i < _docxDocument.PageCount - 1)
+                totalHeight += 12;
+            if (_docxPageWidthLp[i] > maxWidth) maxWidth = _docxPageWidthLp[i];
         }
 
         PdfViewportCanvas.Width = maxWidth;
         PdfViewportCanvas.Height = totalHeight;
+        SearchHighlightCanvas.Width = maxWidth;
+        SearchHighlightCanvas.Height = totalHeight;
+        Canvas.SetZIndex(SearchHighlightCanvas, 10);
+    }
+
+    private double GetDocxPageTopLp(int pageIndex) =>
+        pageIndex >= 0 && pageIndex < _docxPageTopLp.Length
+            ? _docxPageTopLp[pageIndex]
+            : 0;
+
+    private (int firstPage, int lastPage) GetVisibleDocxPageRange()
+    {
+        if (_docxDocument == null || _docxPageTopLp.Length != _docxDocument.PageCount)
+            return (-1, -1);
+
+        double zoom = Math.Max(0.01, DocumentScrollViewer.ZoomFactor);
+        double visibleTop = DocumentScrollViewer.VerticalOffset / zoom;
+        double visibleBottom =
+            (DocumentScrollViewer.VerticalOffset + DocumentScrollViewer.ViewportHeight) / zoom;
+        int firstPage = -1;
+        int lastPage = -1;
+
+        for (int i = 0; i < _docxDocument.PageCount; i++)
+        {
+            double pageTop = _docxPageTopLp[i];
+            double pageBottom = pageTop + _docxPageHeightLp[i];
+            if (pageBottom >= visibleTop && pageTop <= visibleBottom)
+            {
+                if (firstPage < 0)
+                    firstPage = i;
+                lastPage = i;
+            }
+        }
+
+        return (firstPage, lastPage);
+    }
+
+    private void UpdateCurrentPageFromDocxScroll()
+    {
+        if (_docxDocument == null || _docxPageTopLp.Length != _docxDocument.PageCount)
+            return;
+
+        double zoom = Math.Max(0.01, DocumentScrollViewer.ZoomFactor);
+        double centerY =
+            (DocumentScrollViewer.VerticalOffset + DocumentScrollViewer.ViewportHeight / 2) / zoom;
+        double nearestDistance = double.MaxValue;
+        int currentPage = 0;
+
+        for (int i = 0; i < _docxDocument.PageCount; i++)
+        {
+            double pageTop = _docxPageTopLp[i];
+            double pageHeight = _docxPageHeightLp[i];
+            double pageBottom = pageTop + pageHeight;
+            if (centerY >= pageTop && centerY <= pageBottom)
+            {
+                currentPage = i;
+                break;
+            }
+
+            double distance = Math.Abs(centerY - (pageTop + pageHeight / 2));
+            if (distance < nearestDistance)
+            {
+                nearestDistance = distance;
+                currentPage = i;
+            }
+        }
+
+        if (_page != currentPage + 1)
+            UpdateCurrentPage(currentPage + 1);
     }
 
     private async Task RenderDocxViewportAsync()
@@ -1076,39 +1162,18 @@ public sealed partial class ViewerPage
         try
         {
             const double PtToLp = 96.0 / 72.0;
-            double scrollY = DocumentScrollViewer.VerticalOffset;
-            double viewHeight = DocumentScrollViewer.ViewportHeight;
-
-            // Calculate which pages are visible
-            double y = 0;
-            int firstPage = -1, lastPage = -1;
-
-            for (int i = 0; i < _docxDocument.PageCount; i++)
-            {
-                var (_, h) = _docxDocument.GetPageSize(i);
-                double pageBottom = y + h * PtToLp;
-
-                if (pageBottom >= scrollY && y <= scrollY + viewHeight)
-                {
-                    if (firstPage < 0) firstPage = i;
-                    lastPage = i;
-                }
-
-                y = pageBottom + 12;
-            }
-
+            var (firstPage, lastPage) = GetVisibleDocxPageRange();
             if (firstPage < 0) return;
 
             // Render visible pages + 1 buffer
             int renderStart = Math.Max(0, firstPage - 1);
             int renderEnd = Math.Min(_docxDocument.PageCount - 1, lastPage + 1);
 
-            y = 0;
             for (int i = 0; i < _docxDocument.PageCount; i++)
             {
-                var (widthPt, heightPt) = _docxDocument.GetPageSize(i);
-                double w = widthPt * PtToLp;
-                double h = heightPt * PtToLp;
+                double w = _docxPageWidthLp[i];
+                double h = _docxPageHeightLp[i];
+                double y = GetDocxPageTopLp(i);
 
                 if (i >= renderStart && i <= renderEnd && !_docxPageCache.ContainsKey(i))
                 {
@@ -1131,12 +1196,11 @@ public sealed partial class ViewerPage
 
                     Microsoft.UI.Xaml.Controls.Canvas.SetLeft(image, 0);
                     Microsoft.UI.Xaml.Controls.Canvas.SetTop(image, y);
+                    Canvas.SetZIndex(image, 0);
 
                     PdfViewportCanvas.Children.Add(image);
                     _docxPageCache[i] = image;
                 }
-
-                y += h + 12;
             }
 
             // Remove pages far from viewport
