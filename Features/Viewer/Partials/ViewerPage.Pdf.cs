@@ -294,22 +294,80 @@ public sealed partial class ViewerPage
         _total = 1;
         Toolbar.UpdatePageInfo(1, 1);
 
-        Thumbnails.Add(new PageThumbnailItem
+        // Create centered content directly (not using ContentControl to avoid centering issues)
+        var stack = new StackPanel
         {
-            PageNumber = 1, PageLabel = "1", BoxHeight = 200, IsSelected = true,
-        });
-        ThumbnailList.ItemsSource = Thumbnails;
+            Orientation = Orientation.Vertical,
+            Spacing = 18,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
 
-        var card = new ViewerInfoCard(doc);
-        card.OpenRequested += (_, _) => OpenExternalButton_Click(card, EventArgs.Empty);
+        stack.Children.Add(new FontIcon
+        {
+            Glyph = doc.FileGlyph,
+            FontSize = 48,
+            Foreground = doc.TypeColor,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Opacity = 0.6,
+        });
+
+        stack.Children.Add(new TextBlock
+        {
+            Text = doc.Title,
+            FontSize = 18,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 500,
+            TextAlignment = TextAlignment.Center,
+            Foreground = ResBrush("TextFillColorPrimaryBrush"),
+        });
+
+        stack.Children.Add(new TextBlock
+        {
+            Text = $"{doc.FileType?.ToUpperInvariant()}  ·  {doc.FileSize}  ·  {doc.LastWriteTime:MMM dd, yyyy}",
+            FontSize = 13,
+            Foreground = ResBrush("TextFillColorSecondaryBrush"),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            TextAlignment = TextAlignment.Center,
+            Opacity = 0.8,
+        });
+
+        stack.Children.Add(new TextBlock
+        {
+            Text = doc.FilePath,
+            FontSize = 12,
+            Foreground = ResBrush("TextFillColorTertiaryBrush"),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 500,
+            TextAlignment = TextAlignment.Center,
+            Opacity = 0.6,
+            Margin = new Thickness(0, -6, 0, 4),
+        });
+
+        var btn = new Button
+        {
+            Content = "Open with default app",
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Padding = new Thickness(20, 10, 20, 10),
+        };
+        if (Application.Current.Resources.TryGetValue("AccentButtonStyle", out var styleObj) && styleObj is Microsoft.UI.Xaml.Style style)
+            btn.Style = style;
+        btn.Click += (_, _) => OpenExternalButton_Click(btn, EventArgs.Empty);
+        stack.Children.Add(btn);
         
         // Use the overlay Grid for proper centering
         CenteredMessageGrid.Children.Clear();
-        CenteredMessageGrid.Children.Add(card);
+        CenteredMessageGrid.Children.Add(stack);
         CenteredMessageGrid.Visibility = Visibility.Visible;
         
-        // Hide the PDF canvas
+        // Hide the PDF canvas and sidebar
         DocumentScrollViewer.Visibility = Visibility.Collapsed;
+        SidebarCard.Visibility = Visibility.Collapsed;
+        SidebarColumn.Width = new GridLength(0);
+        Toolbar.SidebarButtonVisibility = Visibility.Collapsed;
     }
 
     private async Task LoadViaRendererAsync(QuickView.Core.Interfaces.IFileRenderer renderer,
@@ -411,8 +469,11 @@ public sealed partial class ViewerPage
         CenteredMessageGrid.Children.Add(stack);
         CenteredMessageGrid.Visibility = Visibility.Visible;
         
-        // Hide the PDF canvas
+        // Hide the PDF canvas and sidebar
         DocumentScrollViewer.Visibility = Visibility.Collapsed;
+        SidebarCard.Visibility = Visibility.Collapsed;
+        SidebarColumn.Width = new GridLength(0);
+        Toolbar.SidebarButtonVisibility = Visibility.Collapsed;
     }
 
     // ══════════════════════════════════════════════════════════════════════════
