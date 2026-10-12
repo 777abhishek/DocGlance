@@ -103,9 +103,6 @@ public sealed partial class ViewerPage
             Thumbnails[index].IsSelected = true;
 
         SyncThumbnailSelection(index);
-        
-        // Update text selection for new page
-        UpdateTextSelectionTransform();
     }
 
     private void SyncThumbnailSelection(int index)

@@ -54,9 +54,6 @@ public sealed partial class ViewerPage
             UpdateCanvasSize();
             _ = RenderPagesAsync();
         }
-
-        // Update text selection for rotation
-        UpdateTextSelectionTransform();
     }
 
     private void Toolbar_FindRequested(object? sender, EventArgs e)

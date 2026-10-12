@@ -166,27 +166,6 @@ public sealed class PptxDocument : IDisposable
         }
     }
 
-    /// <summary>
-    /// Extract all text from a slide (all shapes, tables, notes).
-    /// </summary>
-    public string ExtractSlideText(int index)
-    {
-        lock (_nativeGate)
-        {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-
-            unsafe
-            {
-                var buf = new byte[32768];
-                fixed (byte* ptr = buf)
-                {
-                    var written = (int)DeckCraftNative.dc_extract_slide_text(_handle, (uint)index, ptr, (nuint)buf.Length);
-                    return written > 0 ? Encoding.UTF8.GetString(buf, 0, written) : string.Empty;
-                }
-            }
-        }
-    }
-
     public IReadOnlyList<PptxSearchMatch> SearchText(string query, bool caseSensitive)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);

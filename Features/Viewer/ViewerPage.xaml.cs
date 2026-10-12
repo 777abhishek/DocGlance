@@ -163,9 +163,6 @@ public sealed partial class ViewerPage : Page
         _spreadsheetDocument?.Dispose();
         _spreadsheetDocument = null;
         
-        // Clean up text selection
-        CleanupTextSelection();
-        
         // Service owns document lifecycle — just clear our reference
         _pdfState = null;
         ViewModel.Reset();

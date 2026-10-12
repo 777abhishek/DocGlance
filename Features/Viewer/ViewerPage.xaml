@@ -6,7 +6,6 @@
     xmlns:models="using:QuickView.Core.Models"
     xmlns:components="using:QuickView.Features.Viewer.Components"
     xmlns:spreadsheet="using:QuickView.Features.Viewer.Spreadsheet"
-    xmlns:selection="using:QuickView.Features.Viewer.TextSelection"
     Background="Transparent"
 >
 
@@ -293,34 +292,26 @@
                     Background="Transparent"
                     ViewChanged="OnViewportViewChanged">
                     
-                    <Grid>
-                        <!-- VIEWPORT RENDERING: Single Canvas with viewport-sized Image
-                             Old approach: StackPanel with N Border elements (one per page)
-                             New approach: Canvas with 1 Image showing only visible content
-                             Memory: 8MB (viewport) vs 132MB (4 full pages at 200% zoom) -->
-                        <Canvas x:Name="PdfViewportCanvas"
-                            Background="Transparent"
-                            Width="1000" Height="1400">
-                            
-                            <!-- Single viewport Image - updated on scroll/zoom.
-                                 Stretch=Fill maps the render-pixel bitmap exactly onto
-                                 its layout-pixel size (render px = lp × displayScale). -->
-                            <Image x:Name="ViewportImage"
-                                Stretch="Fill"
-                                Canvas.Left="0"
-                                Canvas.Top="0"/>
-                                
-                            <!-- Canvas for search highlight overlays -->
-                            <Canvas x:Name="SearchHighlightCanvas"
-                                IsHitTestVisible="False"/>
-                        </Canvas>
+                    <!-- VIEWPORT RENDERING: Single Canvas with viewport-sized Image
+                         Old approach: StackPanel with N Border elements (one per page)
+                         New approach: Canvas with 1 Image showing only visible content
+                         Memory: 8MB (viewport) vs 132MB (4 full pages at 200% zoom) -->
+                    <Canvas x:Name="PdfViewportCanvas"
+                        Background="Transparent"
+                        Width="1000" Height="1400">
                         
-                        <!-- Text Selection Overlay -->
-                        <selection:TextSelectionOverlay x:Name="TextSelectionOverlay"
-                                                         Width="{Binding ActualWidth, ElementName=PdfViewportCanvas}"
-                                                         Height="{Binding ActualHeight, ElementName=PdfViewportCanvas}"
-                                                         Visibility="Collapsed"/>
-                    </Grid>
+                        <!-- Single viewport Image - updated on scroll/zoom.
+                             Stretch=Fill maps the render-pixel bitmap exactly onto
+                             its layout-pixel size (render px = lp × displayScale). -->
+                        <Image x:Name="ViewportImage"
+                            Stretch="Fill"
+                            Canvas.Left="0"
+                            Canvas.Top="0"/>
+                            
+                        <!-- Canvas for search highlight overlays -->
+                        <Canvas x:Name="SearchHighlightCanvas"
+                            IsHitTestVisible="False"/>
+                    </Canvas>
                 </ScrollViewer>
 
                 <!-- Unsupported file message (same pattern as HomePage empty state) -->

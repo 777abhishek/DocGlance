@@ -140,12 +140,6 @@ public sealed partial class ViewerPage
             }
 
             Infrastructure.Logging.Logger.Log($"[PDF] Document loaded: {_total} pages");
-            
-            // Initialize text selection for PDF
-            InitializePdfTextSelection();
-            
-            // Initialize text selection for PDF
-            InitializePdfTextSelection();
 
             Toolbar.UpdatePageInfo(_page, _total);
             _page = 1;
@@ -1289,71 +1283,6 @@ public sealed partial class ViewerPage
             {
                 Logger.Error($"LoadDocxThumbnails: page {i}", ex);
             }
-        }
-    }
-
-
-    // ── Text Selection ────────────────────────────────────────────────────────
-
-    private void InitializePdfTextSelection()
-    {
-        if (_pdfState == null || TextSelectionOverlay == null)
-            return;
-
-        try
-        {
-            var provider = new TextSelection.Providers.PdfTextSelectionProvider(
-                _pdfState,
-                _page - 1, // Convert to 0-based index
-                _zoom,
-                _rotation
-            );
-
-            TextSelectionOverlay.SetProvider(provider);
-            TextSelectionOverlay.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
-
-            // Subscribe to text selection events
-            TextSelectionOverlay.TextSelected -= OnTextSelected;
-            TextSelectionOverlay.TextSelected += OnTextSelected;
-
-            UpdateTextSelectionTransform();
-
-            Infrastructure.Logging.Logger.Log("[TextSelection] PDF text selection initialized");
-        }
-        catch (Exception ex)
-        {
-            Infrastructure.Logging.Logger.Error("[TextSelection] Failed to initialize PDF text selection", ex);
-        }
-    }
-
-    private void OnTextSelected(object? sender, TextSelection.TextSelection selection)
-    {
-        Infrastructure.Logging.Logger.Log($"[TextSelection] Text selected: {selection.Text.Length} chars");
-        // Text is automatically copied to clipboard by the overlay
-    }
-
-    private void UpdateTextSelectionTransform()
-    {
-        if (TextSelectionOverlay?.Provider is TextSelection.Providers.PdfTextSelectionProvider pdfProvider)
-        {
-            var scrollOffset = new Windows.Foundation.Point(
-                DocumentScrollViewer.HorizontalOffset,
-                DocumentScrollViewer.VerticalOffset
-            );
-
-            pdfProvider.UpdateTransform(_zoom, _rotation, scrollOffset);
-            pdfProvider.SetCurrentPage(_page - 1); // 0-based index
-        }
-    }
-
-    private void CleanupTextSelection()
-    {
-        if (TextSelectionOverlay != null)
-        {
-            TextSelectionOverlay.TextSelected -= OnTextSelected;
-            TextSelectionOverlay.ClearSelection();
-            TextSelectionOverlay.SetProvider(null);
-            TextSelectionOverlay.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
         }
     }
 }
