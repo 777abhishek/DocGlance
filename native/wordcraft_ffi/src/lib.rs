@@ -90,6 +90,10 @@ pub extern "C" fn wc_open_docx(data: *const u8, len: usize) -> *mut WcDocument {
             show_hidden: false,
             hide_deleted: true,
             proofing: false,
+            comment_balloons: false,
+            deletions_in_balloons: false,
+            field_codes: false,
+            ..Default::default()
         };
 
         let layout = wordcraft_layout::layout(&doc, &mut cache, &opts);

@@ -8,11 +8,11 @@ name = "deckcraft_ffi"
 crate-type = ["cdylib"]
 
 [dependencies]
-deckcraft-pptx   = { git = "https://github.com/storytold/deckcraft" }
-deckcraft-render = { git = "https://github.com/storytold/deckcraft" }
-deckcraft-model  = { git = "https://github.com/storytold/deckcraft" }
-deckcraft-fonts  = { git = "https://github.com/storytold/deckcraft" }
-deckcraft-geom   = { git = "https://github.com/storytold/deckcraft" }
+deckcraft-pptx   = { git = "https://github.com/storytold/deckcraft", branch = "main" }
+deckcraft-render = { git = "https://github.com/storytold/deckcraft", branch = "main" }
+deckcraft-model  = { git = "https://github.com/storytold/deckcraft", branch = "main" }
+deckcraft-fonts  = { git = "https://github.com/storytold/deckcraft", branch = "main" }
+deckcraft-geom   = { git = "https://github.com/storytold/deckcraft", branch = "main" }
 
 [profile.release]
 opt-level     = 3

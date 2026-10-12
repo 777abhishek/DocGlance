@@ -103,6 +103,9 @@ public sealed partial class ViewerPage
         {
             SpreadsheetViewerControl.SetZoom(_zoom);
         }
+        
+        // Update text selection transform for new zoom
+        UpdateTextSelectionTransform();
     }
 
     private Windows.Foundation.Point GetViewportCenter() =>
