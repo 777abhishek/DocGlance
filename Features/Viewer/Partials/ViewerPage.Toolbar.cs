@@ -167,6 +167,12 @@ public sealed partial class ViewerPage
         catch { }
     }
 
+    private void OpenDefaultAppButton_Click(object sender, RoutedEventArgs e)
+    {
+        // Redirect to the main handler
+        OpenExternalButton_Click(sender, EventArgs.Empty);
+    }
+
     private async void ShowInExplorerButton_Click(object? sender, EventArgs e)
     {
         if (_doc?.FilePath == null) return;

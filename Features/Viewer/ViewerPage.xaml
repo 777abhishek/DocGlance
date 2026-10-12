@@ -313,14 +313,81 @@
                             IsHitTestVisible="False"/>
                     </Canvas>
                 </ScrollViewer>
-                
-                <!-- Overlay Grid for centered error/info messages -->
-                <Grid x:Name="CenteredMessageGrid"
-                      Visibility="Collapsed"
-                      Background="Transparent"
-                      HorizontalAlignment="Stretch"
-                      VerticalAlignment="Stretch"
-                      IsHitTestVisible="True"/>
+
+                <!-- Unsupported file message (same pattern as HomePage empty state) -->
+                <StackPanel
+                    x:Name="UnsupportedFileMessage"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Spacing="16"
+                    Visibility="Collapsed">
+                    <FontIcon
+                        x:Name="UnsupportedIcon"
+                        Glyph="&#xE8A5;"
+                        FontSize="48"
+                        HorizontalAlignment="Center"
+                        Opacity="0.6"/>
+                    <TextBlock
+                        x:Name="UnsupportedFileName"
+                        Text="Document name"
+                        FontSize="18"
+                        FontWeight="SemiBold"
+                        HorizontalAlignment="Center"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap"
+                        MaxWidth="500"
+                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                    <TextBlock
+                        x:Name="UnsupportedMetadata"
+                        Text="DOCX · 1 MB · Date"
+                        FontSize="13"
+                        HorizontalAlignment="Center"
+                        TextAlignment="Center"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Opacity="0.8"/>
+                    <TextBlock
+                        x:Name="UnsupportedPath"
+                        Text="C:\path\to\file"
+                        FontSize="12"
+                        HorizontalAlignment="Center"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap"
+                        MaxWidth="500"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        Opacity="0.6"
+                        Margin="0,-6,0,4"/>
+                    <Button
+                        x:Name="OpenDefaultAppButton"
+                        Content="Open with default app"
+                        HorizontalAlignment="Center"
+                        Padding="20,10"
+                        Style="{StaticResource AccentButtonStyle}"
+                        Click="OpenDefaultAppButton_Click"/>
+                </StackPanel>
+
+                <!-- Error message (same pattern as HomePage empty state) -->
+                <StackPanel
+                    x:Name="ErrorMessage"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Spacing="16"
+                    Visibility="Collapsed">
+                    <FontIcon
+                        Glyph="&#xEA39;"
+                        FontSize="48"
+                        HorizontalAlignment="Center"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Opacity="0.6"/>
+                    <TextBlock
+                        x:Name="ErrorMessageText"
+                        Text="Error message"
+                        FontSize="15"
+                        HorizontalAlignment="Center"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap"
+                        MaxWidth="400"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
 
                 <!-- ── TEXT viewer (plain) — TextBox IS the scroll host ── -->
                 <!-- ── PLAIN TEXT viewer — TextBox is the scroll host ── -->

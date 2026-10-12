@@ -10,6 +10,7 @@ using QuickView.Core.Models;
 using QuickView.Rendering.Pdf;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -294,77 +295,21 @@ public sealed partial class ViewerPage
         _total = 1;
         Toolbar.UpdatePageInfo(1, 1);
 
-        // Create centered content directly (not using ContentControl to avoid centering issues)
-        var stack = new StackPanel
-        {
-            Orientation = Orientation.Vertical,
-            Spacing = 18,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-
-        stack.Children.Add(new FontIcon
-        {
-            Glyph = doc.FileGlyph,
-            FontSize = 48,
-            Foreground = doc.TypeColor,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Opacity = 0.6,
-        });
-
-        stack.Children.Add(new TextBlock
-        {
-            Text = doc.Title,
-            FontSize = 18,
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            TextWrapping = TextWrapping.Wrap,
-            MaxWidth = 500,
-            TextAlignment = TextAlignment.Center,
-            Foreground = ResBrush("TextFillColorPrimaryBrush"),
-        });
-
-        stack.Children.Add(new TextBlock
-        {
-            Text = $"{doc.FileType?.ToUpperInvariant()}  ·  {doc.FileSize}  ·  {doc.LastWriteTime:MMM dd, yyyy}",
-            FontSize = 13,
-            Foreground = ResBrush("TextFillColorSecondaryBrush"),
-            HorizontalAlignment = HorizontalAlignment.Center,
-            TextAlignment = TextAlignment.Center,
-            Opacity = 0.8,
-        });
-
-        stack.Children.Add(new TextBlock
-        {
-            Text = doc.FilePath,
-            FontSize = 12,
-            Foreground = ResBrush("TextFillColorTertiaryBrush"),
-            HorizontalAlignment = HorizontalAlignment.Center,
-            TextWrapping = TextWrapping.Wrap,
-            MaxWidth = 500,
-            TextAlignment = TextAlignment.Center,
-            Opacity = 0.6,
-            Margin = new Thickness(0, -6, 0, 4),
-        });
-
-        var btn = new Button
-        {
-            Content = "Open with default app",
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Padding = new Thickness(20, 10, 20, 10),
-        };
-        if (Application.Current.Resources.TryGetValue("AccentButtonStyle", out var styleObj) && styleObj is Microsoft.UI.Xaml.Style style)
-            btn.Style = style;
-        btn.Click += (_, _) => OpenExternalButton_Click(btn, EventArgs.Empty);
-        stack.Children.Add(btn);
+        // Populate the unsupported file message UI (defined in XAML)
+        UnsupportedIcon.Glyph = doc.FileGlyph;
+        UnsupportedIcon.Foreground = doc.TypeColor;
+        UnsupportedFileName.Text = doc.Title;
+        UnsupportedMetadata.Text = $"{doc.FileType?.ToUpperInvariant()}  ·  {doc.FileSize}  ·  {doc.LastWriteTime:MMM dd, yyyy}";
+        UnsupportedPath.Text = doc.FilePath;
+        UnsupportedFileMessage.Visibility = Visibility.Visible;
         
-        // Use the overlay Grid for proper centering
-        CenteredMessageGrid.Children.Clear();
-        CenteredMessageGrid.Children.Add(stack);
-        CenteredMessageGrid.Visibility = Visibility.Visible;
-        
-        // Hide the PDF canvas and sidebar
+        // Hide other viewers and sidebar
         DocumentScrollViewer.Visibility = Visibility.Collapsed;
+        PlainTextViewerGrid.Visibility = Visibility.Collapsed;
+        TextViewerScroll.Visibility = Visibility.Collapsed;
+        MarkdownViewerHost.Visibility = Visibility.Collapsed;
+        ErrorMessage.Visibility = Visibility.Collapsed;
+        
         SidebarCard.Visibility = Visibility.Collapsed;
         SidebarColumn.Width = new GridLength(0);
         Toolbar.SidebarButtonVisibility = Visibility.Collapsed;
@@ -397,6 +342,14 @@ public sealed partial class ViewerPage
             if (ct.IsCancellationRequested || element == null)
                 return;
 
+            // If renderer returned a ViewerInfoCard, show our centered unsupported message instead
+            if (element is ViewerInfoCard)
+            {
+                var doc = DocumentItem.FromFileInfo(new FileInfo(filePath));
+                ShowInfoCard(doc);
+                return;
+            }
+
             // Track for cleanup later
             _currentRenderer = renderer;
             _currentRenderedElement = element;
@@ -406,6 +359,8 @@ public sealed partial class ViewerPage
             TextViewerScroll.Visibility     = Visibility.Collapsed;
             MarkdownViewerHost.Visibility   = Visibility.Collapsed;
             DocumentScrollViewer.Visibility = Visibility.Visible;
+            UnsupportedFileMessage.Visibility = Visibility.Collapsed;
+            ErrorMessage.Visibility = Visibility.Collapsed;
             
             // Place the rendered element into Canvas
             var canvasForRenderer = new Canvas { Width = 800, Height = 1000 };
@@ -437,40 +392,17 @@ public sealed partial class ViewerPage
     {
         ViewModel.ErrorMessage = message;
         
-        var stack = new StackPanel 
-        { 
-            Spacing = 16,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
+        // Populate the error message UI (defined in XAML)
+        ErrorMessageText.Text = message;
+        ErrorMessage.Visibility = Visibility.Visible;
         
-        stack.Children.Add(new FontIcon
-        {
-            Glyph = "\uEA39", 
-            FontSize = 48,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Foreground = ResBrush("TextFillColorSecondaryBrush"),
-            Opacity = 0.6,
-        });
-        
-        stack.Children.Add(new TextBlock
-        {
-            Text          = message,
-            FontSize      = 15,
-            TextWrapping  = TextWrapping.Wrap,
-            TextAlignment = TextAlignment.Center,
-            MaxWidth      = 400,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Foreground    = ResBrush("TextFillColorSecondaryBrush"),
-        });
-        
-        // Use the overlay Grid for proper centering
-        CenteredMessageGrid.Children.Clear();
-        CenteredMessageGrid.Children.Add(stack);
-        CenteredMessageGrid.Visibility = Visibility.Visible;
-        
-        // Hide the PDF canvas and sidebar
+        // Hide other viewers and sidebar
         DocumentScrollViewer.Visibility = Visibility.Collapsed;
+        PlainTextViewerGrid.Visibility = Visibility.Collapsed;
+        TextViewerScroll.Visibility = Visibility.Collapsed;
+        MarkdownViewerHost.Visibility = Visibility.Collapsed;
+        UnsupportedFileMessage.Visibility = Visibility.Collapsed;
+        
         SidebarCard.Visibility = Visibility.Collapsed;
         SidebarColumn.Width = new GridLength(0);
         Toolbar.SidebarButtonVisibility = Visibility.Collapsed;
