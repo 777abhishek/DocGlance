@@ -60,6 +60,12 @@ public sealed partial class ViewerPage
             return;
         }
 
+        if (_spreadsheetDocument != null)
+        {
+            _ = SpreadsheetViewerControl.SelectSheetAsync(pageNumber - 1);
+            return;
+        }
+
         // PDF: scroll to page
         if (_pdfState == null) return;
         

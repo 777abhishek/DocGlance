@@ -449,6 +449,19 @@ public sealed partial class ViewerPage
             return;
         }
 
+        if (IsSpreadsheetViewerActive() && _spreadsheetDocument != null)
+        {
+            string sheetText = _spreadsheetDocument.ExtractSheetText(
+                SpreadsheetViewerControl.ActiveSheetIndex);
+            if (sheetText.Length == 0) return;
+
+            var sheetPackage = new Windows.ApplicationModel.DataTransfer.DataPackage();
+            sheetPackage.SetText(sheetText);
+            Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(sheetPackage);
+            e.Handled = true;
+            return;
+        }
+
         if (_pdfState == null) return;
         string text = await PdfTextService.ExtractTextAsync(_pdfState, _page - 1);
         if (text.Length == 0) return;

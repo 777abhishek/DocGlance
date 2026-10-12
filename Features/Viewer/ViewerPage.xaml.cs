@@ -55,28 +55,51 @@ public sealed partial class ViewerPage : Page
         // UI-10 fix: debounce to avoid render storm during drag-resize
         DocumentScrollViewer.SizeChanged += (_, _) =>
         {
-            if (_resizeDebounceTimer == null)
-            {
-                _resizeDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
-                _resizeDebounceTimer.Tick += (_, _) =>
-                {
-                    _resizeDebounceTimer?.Stop();
-                    ReapplyFitMode();
-                    if (_pdfState != null) _ = RenderPagesAsync();
-                };
-            }
-            _resizeDebounceTimer.Stop();
-            _resizeDebounceTimer.Start();
+            ScheduleFitModeReapply();
         };
+        SpreadsheetViewerControl.SizeChanged += (_, _) => ScheduleFitModeReapply();
+        SpreadsheetViewerControl.ActiveSheetChanged += (_, sheetIndex) =>
+        {
+            if (_spreadsheetDocument == null) return;
+            UpdateCurrentPage(sheetIndex + 1);
+            SpreadsheetViewerControl.SetSearchMatches(
+                _spreadsheetMatches,
+                _activeSpreadsheetIndex);
+            ReapplyFitMode();
+        };
+        SpreadsheetViewerControl.ZoomChanged += (_, zoom) =>
+        {
+            _zoom = zoom;
+            ZoomLabel.Text = $"{Math.Round(_zoom * 100)}%";
+            SyncToViewModel();
+        };
+        SpreadsheetViewerControl.ManualZoomRequested += (_, _) => SetFitMode(FitMode.None);
 
         // Ctrl+Wheel zoom anchored at the cursor.
         DocumentScrollViewer.PointerWheelChanged += OnViewerPointerWheelChanged;
 
         // ViewModel commands → ViewerPage actions
         ViewModel.PageChangeRequested  += (_, page)  => GoToPage(page);
-        ViewModel.ZoomInRequested      += (_, _)     => SetZoom(_zoom * 1.25);
-        ViewModel.ZoomOutRequested     += (_, _)     => SetZoom(_zoom / 1.25);
-        ViewModel.ZoomResetRequested   += (_, _)     => SetZoom(NaturalZoom);
+        ViewModel.ZoomInRequested      += (_, _)     => { SetFitMode(FitMode.None); SetZoom(_zoom * 1.25); };
+        ViewModel.ZoomOutRequested     += (_, _)     => { SetFitMode(FitMode.None); SetZoom(_zoom / 1.25); };
+        ViewModel.ZoomResetRequested   += (_, _)     => { SetFitMode(FitMode.None); SetZoom(NaturalZoom); };
+    }
+
+    private void ScheduleFitModeReapply()
+    {
+        if (_resizeDebounceTimer == null)
+        {
+            _resizeDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+            _resizeDebounceTimer.Tick += (_, _) =>
+            {
+                _resizeDebounceTimer?.Stop();
+                ReapplyFitMode();
+                if (_pdfState != null) _ = RenderPagesAsync();
+            };
+        }
+
+        _resizeDebounceTimer.Stop();
+        _resizeDebounceTimer.Start();
     }
 
     // ── ViewModel sync ────────────────────────────────────────────────────────
@@ -117,6 +140,8 @@ public sealed partial class ViewerPage : Page
         _cts?.Cancel();
 
         _searchCts?.Cancel();
+        _spreadsheetSearchCts?.Cancel();
+        _spreadsheetSearchGeneration++;
         
         // PERF-05: Clean up WebView2 and other resources
         if (_currentRenderer != null && _currentRenderedElement != null)
@@ -134,7 +159,9 @@ public sealed partial class ViewerPage : Page
         }
 
         // Clean up spreadsheet viewer
-        try { SpreadsheetViewerControl?.Cleanup(); } catch { }
+        SpreadsheetViewerControl?.Cleanup();
+        _spreadsheetDocument?.Dispose();
+        _spreadsheetDocument = null;
         
         // Service owns document lifecycle — just clear our reference
         _pdfState = null;

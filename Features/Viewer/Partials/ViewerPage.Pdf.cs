@@ -36,6 +36,12 @@ public sealed partial class ViewerPage
         _cts?.Cancel();
 
         _searchCts?.Cancel();
+        _spreadsheetSearchCts?.Cancel();
+        _spreadsheetSearchGeneration++;
+        ClearSpreadsheetSearch();
+        SpreadsheetViewerControl.Cleanup();
+        _spreadsheetDocument?.Dispose();
+        _spreadsheetDocument = null;
         
         // Service owns document lifecycle — just clear our reference
         _pdfState = null;
@@ -612,7 +618,7 @@ public sealed partial class ViewerPage
             double renderScale = Math.Clamp(
                 _zoom * DisplayScale * PtToLp * 1.15,
                 1.8,
-                3.5);
+                6.0);
             
             Logger.Log($"Render scale: {renderScale:F2} (zoom={_zoom:F2}, display={DisplayScale:F2})");
             
@@ -714,7 +720,7 @@ public sealed partial class ViewerPage
         // Re-render when zoom or display density has changed enough to affect
         // the source bitmap's pixel density.
         bool needsRerender =
-            Math.Abs(_zoom - _lastPptxRenderZoom) > (_lastPptxRenderZoom * 0.15) ||
+            Math.Abs(_zoom - _lastPptxRenderZoom) > (_lastPptxRenderZoom * 0.08) ||
             Math.Abs(DisplayScale - _lastPptxRenderDisplayScale) > 0.05;
         
         // Render visible slides when scroll/zoom settles
@@ -876,6 +882,10 @@ public sealed partial class ViewerPage
             ClearPptxCache();
             _pdfState = null;
             Thumbnails.Clear();
+            _spreadsheetSearchCts?.Cancel();
+            _spreadsheetMatches.Clear();
+            _activeSpreadsheetIndex = -1;
+            SpreadsheetViewerControl.ClearSearchMatches();
 
             if (!QuickView.Rendering.Document.GridCraftNative.IsAvailable)
             {
@@ -905,6 +915,9 @@ public sealed partial class ViewerPage
 
             // Hand off to the Win2D cell-grid control
             await SpreadsheetViewerControl.LoadDocumentAsync(_spreadsheetDocument, ct);
+            _zoom = SpreadsheetViewerControl.Zoom;
+            SetFitMode(FitMode.FitWidth);
+            ApplyFitWidth();
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
@@ -1011,6 +1024,7 @@ public sealed partial class ViewerPage
 
             // Render visible pages
             _lastDocxRenderZoom = _zoom;
+            _lastDocxRenderDisplayScale = DisplayScale;
             await RenderDocxViewportAsync();
             DocumentScrollViewer.ViewChanged += OnDocxViewportChanged;
 
@@ -1030,6 +1044,7 @@ public sealed partial class ViewerPage
     }
 
     private double _lastDocxRenderZoom = 1.0;
+    private double _lastDocxRenderDisplayScale = 1.0;
 
     private void OnDocxViewportChanged(object? sender, ScrollViewerViewChangedEventArgs e)
     {
@@ -1044,13 +1059,16 @@ public sealed partial class ViewerPage
             SyncToViewModel();
         }
 
-        bool needsRerender = Math.Abs(_zoom - _lastDocxRenderZoom) > (_lastDocxRenderZoom * 0.15);
+        bool needsRerender =
+            Math.Abs(_zoom - _lastDocxRenderZoom) > (_lastDocxRenderZoom * 0.08) ||
+            Math.Abs(DisplayScale - _lastDocxRenderDisplayScale) > 0.05;
         if (!e.IsIntermediate)
         {
             if (needsRerender)
             {
                 ClearDocxCache();
                 _lastDocxRenderZoom = _zoom;
+                _lastDocxRenderDisplayScale = DisplayScale;
             }
 
             UpdateCurrentPageFromDocxScroll();
@@ -1182,7 +1200,7 @@ public sealed partial class ViewerPage
                     double renderScale = Math.Clamp(
                         Math.Max(1.5, _zoom * DisplayScale * PtToLp * 1.25),
                         1.5,
-                        4.0);
+                        6.0);
                     var bmp = await _docxDocument.RenderPageAsync(i, renderScale);
                     if (bmp == null) continue;
 

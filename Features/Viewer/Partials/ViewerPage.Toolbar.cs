@@ -118,6 +118,18 @@ public sealed partial class ViewerPage
 
     private async void CopyPageTextMenuItem_Click(object? sender, EventArgs e)
     {
+        if (_spreadsheetDocument != null)
+        {
+            string sheetText = _spreadsheetDocument.ExtractSheetText(
+                SpreadsheetViewerControl.ActiveSheetIndex);
+            if (sheetText.Length == 0) return;
+
+            var sheetPackage = new DataPackage();
+            sheetPackage.SetText(sheetText);
+            Clipboard.SetContent(sheetPackage);
+            return;
+        }
+
         if (_docxDocument != null)
         {
             string docxText = _docxDocument.ExtractPageText(_page - 1);

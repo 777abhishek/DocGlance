@@ -13,11 +13,11 @@
         <!-- Sheet canvas area -->
         <Grid Grid.Row="0" x:Name="CanvasHost">
             <Grid.RowDefinitions>
-                <RowDefinition Height="26"/>  <!-- col headers -->
+                <RowDefinition x:Name="ColumnHeaderRow" Height="26"/>  <!-- col headers -->
                 <RowDefinition Height="*"/>   <!-- cell area  -->
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="50"/>  <!-- row numbers -->
+                <ColumnDefinition x:Name="RowHeaderColumn" Width="50"/>  <!-- row numbers -->
                 <ColumnDefinition Width="*"/>   <!-- data area   -->
             </Grid.ColumnDefinitions>
 
@@ -33,7 +33,8 @@
                 HorizontalScrollBarVisibility="Hidden"
                 VerticalScrollBarVisibility="Disabled"
                 HorizontalScrollMode="Enabled"
-                VerticalScrollMode="Disabled">
+                VerticalScrollMode="Disabled"
+                ZoomMode="Enabled">
                 <!-- CanvasControl injected at runtime -->
                 <Grid x:Name="ColHeaderCanvasHost" Height="26"/>
             </ScrollViewer>
@@ -44,7 +45,8 @@
                 HorizontalScrollBarVisibility="Disabled"
                 VerticalScrollBarVisibility="Hidden"
                 HorizontalScrollMode="Disabled"
-                VerticalScrollMode="Enabled">
+                VerticalScrollMode="Enabled"
+                ZoomMode="Enabled">
                 <!-- CanvasControl injected at runtime -->
                 <Grid x:Name="RowHeaderCanvasHost" Width="50"/>
             </ScrollViewer>
@@ -56,6 +58,9 @@
                 VerticalScrollBarVisibility="Auto"
                 HorizontalScrollMode="Enabled"
                 VerticalScrollMode="Enabled"
+                ZoomMode="Enabled"
+                MinZoomFactor="0.1"
+                MaxZoomFactor="6.0"
                 ViewChanged="CellScroll_ViewChanged">
                 <!-- CanvasControl injected at runtime -->
                 <Grid x:Name="CellCanvasHost"/>

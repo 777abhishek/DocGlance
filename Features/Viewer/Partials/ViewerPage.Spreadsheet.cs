@@ -2,7 +2,10 @@
 using Microsoft.UI.Xaml;
 using QuickView.Infrastructure.Logging;
 using QuickView.Rendering.Document;
+using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace QuickView.Features.Viewer;
 
@@ -11,6 +14,8 @@ public sealed partial class ViewerPage
     // ── Spreadsheet search state ──────────────────────────────────────────────
     private List<SpreadsheetMatch> _spreadsheetMatches = new();
     private int _activeSpreadsheetIndex = -1;
+    private CancellationTokenSource? _spreadsheetSearchCts;
+    private int _spreadsheetSearchGeneration;
 
     // ── Search implementation ─────────────────────────────────────────────────
 
@@ -18,26 +23,55 @@ public sealed partial class ViewerPage
     /// Search spreadsheet using native GridCraft search.
     /// Called from ViewerPage.Search.cs when spreadsheet viewer is active.
     /// </summary>
-    internal void SearchInSpreadsheet(string query, bool matchCase)
+    internal async void SearchInSpreadsheet(string query, bool matchCase)
     {
-        ClearSpreadsheetSearch();
+        _spreadsheetSearchCts?.Cancel();
+        _spreadsheetSearchCts?.Dispose();
+        _spreadsheetSearchCts = new CancellationTokenSource();
+        CancellationToken token = _spreadsheetSearchCts.Token;
+        int generation = ++_spreadsheetSearchGeneration;
 
         if (string.IsNullOrEmpty(query) || _spreadsheetDocument == null)
         {
+            ClearSpreadsheetSearch();
             UpdateSpreadsheetSearchCount();
+            SetSearchLoading(false);
             return;
         }
 
-        // Use native GridCraft search via FFI
-        _spreadsheetMatches = _spreadsheetDocument.SearchText(query, matchCase);
-        _activeSpreadsheetIndex = _spreadsheetMatches.Count > 0 ? 0 : -1;
+        var document = _spreadsheetDocument;
+        SetSearchLoading(true);
+        try
+        {
+            await Task.Delay(200, token);
+            var results = await Task.Run(
+                () => document.SearchText(query, matchCase),
+                token);
+            if (token.IsCancellationRequested || generation != _spreadsheetSearchGeneration)
+                return;
 
-        UpdateSpreadsheetSearchCount();
-        
-        if (_activeSpreadsheetIndex >= 0)
-            ScrollToSpreadsheetMatch(_activeSpreadsheetIndex);
+            _spreadsheetMatches = results;
+            _activeSpreadsheetIndex = results.Count > 0 ? 0 : -1;
+            UpdateSpreadsheetSearchCount();
 
-        Logger.Log($"[Spreadsheet] Found {_spreadsheetMatches.Count} matches for '{query}'");
+            SpreadsheetViewerControl?.SetSearchMatches(_spreadsheetMatches, _activeSpreadsheetIndex);
+            if (_activeSpreadsheetIndex >= 0)
+                ScrollToSpreadsheetMatch(_activeSpreadsheetIndex);
+
+            Logger.Log($"[Spreadsheet] Found {_spreadsheetMatches.Count} matches for '{query}'");
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            Logger.Error("[Spreadsheet] Search failed", ex);
+            if (generation == _spreadsheetSearchGeneration)
+                FindCount.Text = "Search failed";
+        }
+        finally
+        {
+            if (generation == _spreadsheetSearchGeneration)
+                SetSearchLoading(false);
+        }
     }
 
     /// <summary>
@@ -52,6 +86,7 @@ public sealed partial class ViewerPage
             (_activeSpreadsheetIndex + direction + _spreadsheetMatches.Count) % _spreadsheetMatches.Count;
 
         UpdateSpreadsheetSearchCount();
+        SpreadsheetViewerControl?.SetSearchMatches(_spreadsheetMatches, _activeSpreadsheetIndex);
         ScrollToSpreadsheetMatch(_activeSpreadsheetIndex);
     }
 
@@ -59,6 +94,7 @@ public sealed partial class ViewerPage
     {
         _spreadsheetMatches.Clear();
         _activeSpreadsheetIndex = -1;
+        SpreadsheetViewerControl?.ClearSearchMatches();
         if (FindCount != null) FindCount.Text = "";
     }
 
@@ -67,7 +103,7 @@ public sealed partial class ViewerPage
         if (FindCount == null) return;
 
         if (_spreadsheetMatches.Count == 0 || _activeSpreadsheetIndex < 0)
-            FindCount.Text = _spreadsheetMatches.Count > 0 ? "No results" : "";
+            FindCount.Text = string.IsNullOrWhiteSpace(FindBox.Text) ? "" : "No matches";
         else
             FindCount.Text = $"{_activeSpreadsheetIndex + 1} of {_spreadsheetMatches.Count}";
     }
@@ -82,8 +118,8 @@ public sealed partial class ViewerPage
         if (SpreadsheetViewerControl == null) return;
 
         var match = _spreadsheetMatches[matchIndex];
+        UpdateCurrentPage(match.SheetIndex + 1);
 
-        // Switch to the sheet containing the match if necessary
         SpreadsheetViewerControl.SelectCell(match.SheetIndex, match.Row, match.Col);
 
         Logger.Log($"[Spreadsheet] Navigated to Sheet {match.SheetIndex + 1}, Row {match.Row + 1}, Col {match.Col + 1}");

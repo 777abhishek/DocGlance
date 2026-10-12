@@ -180,11 +180,12 @@ public sealed partial class ViewerPage
 
         Toolbar.WordWrapVisibility       = Visibility.Collapsed;
         Toolbar.SidebarButtonVisibility  = Visibility.Collapsed;
-        Toolbar.FitWidthButtonVisibility = Visibility.Collapsed;
-        Toolbar.FitPageButtonVisibility  = Visibility.Collapsed;
+        Toolbar.FitWidthButtonVisibility = Visibility.Visible;
+        Toolbar.FitPageButtonVisibility  = Visibility.Visible;
         SidebarCard.Visibility           = Visibility.Collapsed;
         SidebarColumn.Width              = new GridLength(0);
         ViewModel.SidebarOpen            = false;
+        ZoomPill.Visibility              = Visibility.Visible;
     }
 
     private bool IsDarkTheme() =>

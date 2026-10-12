@@ -164,7 +164,7 @@
                 Visibility="Collapsed"
                 Click="WordWrapButton_Click"
                 ToolTipService.ToolTip="Word wrap (Alt+Z)">
-                <FontIcon Glyph="&#xF2B9;" FontSize="20"/>
+                <FontIcon Glyph="&#xEF64;" FontSize="20"/>
             </ToggleButton>
 
             <!-- Search -->

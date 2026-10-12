@@ -96,6 +96,12 @@ public sealed partial class ViewerPage
         if (_docxDocument != null)
         {
             DocumentScrollViewer.ChangeView(null, null, (float)_zoom, disableAnimation: false);
+            return;
+        }
+
+        if (_spreadsheetDocument != null)
+        {
+            SpreadsheetViewerControl.SetZoom(_zoom);
         }
     }
 
@@ -166,6 +172,12 @@ public sealed partial class ViewerPage
             if (avail <= 0) return;
 
             SetZoom(avail / widthLp);
+            return;
+        }
+
+        if (_spreadsheetDocument != null)
+        {
+            SetZoom(SpreadsheetViewerControl.GetFitWidthZoom());
         }
     }
 
@@ -240,6 +252,12 @@ public sealed partial class ViewerPage
             if (availableWidth <= 0 || availableHeight <= 0) return;
 
             SetZoom(Math.Min(availableWidth / widthLp, availableHeight / heightLp));
+            return;
+        }
+
+        if (_spreadsheetDocument != null)
+        {
+            SetZoom(SpreadsheetViewerControl.GetFitPageZoom());
         }
     }
 

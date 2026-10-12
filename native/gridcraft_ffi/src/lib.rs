@@ -321,17 +321,49 @@ pub extern "C" fn gc_search_text(
         }
 
         let result_str = matches.join(";");
-        let bytes = result_str.as_bytes();
-        let copy = bytes.len().min(buf_len);
-        if copy == 0 {
-            return 0;
-        }
-
-        unsafe {
-            std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf, copy);
-        }
-        copy
+        copy_search_results(result_str.as_bytes(), buf, buf_len)
     })
+}
+
+fn copy_search_results(bytes: &[u8], buf: *mut u8, buf_len: usize) -> usize {
+    if bytes.len() > buf_len {
+        return bytes.len();
+    }
+    if bytes.is_empty() {
+        return 0;
+    }
+
+    unsafe {
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf, bytes.len());
+    }
+    bytes.len()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::copy_search_results;
+
+    #[test]
+    fn reports_required_search_buffer_capacity() {
+        let bytes = b"0,1200,200;";
+        let mut output = [0xAA; 4];
+
+        let required = copy_search_results(bytes, output.as_mut_ptr(), output.len());
+
+        assert_eq!(required, bytes.len());
+        assert_eq!(output, [0xAA; 4]);
+    }
+
+    #[test]
+    fn writes_complete_search_results_when_buffer_fits() {
+        let bytes = b"0,12,3;1,8,4;";
+        let mut output = [0; 32];
+
+        let written = copy_search_results(bytes, output.as_mut_ptr(), output.len());
+
+        assert_eq!(written, bytes.len());
+        assert_eq!(&output[..written], bytes);
+    }
 }
 
 

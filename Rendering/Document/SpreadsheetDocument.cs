@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Globalization;
 
 namespace QuickView.Rendering.Document;
 
@@ -21,6 +22,7 @@ public sealed class SpreadsheetDocument : IDisposable
 {
     private GridCraftNative.GcDocumentHandle _handle;
     private readonly SemaphoreSlim _exportLock = new(1, 1);
+    private readonly object _nativeGate = new();
     private bool _disposed;
 
     private SpreadsheetDocument(GridCraftNative.GcDocumentHandle handle)
@@ -32,8 +34,11 @@ public sealed class SpreadsheetDocument : IDisposable
     {
         get
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-            return (int)GridCraftNative.gc_sheet_count(_handle);
+            lock (_nativeGate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                return (int)GridCraftNative.gc_sheet_count(_handle);
+            }
         }
     }
 
@@ -75,15 +80,17 @@ public sealed class SpreadsheetDocument : IDisposable
     /// </summary>
     public string GetSheetName(int index)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-
-        var buf = new byte[256];
-        unsafe
+        lock (_nativeGate)
         {
-            fixed (byte* pBuf = buf)
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var buf = new byte[256];
+            unsafe
             {
-                nuint written = GridCraftNative.gc_get_sheet_name(_handle, (uint)index, pBuf, (nuint)buf.Length);
-                return written > 0 ? Encoding.UTF8.GetString(buf, 0, (int)written) : $"Sheet {index + 1}";
+                fixed (byte* pBuf = buf)
+                {
+                    nuint written = GridCraftNative.gc_get_sheet_name(_handle, (uint)index, pBuf, (nuint)buf.Length);
+                    return written > 0 ? Encoding.UTF8.GetString(buf, 0, (int)written) : $"Sheet {index + 1}";
+                }
             }
         }
     }
@@ -93,13 +100,15 @@ public sealed class SpreadsheetDocument : IDisposable
     /// </summary>
     public (double widthPt, double heightPt) GetSheetSize(int index)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-
-        unsafe
+        lock (_nativeGate)
         {
-            double w, h;
-            GridCraftNative.gc_get_sheet_size(_handle, (uint)index, &w, &h);
-            return (w, h);
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            unsafe
+            {
+                double w, h;
+                GridCraftNative.gc_get_sheet_size(_handle, (uint)index, &w, &h);
+                return (w, h);
+            }
         }
     }
 
@@ -108,8 +117,6 @@ public sealed class SpreadsheetDocument : IDisposable
     /// </summary>
     public async Task<byte[]?> ExportToPdfAsync(int? sheetIndex = null, CancellationToken ct = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-
         await _exportLock.WaitAsync(ct);
         try
         {
@@ -117,7 +124,12 @@ public sealed class SpreadsheetDocument : IDisposable
 
             return await Task.Run(() =>
             {
-                var buf = GridCraftNative.gc_export_sheet_pdf(_handle, idx);
+                GridCraftNative.GcPdfBuffer buf;
+                lock (_nativeGate)
+                {
+                    ObjectDisposedException.ThrowIf(_disposed, this);
+                    buf = GridCraftNative.gc_export_sheet_pdf(_handle, idx);
+                }
                 if (buf.Data == IntPtr.Zero || buf.Len == 0)
                     return null;
 
@@ -144,15 +156,17 @@ public sealed class SpreadsheetDocument : IDisposable
     /// </summary>
     public string ExtractSheetText(int index)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-
-        var buf = new byte[128 * 1024]; // 128 KB
-        unsafe
+        lock (_nativeGate)
         {
-            fixed (byte* pBuf = buf)
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var buf = new byte[128 * 1024];
+            unsafe
             {
-                nuint written = GridCraftNative.gc_extract_sheet_text(_handle, (uint)index, pBuf, (nuint)buf.Length);
-                return written > 0 ? Encoding.UTF8.GetString(buf, 0, (int)written) : string.Empty;
+                fixed (byte* pBuf = buf)
+                {
+                    nuint written = GridCraftNative.gc_extract_sheet_text(_handle, (uint)index, pBuf, (nuint)buf.Length);
+                    return written > 0 ? Encoding.UTF8.GetString(buf, 0, (int)written) : string.Empty;
+                }
             }
         }
     }
@@ -162,47 +176,59 @@ public sealed class SpreadsheetDocument : IDisposable
     /// </summary>
     public List<SpreadsheetMatch> SearchText(string query, bool caseSensitive = false)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-
-        if (string.IsNullOrEmpty(query))
+        if (string.IsNullOrWhiteSpace(query))
             return [];
 
         var queryBytes = Encoding.UTF8.GetBytes(query);
-        var buf = new byte[256 * 1024]; // 256 KB
+        var buffer = new byte[4096];
+        nuint written;
 
-        unsafe
+        while (true)
         {
-            fixed (byte* pQuery = queryBytes)
-            fixed (byte* pBuf = buf)
+            unsafe
             {
-                nuint written = GridCraftNative.gc_search_text(
-                    _handle,
-                    pQuery,
-                    (nuint)queryBytes.Length,
-                    caseSensitive,
-                    pBuf,
-                    (nuint)buf.Length);
-
-                if (written == 0)
-                    return [];
-
-                string str = Encoding.UTF8.GetString(buf, 0, (int)written);
-                var matches = new List<SpreadsheetMatch>();
-                var parts = str.Split(';', StringSplitOptions.RemoveEmptyEntries);
-                foreach (var part in parts)
+                lock (_nativeGate)
                 {
-                    var tokens = part.Split(',');
-                    if (tokens.Length >= 3 &&
-                        int.TryParse(tokens[0], out int sIdx) &&
-                        int.TryParse(tokens[1], out int row) &&
-                        int.TryParse(tokens[2], out int col))
+                    ObjectDisposedException.ThrowIf(_disposed, this);
+                    fixed (byte* pQuery = queryBytes)
+                    fixed (byte* pBuf = buffer)
                     {
-                        matches.Add(new SpreadsheetMatch(sIdx, row, col));
+                        written = GridCraftNative.gc_search_text(
+                            _handle,
+                            pQuery,
+                            (nuint)queryBytes.Length,
+                            caseSensitive,
+                            pBuf,
+                            (nuint)buffer.Length);
                     }
                 }
-                return matches;
+            }
+
+            if (written <= (nuint)buffer.Length)
+                break;
+            if (written > int.MaxValue)
+                throw new InvalidOperationException("Spreadsheet search results exceed the supported buffer size.");
+
+            Array.Resize(ref buffer, (int)written);
+        }
+
+        if (written == 0)
+            return [];
+
+        string str = Encoding.UTF8.GetString(buffer, 0, (int)written);
+        var matches = new List<SpreadsheetMatch>();
+        foreach (string part in str.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var tokens = part.Split(',');
+            if (tokens.Length == 3 &&
+                int.TryParse(tokens[0], NumberStyles.None, CultureInfo.InvariantCulture, out int sheet) &&
+                int.TryParse(tokens[1], NumberStyles.None, CultureInfo.InvariantCulture, out int row) &&
+                int.TryParse(tokens[2], NumberStyles.None, CultureInfo.InvariantCulture, out int col))
+            {
+                matches.Add(new SpreadsheetMatch(sheet, row, col));
             }
         }
+        return matches;
     }
 
     /// <summary>
@@ -211,11 +237,14 @@ public sealed class SpreadsheetDocument : IDisposable
     /// </summary>
     public async Task<string?> GetSheetDataJsonAsync(int index, CancellationToken ct = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-
         return await Task.Run(() =>
         {
-            var buf = GridCraftNative.gc_get_sheet_data_json(_handle, (uint)index);
+            GridCraftNative.GcJsonBuffer buf;
+            lock (_nativeGate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                buf = GridCraftNative.gc_get_sheet_data_json(_handle, (uint)index);
+            }
             if (buf.Data == IntPtr.Zero || buf.Len == 0)
                 return null;
 
@@ -235,15 +264,16 @@ public sealed class SpreadsheetDocument : IDisposable
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
-
-        if (_handle.IsValid)
+        lock (_nativeGate)
         {
-            GridCraftNative.gc_free_document(_handle);
-            _handle = default;
-        }
+            if (_disposed) return;
+            _disposed = true;
 
-        _exportLock.Dispose();
+            if (_handle.IsValid)
+            {
+                GridCraftNative.gc_free_document(_handle);
+                _handle = default;
+            }
+        }
     }
 }

@@ -5,6 +5,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Graphics.Canvas;
@@ -48,11 +49,18 @@ public sealed partial class SpreadsheetViewer : UserControl
 
     // ── State ─────────────────────────────────────────────────────────────────
     private SpreadsheetDocument? _doc;
+    private int _sheetLoadGeneration;
     private SheetData?           _data;
     private Dictionary<(int, int), CellData>? _cellMap;
     private int _activeSheet = 0;
     private int _selectedRow = -1;
     private int _selectedCol = -1;
+    private int _activeSearchRow = -1;
+    private int _activeSearchCol = -1;
+    private IReadOnlyList<SpreadsheetMatch> _allSearchMatches = Array.Empty<SpreadsheetMatch>();
+    private int _activeSearchIndex = -1;
+    private HashSet<(int Row, int Col)> _searchCells = new();
+    private double _zoom = 1.0;
 
     // Cumulative column/row pixel offsets
     private double[] _colX = Array.Empty<double>();
@@ -73,6 +81,17 @@ public sealed partial class SpreadsheetViewer : UserControl
         Loaded += OnLoaded;
     }
 
+    public event EventHandler<int>? ActiveSheetChanged;
+    public event EventHandler<double>? ZoomChanged;
+    public event EventHandler? ManualZoomRequested;
+
+    public double Zoom => _zoom;
+    public int ActiveSheetIndex => _activeSheet;
+    public double SheetWidth => _totalWidth;
+    public double SheetHeight => _totalHeight;
+    public double ViewportWidth => CellScroll.ViewportWidth;
+    public double ViewportHeight => CellScroll.ViewportHeight;
+
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -91,6 +110,7 @@ public sealed partial class SpreadsheetViewer : UserControl
         _cellCanvas = new CanvasControl { HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
         _cellCanvas.Draw += CellCanvas_Draw;
         _cellCanvas.PointerPressed += CellCanvas_PointerPressed;
+        CellScroll.PointerWheelChanged += CellScroll_PointerWheelChanged;
         CellCanvasHost.Children.Add(_cellCanvas);
 
         // Column header canvas
@@ -108,26 +128,34 @@ public sealed partial class SpreadsheetViewer : UserControl
 
     private void ApplyCanvasSizes()
     {
-        if (_totalWidth <= 0 && _totalHeight <= 0) return;
+        double width = _totalWidth * _zoom;
+        double height = _totalHeight * _zoom;
+
+        ColumnHeaderRow.Height = new GridLength(26 * _zoom);
+        RowHeaderColumn.Width = new GridLength(50 * _zoom);
 
         if (_cellCanvas != null)
         {
-            _cellCanvas.Width  = _totalWidth;
-            _cellCanvas.Height = _totalHeight;
+            _cellCanvas.Width  = width;
+            _cellCanvas.Height = height;
         }
         if (_colHeaderCanvas != null)
         {
-            _colHeaderCanvas.Width = _totalWidth;
+            _colHeaderCanvas.Width = width;
+            _colHeaderCanvas.Height = 26 * _zoom;
         }
         if (_rowHeaderCanvas != null)
         {
-            _rowHeaderCanvas.Height = _totalHeight;
+            _rowHeaderCanvas.Width = 50 * _zoom;
+            _rowHeaderCanvas.Height = height;
         }
 
-        CellCanvasHost.Width  = _totalWidth;
-        CellCanvasHost.Height = _totalHeight;
-        ColHeaderCanvasHost.Width  = _totalWidth;
-        RowHeaderCanvasHost.Height = _totalHeight;
+        CellCanvasHost.Width  = width;
+        CellCanvasHost.Height = height;
+        ColHeaderCanvasHost.Width  = width;
+        ColHeaderCanvasHost.Height = 26 * _zoom;
+        RowHeaderCanvasHost.Width = 50 * _zoom;
+        RowHeaderCanvasHost.Height = height;
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -136,8 +164,13 @@ public sealed partial class SpreadsheetViewer : UserControl
     {
         _doc = doc;
         _activeSheet = 0;
+        _zoom = 1.0;
+        CellScroll.ChangeView(0, 0, 1.0f, disableAnimation: true);
+        SyncHeaderZoomAndOffsets();
         RebuildTabBar();
         await LoadSheetAsync(0, ct);
+        if (!ReferenceEquals(_doc, doc) || _activeSheet != 0) return;
+        ActiveSheetChanged?.Invoke(this, _activeSheet);
     }
 
     /// <summary>
@@ -152,6 +185,8 @@ public sealed partial class SpreadsheetViewer : UserControl
             _activeSheet = sheetIndex;
             UpdateTabStyles();
             await LoadSheetAsync(sheetIndex);
+            if (_activeSheet != sheetIndex) return;
+            ActiveSheetChanged?.Invoke(this, _activeSheet);
         }
 
         // Select the cell
@@ -161,10 +196,10 @@ public sealed partial class SpreadsheetViewer : UserControl
         // Scroll to make the cell visible (with some padding)
         if (_colX.Length > col + 1 && _rowY.Length > row + 1)
         {
-            double cellX = _colX[col];
-            double cellY = _rowY[row];
-            double cellW = _colX[col + 1] - cellX;
-            double cellH = _rowY[row + 1] - cellY;
+            double cellX = _colX[col] * _zoom;
+            double cellY = _rowY[row] * _zoom;
+            double cellW = (_colX[col + 1] - _colX[col]) * _zoom;
+            double cellH = (_rowY[row + 1] - _rowY[row]) * _zoom;
 
             // Calculate scroll position to center the cell
             double vpW = CellScroll.ViewportWidth > 0 ? CellScroll.ViewportWidth : 1200;
@@ -179,11 +214,118 @@ public sealed partial class SpreadsheetViewer : UserControl
         Invalidate();
     }
 
+    public async Task SelectSheetAsync(int sheetIndex, CancellationToken ct = default)
+    {
+        if (_doc == null || sheetIndex < 0 || sheetIndex >= _doc.SheetCount)
+            return;
+        if (sheetIndex == _activeSheet) return;
+
+        _activeSheet = sheetIndex;
+        UpdateTabStyles();
+        await LoadSheetAsync(sheetIndex, ct);
+        if (_activeSheet != sheetIndex) return;
+        ActiveSheetChanged?.Invoke(this, _activeSheet);
+    }
+
+    public void SetZoom(double zoom)
+    {
+        double nextZoom = Math.Clamp(zoom, 0.1, 6.0);
+        if (Math.Abs(nextZoom - _zoom) < 0.001) return;
+
+        double oldZoom = Math.Max(0.01, _zoom);
+        double anchorX = (CellScroll.HorizontalOffset + CellScroll.ViewportWidth / 2) / oldZoom;
+        double anchorY = (CellScroll.VerticalOffset + CellScroll.ViewportHeight / 2) / oldZoom;
+        _zoom = nextZoom;
+        ApplyCanvasSizes();
+        UpdateLayout();
+
+        _syncingZoom = true;
+        CellScroll.ChangeView(
+            Math.Max(0, anchorX * nextZoom - CellScroll.ViewportWidth / 2),
+            Math.Max(0, anchorY * nextZoom - CellScroll.ViewportHeight / 2),
+            1.0f,
+            disableAnimation: true);
+        _syncingZoom = false;
+        SyncHeaderZoomAndOffsets();
+        Invalidate();
+        ZoomChanged?.Invoke(this, _zoom);
+    }
+
+    public double GetFitWidthZoom()
+    {
+        double availableWidth = CellScroll.ViewportWidth;
+        return SheetWidth > 0 && availableWidth > 0
+            ? availableWidth / SheetWidth
+            : _zoom;
+    }
+
+    public double GetFitPageZoom()
+    {
+        double availableWidth = CellScroll.ViewportWidth;
+        double availableHeight = CellScroll.ViewportHeight;
+        return SheetWidth > 0 && SheetHeight > 0 && availableWidth > 0 && availableHeight > 0
+            ? Math.Min(availableWidth / SheetWidth, availableHeight / SheetHeight)
+            : _zoom;
+    }
+
+    public void SetSearchMatches(IReadOnlyList<SpreadsheetMatch> matches, int activeIndex)
+    {
+        _allSearchMatches = matches;
+        _activeSearchIndex = activeIndex;
+        UpdateVisibleSearchMatches();
+    }
+
+    private void UpdateVisibleSearchMatches()
+    {
+        _searchCells.Clear();
+        _activeSearchRow = -1;
+        _activeSearchCol = -1;
+
+        for (int i = 0; i < _allSearchMatches.Count; i++)
+        {
+            var match = _allSearchMatches[i];
+            if (match.SheetIndex != _activeSheet)
+                continue;
+
+            _searchCells.Add((match.Row, match.Col));
+            if (i == _activeSearchIndex)
+            {
+                _activeSearchRow = match.Row;
+                _activeSearchCol = match.Col;
+            }
+        }
+
+        Invalidate();
+    }
+
+    public void ClearSearchMatches()
+    {
+        _allSearchMatches = Array.Empty<SpreadsheetMatch>();
+        _activeSearchIndex = -1;
+        _searchCells.Clear();
+        _activeSearchRow = -1;
+        _activeSearchCol = -1;
+        Invalidate();
+    }
+
     public void Cleanup()
     {
+        _sheetLoadGeneration++;
         _doc = null;
         _data = null;
         _cellMap = null;
+        _activeSheet = 0;
+        _selectedRow = -1;
+        _selectedCol = -1;
+        _mergeMap.Clear();
+        _covered.Clear();
+        _colX = Array.Empty<double>();
+        _rowY = Array.Empty<double>();
+        _totalWidth = 0;
+        _totalHeight = 0;
+        TabBar.Children.Clear();
+        ClearSearchMatches();
+        ApplyCanvasSizes();
         _cellCanvas?.Invalidate();
         _colHeaderCanvas?.Invalidate();
         _rowHeaderCanvas?.Invalidate();
@@ -195,13 +337,30 @@ public sealed partial class SpreadsheetViewer : UserControl
     {
         if (_doc == null) return;
 
-        var json = await _doc.GetSheetDataJsonAsync(index, ct);
+        int generation = ++_sheetLoadGeneration;
+        var document = _doc;
+        string? json;
+        try
+        {
+            json = await document.GetSheetDataJsonAsync(index, ct);
+        }
+        catch (ObjectDisposedException) when (!ReferenceEquals(document, _doc))
+        {
+            return;
+        }
+
+        if (generation != _sheetLoadGeneration ||
+            !ReferenceEquals(document, _doc) ||
+            _activeSheet != index)
+            return;
+
         _data    = SheetData.FromJson(json);
         if (_data == null) return;
 
         _cellMap = _data.BuildCellMap();
         BuildMergeIndex();
         BuildLayoutArrays();
+        UpdateVisibleSearchMatches();
 
         ApplyCanvasSizes();
 
@@ -291,9 +450,7 @@ public sealed partial class SpreadsheetViewer : UserControl
             };
             btn.Click += async (_, _) =>
             {
-                _activeSheet = idx;
-                UpdateTabStyles();
-                await LoadSheetAsync(idx);
+                await SelectSheetAsync(idx);
             };
             TabBar.Children.Add(btn);
         }
@@ -311,6 +468,8 @@ public sealed partial class SpreadsheetViewer : UserControl
                 btn.Foreground = new SolidColorBrush(_tabText);
                 btn.BorderBrush = new SolidColorBrush(_tabBorder);
                 btn.FontWeight  = active ? FontWeights.SemiBold : FontWeights.Normal;
+                if (active)
+                    btn.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = true });
             }
         }
     }
@@ -318,22 +477,102 @@ public sealed partial class SpreadsheetViewer : UserControl
     // ── Scroll sync ───────────────────────────────────────────────────────────
 
     private bool _syncingScroll;
+    private bool _syncingZoom;
 
     private void CellScroll_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
     {
-        if (_syncingScroll) return;
+        if (_syncingScroll || _syncingZoom) return;
+
+        double nativeZoom = CellScroll.ZoomFactor;
+        if (Math.Abs(nativeZoom - 1.0) > 0.001)
+        {
+            if (e.IsIntermediate)
+            {
+                SyncHeadersDuringPinch(nativeZoom);
+                return;
+            }
+
+            double offsetX = CellScroll.HorizontalOffset;
+            double offsetY = CellScroll.VerticalOffset;
+            _zoom = Math.Clamp(_zoom * nativeZoom, 0.1, 6.0);
+            ApplyCanvasSizes();
+            UpdateLayout();
+
+            _syncingZoom = true;
+            CellScroll.ChangeView(offsetX, offsetY, 1.0f, disableAnimation: true);
+            _syncingZoom = false;
+
+            ManualZoomRequested?.Invoke(this, EventArgs.Empty);
+            SyncHeaderZoomAndOffsets();
+            Invalidate();
+            ZoomChanged?.Invoke(this, _zoom);
+        }
+
         _syncingScroll = true;
         try
         {
             ColHeaderScroll.ChangeView(CellScroll.HorizontalOffset, null, null, disableAnimation: true);
             RowHeaderScroll.ChangeView(null, CellScroll.VerticalOffset, null, disableAnimation: true);
         }
-        finally
-        {
-            _syncingScroll = false;
-        }
+        finally { _syncingScroll = false; }
+
         _colHeaderCanvas?.Invalidate();
         _rowHeaderCanvas?.Invalidate();
+    }
+
+    private void SyncHeaderZoomAndOffsets()
+    {
+        if (_syncingZoom) return;
+
+        _syncingZoom = true;
+        try
+        {
+            ColHeaderScroll.ChangeView(
+                CellScroll.HorizontalOffset,
+                null,
+                1.0f,
+                disableAnimation: true);
+            RowHeaderScroll.ChangeView(
+                null,
+                CellScroll.VerticalOffset,
+                1.0f,
+                disableAnimation: true);
+        }
+        finally { _syncingZoom = false; }
+    }
+
+    private void SyncHeadersDuringPinch(double nativeZoom)
+    {
+        _syncingZoom = true;
+        try
+        {
+            ColHeaderScroll.ChangeView(
+                CellScroll.HorizontalOffset,
+                null,
+                (float)nativeZoom,
+                disableAnimation: true);
+            RowHeaderScroll.ChangeView(
+                null,
+                CellScroll.VerticalOffset,
+                (float)nativeZoom,
+                disableAnimation: true);
+        }
+        finally { _syncingZoom = false; }
+    }
+
+    private void CellScroll_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
+    {
+        bool controlDown = Microsoft.UI.Input.InputKeyboardSource
+            .GetKeyStateForCurrentThread(Windows.System.VirtualKey.Control)
+            .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+        if (!controlDown) return;
+
+        int delta = e.GetCurrentPoint(CellScroll).Properties.MouseWheelDelta;
+        if (delta == 0) return;
+
+        ManualZoomRequested?.Invoke(this, EventArgs.Empty);
+        SetZoom(_zoom * Math.Pow(1.1, delta / 120.0));
+        e.Handled = true;
     }
 
     // ── Win2D draw ─────────────────────────────────────────────────────────────
@@ -349,15 +588,18 @@ public sealed partial class SpreadsheetViewer : UserControl
         double vpW     = CellScroll.ViewportWidth > 0 ? CellScroll.ViewportWidth : Math.Max(ActualWidth, 1200);
         double vpH     = CellScroll.ViewportHeight > 0 ? CellScroll.ViewportHeight : Math.Max(ActualHeight, 800);
 
-        int firstCol = ColAt(scrollX);
-        int lastCol  = ColAt(scrollX + vpW) + 1;
-        int firstRow = RowAt(scrollY);
-        int lastRow  = RowAt(scrollY + vpH) + 1;
+        double zoom = Math.Max(0.01, _zoom);
+        int firstCol = ColAt(scrollX / zoom);
+        int lastCol  = ColAt((scrollX + vpW) / zoom) + 1;
+        int firstRow = RowAt(scrollY / zoom);
+        int lastRow  = RowAt((scrollY + vpH) / zoom) + 1;
 
         firstCol = Math.Clamp(firstCol, 0, _colX.Length - 2);
         lastCol  = Math.Clamp(lastCol,  0, _colX.Length - 2);
         firstRow = Math.Clamp(firstRow, 0, _rowY.Length - 2);
         lastRow  = Math.Clamp(lastRow,  0, _rowY.Length - 2);
+
+        ds.Transform = Matrix3x2.CreateScale((float)zoom);
 
         // ── Background fills ─────────────────────────────────────────────────
         for (int row = firstRow; row <= lastRow; row++)
@@ -367,7 +609,7 @@ public sealed partial class SpreadsheetViewer : UserControl
                 if (_covered.Contains((row, col))) continue;
 
                 var cr = CellRect(row, col);
-                bool isSelected = (row == _selectedRow || col == _selectedCol);
+                bool isSelected = row == _selectedRow && col == _selectedCol;
 
                 if (_cellMap != null && _cellMap.TryGetValue((row, col), out var cell) && cell.Bg != null
                     && TryParseColor(cell.Bg, out var bg))
@@ -375,8 +617,18 @@ public sealed partial class SpreadsheetViewer : UserControl
                     ds.FillRectangle(ToR(cr), bg);
                 }
 
-                if (isSelected)
+                if (_searchCells.Contains((row, col)))
+                {
+                    bool activeSearchHit = row == _activeSearchRow && col == _activeSearchCol;
+                    ds.FillRectangle(ToR(cr), activeSearchHit
+                        ? Color.FromArgb(105, 255, 105, 97)
+                        : Color.FromArgb(90, 255, 224, 102));
+                }
+
+                if (isSelected && !_searchCells.Contains((row, col)))
                     ds.FillRectangle(ToR(cr), _selection);
+                if (row == _activeSearchRow && col == _activeSearchCol)
+                    ds.DrawRectangle(ToR(cr), Color.FromArgb(230, 205, 65, 60), 1.0f);
             }
         }
 
@@ -448,7 +700,11 @@ public sealed partial class SpreadsheetViewer : UserControl
                 };
 
                 var fg = (cell.Fg != null && TryParseColor(cell.Fg, out var c)) ? c : _cellText;
-                var textRect = new Rect(cr.X + 3, cr.Y + 2, Math.Max(0, cr.Width - 6), Math.Max(0, cr.Height - 4));
+                var textRect = new Rect(
+                    cr.X + 3,
+                    cr.Y + 2,
+                    Math.Max(0, cr.Width - 6),
+                    Math.Max(0, cr.Height - 4));
                 ds.DrawText(cell.Value!, ToR(textRect), fg, fmt);
             }
         }
@@ -461,10 +717,13 @@ public sealed partial class SpreadsheetViewer : UserControl
         if (_data == null || _colX.Length < 2) return;
 
         double scrollX = CellScroll.HorizontalOffset;
-        int firstCol   = ColAt(scrollX);
-        int lastCol    = ColAt(scrollX + Math.Max(CellScroll.ViewportWidth, 400)) + 1;
+        double zoom = Math.Max(0.01, _zoom);
+        int firstCol   = ColAt(scrollX / zoom);
+        int lastCol    = ColAt((scrollX + Math.Max(CellScroll.ViewportWidth, 400)) / zoom) + 1;
         firstCol = Math.Clamp(firstCol, 0, _colX.Length - 2);
         lastCol  = Math.Clamp(lastCol,  0, _colX.Length - 2);
+
+        ds.Transform = Matrix3x2.CreateScale((float)zoom);
 
         using var fmt = new CanvasTextFormat
         {
@@ -484,7 +743,7 @@ public sealed partial class SpreadsheetViewer : UserControl
             ds.DrawText(ColName(col), x + w / 2, 13, _headerText, fmt);
             ds.DrawLine(x + w, 0, x + w, 26, _gridLine, 0.5f);
         }
-        float headerW = (float)(sender.Size.Width > 0 ? sender.Size.Width : _totalWidth);
+        float headerW = (float)_totalWidth;
         ds.DrawLine(0, 25.5f, headerW, 25.5f, _gridLine, 1f);
     }
 
@@ -494,11 +753,14 @@ public sealed partial class SpreadsheetViewer : UserControl
         ds.Clear(_bgHeader);
         if (_data == null || _rowY.Length < 2) return;
 
+        double zoom = Math.Max(0.01, _zoom);
         double scrollY = CellScroll.VerticalOffset;
-        int firstRow   = RowAt(scrollY);
-        int lastRow    = RowAt(scrollY + Math.Max(CellScroll.ViewportHeight > 0 ? CellScroll.ViewportHeight : 800, 400)) + 1;
+        int firstRow   = RowAt(scrollY / zoom);
+        int lastRow    = RowAt((scrollY + Math.Max(CellScroll.ViewportHeight > 0 ? CellScroll.ViewportHeight : 800, 400)) / zoom) + 1;
         firstRow = Math.Clamp(firstRow, 0, _rowY.Length - 2);
         lastRow  = Math.Clamp(lastRow,  0, _rowY.Length - 2);
+
+        ds.Transform = Matrix3x2.CreateScale((float)zoom);
 
         using var fmt = new CanvasTextFormat
         {
@@ -518,7 +780,7 @@ public sealed partial class SpreadsheetViewer : UserControl
             ds.DrawText((row + 1).ToString(), 25, y + h / 2, _headerText, fmt);
             ds.DrawLine(0, y + h, 50, y + h, _gridLine, 0.5f);
         }
-        float headerH = (float)(sender.Size.Height > 0 ? sender.Size.Height : _totalHeight);
+        float headerH = (float)_totalHeight;
         ds.DrawLine(49.5f, 0, 49.5f, headerH, _gridLine, 1f);
     }
 
@@ -527,8 +789,8 @@ public sealed partial class SpreadsheetViewer : UserControl
     private void CellCanvas_PointerPressed(object sender, PointerRoutedEventArgs e)
     {
         var pos  = e.GetCurrentPoint(_cellCanvas).Position;
-        _selectedCol = ColAt(pos.X);
-        _selectedRow = RowAt(pos.Y);
+        _selectedCol = ColAt(pos.X / _zoom);
+        _selectedRow = RowAt(pos.Y / _zoom);
         Invalidate();
     }
 
