@@ -303,13 +303,13 @@ public sealed partial class ViewerPage
         var card = new ViewerInfoCard(doc);
         card.OpenRequested += (_, _) => OpenExternalButton_Click(card, EventArgs.Empty);
         
-        // For info cards, use the Canvas
-        var canvasForCard = new Canvas { Width = 500, Height = 400 };
-        Canvas.SetLeft(card, 50);
-        Canvas.SetTop(card, 50);
-        canvasForCard.Children.Add(card);
-        PdfViewportCanvas.Children.Clear();
-        PdfViewportCanvas.Children.Add(canvasForCard);
+        // Use the overlay Grid for proper centering
+        CenteredMessageGrid.Children.Clear();
+        CenteredMessageGrid.Children.Add(card);
+        CenteredMessageGrid.Visibility = Visibility.Visible;
+        
+        // Hide the PDF canvas
+        DocumentScrollViewer.Visibility = Visibility.Collapsed;
     }
 
     private async Task LoadViaRendererAsync(QuickView.Core.Interfaces.IFileRenderer renderer,
@@ -378,35 +378,41 @@ public sealed partial class ViewerPage
     private void ShowErrorCard(string message)
     {
         ViewModel.ErrorMessage = message;
-        var card = new Border
-        {
-            Width           = 420,
-            BorderThickness = new Thickness(1),
-            CornerRadius    = new CornerRadius(12),
-            Padding         = new Thickness(32),
-            Background      = ResBrush("CardBackgroundFillColorDefaultBrush"),
-            BorderBrush     = ResBrush("CardStrokeColorDefaultBrush"),
+        
+        var stack = new StackPanel 
+        { 
+            Spacing = 16,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
         };
-        var stack = new StackPanel { Spacing = 12, HorizontalAlignment = HorizontalAlignment.Center };
+        
         stack.Children.Add(new FontIcon
         {
-            Glyph = "\uEA39", FontSize = 48,
+            Glyph = "\uEA39", 
+            FontSize = 48,
             HorizontalAlignment = HorizontalAlignment.Center,
+            Foreground = ResBrush("TextFillColorSecondaryBrush"),
+            Opacity = 0.6,
         });
+        
         stack.Children.Add(new TextBlock
         {
             Text          = message,
+            FontSize      = 15,
             TextWrapping  = TextWrapping.Wrap,
             TextAlignment = TextAlignment.Center,
+            MaxWidth      = 400,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Foreground    = ResBrush("TextFillColorSecondaryBrush"),
         });
-        card.Child = stack;
         
-        var canvasForError = new Canvas { Width = 500, Height = 400 };
-        Canvas.SetLeft(card, 50);
-        Canvas.SetTop(card, 50);
-        canvasForError.Children.Add(card);
-        PdfViewportCanvas.Children.Clear();
-        PdfViewportCanvas.Children.Add(canvasForError);
+        // Use the overlay Grid for proper centering
+        CenteredMessageGrid.Children.Clear();
+        CenteredMessageGrid.Children.Add(stack);
+        CenteredMessageGrid.Visibility = Visibility.Visible;
+        
+        // Hide the PDF canvas
+        DocumentScrollViewer.Visibility = Visibility.Collapsed;
     }
 
     // ══════════════════════════════════════════════════════════════════════════

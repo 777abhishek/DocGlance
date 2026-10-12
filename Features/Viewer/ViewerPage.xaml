@@ -6,6 +6,7 @@
     xmlns:models="using:QuickView.Core.Models"
     xmlns:components="using:QuickView.Features.Viewer.Components"
     xmlns:spreadsheet="using:QuickView.Features.Viewer.Spreadsheet"
+    Background="Transparent"
 >
 
     <Page.Transitions>
@@ -311,6 +312,14 @@
                             IsHitTestVisible="False"/>
                     </Canvas>
                 </ScrollViewer>
+                
+                <!-- Overlay Grid for centered error/info messages -->
+                <Grid x:Name="CenteredMessageGrid"
+                      Visibility="Collapsed"
+                      Background="Transparent"
+                      HorizontalAlignment="Stretch"
+                      VerticalAlignment="Stretch"
+                      IsHitTestVisible="True"/>
 
                 <!-- ── TEXT viewer (plain) — TextBox IS the scroll host ── -->
                 <!-- ── PLAIN TEXT viewer — TextBox is the scroll host ── -->

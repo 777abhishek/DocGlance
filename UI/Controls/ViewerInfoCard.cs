@@ -26,7 +26,7 @@ public sealed class ViewerInfoCard : ContentControl
     {
         HorizontalAlignment = HorizontalAlignment.Center;
         VerticalAlignment   = VerticalAlignment.Center;
-        Content             = BuildCard(doc);
+        Content             = BuildSimpleContent(doc);
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
@@ -43,62 +43,47 @@ public sealed class ViewerInfoCard : ContentControl
         return null;
     }
 
-    // ── card builder ──────────────────────────────────────────────────────────
+    // ── content builder ───────────────────────────────────────────────────────
 
-    private Border BuildCard(DocumentItem doc)
-    {
-        var card = new Border
-        {
-            Width           = 560,
-            MinHeight       = 380,
-            CornerRadius    = new CornerRadius(12),
-            BorderThickness = new Thickness(1),
-            Padding         = new Thickness(48, 40, 48, 40),
-            Background      = Brush("CardBackgroundFillColorDefaultBrush"),
-            BorderBrush     = Brush("CardStrokeColorDefaultBrush"),
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment   = VerticalAlignment.Center,
-        };
-        card.Shadow      = new ThemeShadow();
-        card.Translation = new System.Numerics.Vector3(0, 0, 12);
-        card.Child       = BuildContent(doc);
-        return card;
-    }
-
-    private StackPanel BuildContent(DocumentItem doc)
+    private StackPanel BuildSimpleContent(DocumentItem doc)
     {
         var stack = new StackPanel
         {
             Orientation         = Orientation.Vertical,
-            Spacing             = 14,
+            Spacing             = 18,
             HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment   = VerticalAlignment.Center,
         };
 
         stack.Children.Add(new FontIcon
         {
             Glyph               = doc.FileGlyph,
-            FontSize            = 64,
+            FontSize            = 48,
             Foreground          = doc.TypeColor,
             HorizontalAlignment = HorizontalAlignment.Center,
+            Opacity             = 0.6,
         });
 
         stack.Children.Add(new TextBlock
         {
             Text                = doc.Title,
-            FontSize            = 20,
+            FontSize            = 18,
             FontWeight          = FontWeights.SemiBold,
             HorizontalAlignment = HorizontalAlignment.Center,
             TextWrapping        = TextWrapping.Wrap,
-            MaxWidth            = 460,
+            MaxWidth            = 500,
             TextAlignment       = TextAlignment.Center,
+            Foreground          = Brush("TextFillColorPrimaryBrush"),
         });
 
         stack.Children.Add(new TextBlock
         {
             Text                = $"{doc.FileType?.ToUpperInvariant()}  ·  {doc.FileSize}  ·  {doc.LastWriteTime:MMM dd, yyyy}",
+            FontSize            = 13,
             Foreground          = Brush("TextFillColorSecondaryBrush"),
             HorizontalAlignment = HorizontalAlignment.Center,
             TextAlignment       = TextAlignment.Center,
+            Opacity             = 0.8,
         });
 
         stack.Children.Add(new TextBlock
@@ -108,8 +93,10 @@ public sealed class ViewerInfoCard : ContentControl
             Foreground          = Brush("TextFillColorTertiaryBrush"),
             HorizontalAlignment = HorizontalAlignment.Center,
             TextWrapping        = TextWrapping.Wrap,
-            MaxWidth            = 460,
+            MaxWidth            = 500,
             TextAlignment       = TextAlignment.Center,
+            Opacity             = 0.6,
+            Margin              = new Thickness(0, -6, 0, 4),
         });
 
         var btn = new Button
@@ -117,6 +104,7 @@ public sealed class ViewerInfoCard : ContentControl
             Content             = "Open with default app",
             HorizontalAlignment = HorizontalAlignment.Center,
             Style               = ResStyle("AccentButtonStyle"),
+            Padding             = new Thickness(20, 10, 20, 10),
         };
         btn.Click += (_, _) => OpenRequested?.Invoke(this, EventArgs.Empty);
         stack.Children.Add(btn);
