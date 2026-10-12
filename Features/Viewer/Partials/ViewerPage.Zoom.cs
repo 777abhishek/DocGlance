@@ -15,34 +15,35 @@ public sealed partial class ViewerPage
     // ── FitMode tracking ──────────────────────────────────────────────────────
     private enum FitMode { None, FitWidth, FitPage }
     private FitMode _fitMode = FitMode.None;
+
+    private void SetFitMode(FitMode mode)
+    {
+        _fitMode = mode;
+        Toolbar.IsFitWidthChecked = mode == FitMode.FitWidth;
+        Toolbar.IsFitPageChecked = mode == FitMode.FitPage;
+    }
     
     // ── Zoom buttons ──────────────────────────────────────────────────────────
 
     private void ZoomFitWidth_Click(object sender, RoutedEventArgs e)
     {
-        Toolbar.IsFitWidthChecked = true;
-        Toolbar.IsFitPageChecked  = false;
         Toolbar_FitWidthRequested(sender, EventArgs.Empty);
     }
 
     private void ZoomFitPage_Click(object sender, RoutedEventArgs e)
     {
-        Toolbar.IsFitPageChecked  = true;
-        Toolbar.IsFitWidthChecked = false;
         Toolbar_FitPageRequested(sender, EventArgs.Empty);
     }
 
     private void ZoomOutButton_Click(object sender, RoutedEventArgs e)
     {
-        _fitMode = FitMode.None;
-        Toolbar.IsFitWidthChecked = Toolbar.IsFitPageChecked = false;
+        SetFitMode(FitMode.None);
         SetZoom(_zoom / 1.25);
     }
 
     private void ZoomInButton_Click(object sender, RoutedEventArgs e)
     {
-        _fitMode = FitMode.None;
-        Toolbar.IsFitWidthChecked = Toolbar.IsFitPageChecked = false;
+        SetFitMode(FitMode.None);
         SetZoom(_zoom * 1.25);
     }
 
@@ -53,8 +54,7 @@ public sealed partial class ViewerPage
                 System.Globalization.NumberStyles.Any,
                 System.Globalization.CultureInfo.InvariantCulture, out double pct))
         {
-            _fitMode = FitMode.None;
-            Toolbar.IsFitWidthChecked = Toolbar.IsFitPageChecked = false;
+            SetFitMode(FitMode.None);
             SetZoom(NaturalZoom * pct);
         }
     }
@@ -80,7 +80,7 @@ public sealed partial class ViewerPage
         // PDF: let ScrollViewer scale the canvas, then re-render pages at new resolution
         if (_pdfState != null)
         {
-            DocumentScrollViewer.ChangeView(null, null, (float)_zoom, disableAnimation: true);
+            DocumentScrollViewer.ChangeView(null, null, (float)_zoom, disableAnimation: false);
             _ = RenderPagesAsync();
             return;
         }
@@ -113,7 +113,7 @@ public sealed partial class ViewerPage
         if (_pdfState != null && _viewportState != null)
         {
             // Base width = page width at zoom 1.0 in layout px
-            var (ptW, _) = _pdfState.GetPageSize(0);
+            var (ptW, _) = GetRotatedPageSize(0);
             if (ptW <= 0) return;
 
             double pageWidthLp = ptW * (96.0 / 72.0);
@@ -179,7 +179,7 @@ public sealed partial class ViewerPage
         if (_pdfState != null && _viewportState != null)
         {
             // Base dimensions = page size at zoom 1.0 in layout px
-            var (ptW, ptH) = _pdfState.GetPageSize(0);
+            var (ptW, ptH) = GetRotatedPageSize(0);
             if (ptW <= 0 || ptH <= 0) return;
 
             double widthLp  = ptW * (96.0 / 72.0);
@@ -222,6 +222,24 @@ public sealed partial class ViewerPage
             QuickView.Infrastructure.Logging.Logger.Log($"ApplyFitPage PPTX: widthLp={widthLp}, heightLp={heightLp}, aw={aw}, ah={ah}, targetZoom={targetZoom}");
             
             SetZoom(targetZoom);
+            return;
+        }
+
+        if (_docxDocument != null)
+        {
+            const double PtToLp = 96.0 / 72.0;
+            var (ptW, ptH) = _docxDocument.GetPageSize(0);
+            if (ptW <= 0 || ptH <= 0) return;
+
+            double widthLp = ptW * PtToLp;
+            double heightLp = ptH * PtToLp;
+            const double sidePad = 28.0;
+            const double topPad = 16.0;
+            double availableWidth = DocumentScrollViewer.ViewportWidth - sidePad * 2;
+            double availableHeight = DocumentScrollViewer.ViewportHeight - topPad * 2;
+            if (availableWidth <= 0 || availableHeight <= 0) return;
+
+            SetZoom(Math.Min(availableWidth / widthLp, availableHeight / heightLp));
         }
     }
 
@@ -247,8 +265,7 @@ public sealed partial class ViewerPage
 
         if (!ctrl || point.Properties.MouseWheelDelta == 0) return;
 
-        _fitMode = FitMode.None;
-        Toolbar.IsFitWidthChecked = Toolbar.IsFitPageChecked = false;
+        SetFitMode(FitMode.None);
 
         // One notch = 120; multiplicative so each step feels the same at any zoom
         double steps  = point.Properties.MouseWheelDelta / 120.0;

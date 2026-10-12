@@ -426,6 +426,10 @@ public sealed partial class ViewerPage
         ShowLoading(true);
         try
         {
+            _pptxSearchResults = Array.Empty<QuickView.Rendering.Presentation.PptxSearchMatch>();
+            _activePptxSearchIndex = -1;
+            FindCount.Text = "";
+
             // Clear PDF viewport image
             if (ViewportImage != null)
                 ViewportImage.Source = null;
@@ -480,6 +484,7 @@ public sealed partial class ViewerPage
             // Apply 100% zoom initially
             _zoom = NaturalZoom;
             _lastPptxRenderZoom = _zoom;
+            _lastPptxRenderDisplayScale = DisplayScale;
             ZoomLabel.Text = "100%";
             ViewModel.NaturalZoom = NaturalZoom;
             ViewModel.Zoom = _zoom;
@@ -494,7 +499,8 @@ public sealed partial class ViewerPage
             // Force layout update before rendering
             DocumentScrollViewer.UpdateLayout();
             
-            // Apply fit-width so slides fit in viewport by default
+            // Start PPTX in fit-width mode and keep the matching toolbar toggle active.
+            SetFitMode(FitMode.FitWidth);
             ApplyFitWidth();
             
             // Wait for zoom animation to complete before rendering
@@ -553,6 +559,7 @@ public sealed partial class ViewerPage
     // ── PPTX Viewport Rendering (memory-efficient, only render visible slides) ────
     
     private Dictionary<int, Microsoft.UI.Xaml.Controls.Image> _pptxSlideCache = new();
+    private readonly List<Border> _pptxSearchHighlights = new();
     
     private async Task RenderPptxViewportAsync()
     {
@@ -588,8 +595,9 @@ public sealed partial class ViewerPage
             
             Logger.Log($"Viewport: width={DocumentScrollViewer.ViewportWidth}, height={viewportHeight}, scrollY={scrollY}");
             
-            // Add buffer above/below for smooth scrolling
-            double bufferSlides = 2;
+            // Keep one nearby slide rendered ahead/behind without pre-rendering
+            // several large bitmaps on every viewport change.
+            const double bufferSlides = 1;
             double visibleStart = scrollY - (bufferSlides * (slideHeightLp + PageGapLp));
             double visibleEnd = scrollY + viewportHeight + (bufferSlides * (slideHeightLp + PageGapLp));
             
@@ -599,15 +607,12 @@ public sealed partial class ViewerPage
             
             Logger.Log($"Rendering PPTX viewport: slides {firstSlide}-{lastSlide} (scroll={scrollY})");
             
-            // Adaptive render scale based on zoom level
-            // Always render at least 1.5x for quality, scale up further when zoomed
-            // At fit-width (~0.93x zoom): render at 1.5x (crisp when scaled down)
-            // At 100% zoom: render at 1.5x (crisp at native size)
-            // At 200% zoom: render at 2.5x (crisp when zoomed in)
-            double baseScale = 1.5; // Minimum quality
-            double zoomMultiplier = Math.Max(1.0, _zoom);
-            double renderScale = baseScale * zoomMultiplier * DisplayScale;
-            renderScale = Math.Min(3.0, renderScale); // Cap at 3x to avoid huge memory
+            // Render at the zoomed display's pixel density, with a small
+            // oversample for text and a cap to limit per-slide memory.
+            double renderScale = Math.Clamp(
+                _zoom * DisplayScale * PtToLp * 1.15,
+                1.8,
+                3.5);
             
             Logger.Log($"Render scale: {renderScale:F2} (zoom={_zoom:F2}, display={DisplayScale:F2})");
             
@@ -676,6 +681,7 @@ public sealed partial class ViewerPage
             }
             
             Logger.Log($"PPTX cache size: {_pptxSlideCache.Count} slides");
+            DrawPptxSearchHighlights();
         }
         catch (Exception ex)
         {
@@ -705,9 +711,11 @@ public sealed partial class ViewerPage
             SyncToViewModel();
         }
         
-        // Check if we need to re-render at different resolution
-        // Re-render if zoom changed by more than 25%
-        bool needsRerender = Math.Abs(_zoom - _lastPptxRenderZoom) > (_lastPptxRenderZoom * 0.25);
+        // Re-render when zoom or display density has changed enough to affect
+        // the source bitmap's pixel density.
+        bool needsRerender =
+            Math.Abs(_zoom - _lastPptxRenderZoom) > (_lastPptxRenderZoom * 0.15) ||
+            Math.Abs(DisplayScale - _lastPptxRenderDisplayScale) > 0.05;
         
         // Render visible slides when scroll/zoom settles
         if (!e.IsIntermediate)
@@ -718,14 +726,40 @@ public sealed partial class ViewerPage
                 Logger.Log($"Zoom changed significantly ({_lastPptxRenderZoom:F2} -> {_zoom:F2}), clearing cache");
                 ClearPptxCache();
                 _lastPptxRenderZoom = _zoom;
+                _lastPptxRenderDisplayScale = DisplayScale;
             }
+
+            UpdateCurrentPptxPage();
             
             _ = RenderPptxViewportAsync();
         }
     }
     
+    private double _lastPptxRenderDisplayScale = 1.0;
+
+    private void UpdateCurrentPptxPage()
+    {
+        if (_pptxDocument == null || _pptxDocument.SlideCount == 0) return;
+
+        const double PtToLp = 96.0 / 72.0;
+        const double PageGapLp = 12.0;
+        const double VerticalPaddingLp = 20.0;
+        var (_, slideHeightPt) = _pptxDocument.GetSlideSize(0);
+        double slideStrideLp = slideHeightPt * PtToLp + PageGapLp;
+        double zoom = Math.Max(0.1, DocumentScrollViewer.ZoomFactor);
+        double viewportCenterLp =
+            (DocumentScrollViewer.VerticalOffset + DocumentScrollViewer.ViewportHeight / 2.0) / zoom;
+        int slideIndex = (int)Math.Floor((viewportCenterLp - VerticalPaddingLp) / slideStrideLp);
+        int currentPage = Math.Clamp(slideIndex + 1, 1, _pptxDocument.SlideCount);
+
+        if (currentPage != _page)
+            UpdateCurrentPage(currentPage);
+    }
+
     private void ClearPptxCache()
     {
+        ClearPptxSearchHighlights();
+
         if (_pptxSlideCache.Count == 0)
         {
             Logger.Log("ClearPptxCache: cache already empty");
@@ -746,6 +780,62 @@ public sealed partial class ViewerPage
         _pptxSlideCache.Clear();
         
         Logger.Log($"After clear: canvas has {PdfViewportCanvas.Children.Count} children (should be 2: ViewportImage + SearchHighlightCanvas)");
+    }
+
+    private void ClearPptxSearchHighlights()
+    {
+        foreach (var highlight in _pptxSearchHighlights)
+            PdfViewportCanvas.Children.Remove(highlight);
+        _pptxSearchHighlights.Clear();
+    }
+
+    private void DrawPptxSearchHighlights()
+    {
+        ClearPptxSearchHighlights();
+        if (_pptxDocument == null || _pptxSearchResults.Count == 0 || _pptxSlideCache.Count == 0)
+            return;
+
+        const double PtToLp = 96.0 / 72.0;
+        const double PageGapLp = 12.0;
+        const double VerticalPaddingLp = 20.0;
+        var (_, slideHeightPt) = _pptxDocument.GetSlideSize(0);
+        double slideStrideLp = slideHeightPt * PtToLp + PageGapLp;
+
+        for (int matchIndex = 0; matchIndex < _pptxSearchResults.Count; matchIndex++)
+        {
+            var match = _pptxSearchResults[matchIndex];
+            if (!_pptxSlideCache.ContainsKey(match.SlideIndex))
+                continue;
+
+            bool active = matchIndex == _activePptxSearchIndex;
+            foreach (var rect in match.Rects)
+            {
+                var highlight = new Border
+                {
+                    Width = Math.Max(2, rect.Width * PtToLp),
+                    Height = Math.Max(2, rect.Height * PtToLp),
+                    CornerRadius = new CornerRadius(2),
+                    Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                        active
+                            ? Windows.UI.Color.FromArgb(145, 255, 105, 97)
+                            : Windows.UI.Color.FromArgb(105, 255, 224, 102)),
+                    BorderBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                        active
+                            ? Windows.UI.Color.FromArgb(190, 210, 70, 65)
+                            : Windows.UI.Color.FromArgb(145, 205, 160, 40)),
+                    BorderThickness = new Thickness(active ? 1 : 0.5),
+                    IsHitTestVisible = false,
+                };
+
+                Microsoft.UI.Xaml.Controls.Canvas.SetLeft(highlight, rect.X * PtToLp);
+                Microsoft.UI.Xaml.Controls.Canvas.SetTop(
+                    highlight,
+                    VerticalPaddingLp + match.SlideIndex * slideStrideLp + rect.Y * PtToLp);
+                Microsoft.UI.Xaml.Controls.Canvas.SetZIndex(highlight, 10);
+                PdfViewportCanvas.Children.Add(highlight);
+                _pptxSearchHighlights.Add(highlight);
+            }
+        }
     }
     
     private async void LoadSlideThumbnails()
@@ -905,7 +995,8 @@ public sealed partial class ViewerPage
             // Force layout update
             DocumentScrollViewer.UpdateLayout();
 
-            // Apply fit-width by default
+            // Start DOCX in fit-width mode and keep the matching toolbar toggle active.
+            SetFitMode(FitMode.FitWidth);
             ApplyFitWidth();
 
             // Wait for zoom animation

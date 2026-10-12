@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using QuickView.Core.Models;
+using QuickView.Rendering.Presentation;
 using QuickView.Rendering.Pdf;
 using System;
 using System.Collections.Generic;
@@ -18,6 +19,8 @@ public sealed partial class ViewerPage
     private CancellationTokenSource? _searchDebounceCts;
     private IReadOnlyList<PdfSearchResult> _searchResults = Array.Empty<PdfSearchResult>();
     private int _activeSearchIndex = -1;
+    private IReadOnlyList<PptxSearchMatch> _pptxSearchResults = Array.Empty<PptxSearchMatch>();
+    private int _activePptxSearchIndex = -1;
 
     // ── Canvas overlay creation ───────────────────────────────────────────────
 
@@ -87,6 +90,25 @@ public sealed partial class ViewerPage
         try
         {
             bool caseSensitive = MatchCaseButton?.IsChecked == true;
+            if (_pptxDocument is { } pptxDocument)
+            {
+                var pptxResults = await Task.Run(
+                    () => pptxDocument.SearchText(query, caseSensitive),
+                    ct);
+                if (ct.IsCancellationRequested) return;
+
+                _pptxSearchResults = pptxResults;
+                _activePptxSearchIndex = pptxResults.Count > 0 ? 0 : -1;
+                FindCount.Text = pptxResults.Count == 0
+                    ? "No matches"
+                    : $"1 of {pptxResults.Count}";
+                DrawPptxSearchHighlights();
+
+                if (_activePptxSearchIndex >= 0)
+                    GoToPage(pptxResults[0].SlideIndex + 1);
+                return;
+            }
+
             if (_pdfState == null) { SetSearchLoading(false); return; }
             var results = await PdfTextService.SearchAsync(_pdfState, query, caseSensitive, ct);
             if (ct.IsCancellationRequested) return;
@@ -101,7 +123,11 @@ public sealed partial class ViewerPage
                 ScrollToHit(_activeSearchIndex);
         }
         catch (OperationCanceledException) { }
-        catch { FindCount.Text = ""; }
+        catch (Exception ex)
+        {
+            QuickView.Infrastructure.Logging.Logger.Error("Document search failed", ex);
+            FindCount.Text = "Search failed";
+        }
         finally { SetSearchLoading(false); }
     }
 
@@ -111,6 +137,9 @@ public sealed partial class ViewerPage
     {
         _searchResults     = Array.Empty<PdfSearchResult>();
         _activeSearchIndex = -1;
+        _pptxSearchResults = Array.Empty<PptxSearchMatch>();
+        _activePptxSearchIndex = -1;
+        ClearPptxSearchHighlights();
         FindCount.Text     = "";
         DrawAllHighlights();
     }
@@ -225,6 +254,16 @@ public sealed partial class ViewerPage
         if (IsSpreadsheetViewerActive())
         {
             NavigateSpreadsheetSearchHit(direction);
+            return;
+        }
+
+        if (_pptxSearchResults.Count > 0)
+        {
+            _activePptxSearchIndex =
+                (_activePptxSearchIndex + direction + _pptxSearchResults.Count) % _pptxSearchResults.Count;
+            FindCount.Text = $"{_activePptxSearchIndex + 1} of {_pptxSearchResults.Count}";
+            DrawPptxSearchHighlights();
+            GoToPage(_pptxSearchResults[_activePptxSearchIndex].SlideIndex + 1);
             return;
         }
 

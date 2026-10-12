@@ -17,8 +17,9 @@
 //!     call dc_free_image when finished (after copying pixels into a WriteableBitmap).
 //!   - dc_open_pptx      returns a Box-leaked pointer; dc_free_document drops it.
 
-use std::slice;
 use std::panic;
+use std::slice;
+use std::sync::OnceLock;
 
 use deckcraft_fonts::FontDb;
 use deckcraft_render::RenderOpts;
@@ -29,7 +30,8 @@ use deckcraft_render::RenderOpts;
 pub struct DcDocument {
     presentation: deckcraft_model::Presentation,
     #[allow(dead_code)]
-    fonts:        FontDb,  // Kept for potential future use
+    fonts: FontDb,
+    slide_text_cache: OnceLock<Vec<SlideText>>,
 }
 
 /// Pixel buffer returned by dc_render_slide.
@@ -61,6 +63,106 @@ macro_rules! catch {
     };
 }
 
+#[derive(Clone, Copy, Debug)]
+struct SearchRect {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+}
+
+struct SlideText {
+    text: String,
+    char_rects: Vec<Option<SearchRect>>,
+}
+
+fn extract_slide_search_data(presentation: &deckcraft_model::Presentation, index: usize) -> SlideText {
+    let placed = deckcraft_render::place_slide(presentation, index);
+    let mut text = String::new();
+    let mut char_rects = Vec::new();
+
+    for text_block in &placed.texts {
+        for run in &text_block.layout.runs {
+            for (char_index, ch) in &run.cells {
+                text.push(*ch);
+                let rect = text_block.layout.lines.iter()
+                    .find(|line| line.para == run.para && *char_index >= line.start && *char_index < line.end)
+                    .and_then(|line| {
+                        let (x0, x1) = line.edges.get(*char_index - line.start)?;
+                        let local = deckcraft_geom::Rect::new(*x0, line.top, *x1, line.bottom);
+                        let slide = text_block.transform.transform_rect_bbox(local);
+                        (slide.width() > 0.0 && slide.height() > 0.0).then_some(SearchRect {
+                            x: slide.x0,
+                            y: slide.y0,
+                            width: slide.width(),
+                            height: slide.height(),
+                        })
+                    });
+                char_rects.push(rect);
+            }
+        }
+        text.push('\n');
+        char_rects.push(None);
+    }
+
+    SlideText { text, char_rects }
+}
+
+fn cached_slide_text(doc: &DcDocument) -> &Vec<SlideText> {
+    doc.slide_text_cache.get_or_init(|| {
+        (0..doc.presentation.slides.len())
+            .map(|index| extract_slide_search_data(&doc.presentation, index))
+            .collect()
+    })
+}
+
+fn find_matches(text: &str, query: &str, case_sensitive: bool) -> Vec<(usize, usize)> {
+    if query.is_empty() {
+        return Vec::new();
+    }
+
+    let mut folded_offsets = Vec::new();
+    let lower_text = (!case_sensitive).then(|| {
+        let mut folded = String::new();
+        for (source_index, ch) in text.chars().enumerate() {
+            for lower_ch in ch.to_lowercase() {
+                folded.push(lower_ch);
+                folded_offsets.push(source_index);
+            }
+        }
+        folded
+    });
+    let lower_query = (!case_sensitive).then(|| query.to_lowercase());
+    let search_text = lower_text.as_deref().unwrap_or(text);
+    let search_query = lower_query.as_deref().unwrap_or(query);
+    let folded_query_len = search_query.chars().count();
+    let mut matches = Vec::new();
+    let mut start_pos = 0;
+
+    while start_pos < search_text.len() {
+        let Some(relative_pos) = search_text[start_pos..].find(search_query) else { break; };
+        let actual_pos = start_pos + relative_pos;
+        let folded_char_index = search_text[..actual_pos].chars().count();
+        if case_sensitive {
+            matches.push((folded_char_index, folded_query_len));
+        } else if let (Some(&first_source_char), Some(&last_source_char)) = (
+            folded_offsets.get(folded_char_index),
+            folded_offsets.get(folded_char_index + folded_query_len.saturating_sub(1)),
+        ) {
+            matches.push((first_source_char, last_source_char - first_source_char + 1));
+        }
+
+        let next_char_len = search_text[actual_pos..]
+            .chars()
+            .next()
+            .map(char::len_utf8)
+            .unwrap_or(1);
+        start_pos = actual_pos + next_char_len;
+    }
+
+    matches
+}
+
 // ── Exported functions ────────────────────────────────────────────────────────
 
 /// Parse a PPTX/PPT file from a byte slice.
@@ -88,6 +190,7 @@ pub extern "C" fn dc_open_pptx(data: *const u8, len: usize) -> *mut DcDocument {
         let doc = Box::new(DcDocument {
             presentation,
             fonts,
+            slide_text_cache: OnceLock::new(),
         });
 
         Box::into_raw(doc)
@@ -228,21 +331,9 @@ pub extern "C" fn dc_extract_slide_text(
         
         if index as usize >= doc.presentation.slides.len() { return 0; }
 
-        // Use place_slide to extract all laid-out text
-        let placed = deckcraft_render::place_slide(&doc.presentation, index as usize);
+        let Some(slide_text) = cached_slide_text(doc).get(index as usize) else { return 0; };
 
-        // Collect text from all text blocks
-        let mut text = String::new();
-        for text_block in &placed.texts {
-            for run in &text_block.layout.runs {
-                for (_, ch) in &run.cells {
-                    text.push(*ch);
-                }
-            }
-            text.push('\n'); // Separate text blocks with newline
-        }
-
-        let bytes = text.as_bytes();
+        let bytes = slide_text.text.as_bytes();
         let copy = bytes.len().min(buf_len);
         if copy == 0 { return 0; }
 
@@ -252,8 +343,10 @@ pub extern "C" fn dc_extract_slide_text(
 }
 
 /// Search for `query` text across all slides.
-/// Returns a semicolon-separated list of matches: "slideIndex,charIndex,length;..."
-/// Write results to `buf` (UTF-8). Returns bytes written.
+/// Returns semicolon-separated match rectangles:
+/// "slideIndex,charIndex,length,x,y,width,height;..."
+/// Write results to `buf` (UTF-8). Returns bytes written, or required buffer size
+/// if `buf` is too small.
 #[no_mangle]
 pub extern "C" fn dc_search_text(
     doc:        *const DcDocument,
@@ -274,45 +367,42 @@ pub extern "C" fn dc_search_text(
             Err(_) => return 0,
         };
         
-        let search_str = if case_sensitive {
-            query_str.to_string()
-        } else {
-            query_str.to_lowercase()
-        };
-        
         let mut results = Vec::new();
         
-        // Search all slides
-        for (slide_idx, _slide) in doc.presentation.slides.iter().enumerate() {
-            let placed = deckcraft_render::place_slide(&doc.presentation, slide_idx);
-            
-            // Extract all text from this slide
-            let mut slide_text = String::new();
-            for text_block in &placed.texts {
-                for run in &text_block.layout.runs {
-                    for (_, ch) in &run.cells {
-                        slide_text.push(*ch);
+        for (slide_idx, slide_text) in cached_slide_text(doc).iter().enumerate() {
+            for (char_index, length) in find_matches(&slide_text.text, query_str, case_sensitive) {
+                let match_end = char_index.saturating_add(length).min(slide_text.char_rects.len());
+                let mut rects: Vec<SearchRect> = Vec::new();
+                for rect in slide_text.char_rects[char_index.min(match_end)..match_end].iter().flatten() {
+                    if let Some(last) = rects.last_mut() {
+                        let same_line = (last.y - rect.y).abs() < 1.0
+                            && (last.height - rect.height).abs() < 1.0;
+                        if same_line && rect.x <= last.x + last.width + 2.0 {
+                            let right = (last.x + last.width).max(rect.x + rect.width);
+                            last.x = last.x.min(rect.x);
+                            last.width = right - last.x;
+                            continue;
+                        }
+                    }
+                    rects.push(*rect);
+                }
+
+                if rects.is_empty() {
+                    results.push(format!("{},{},{},0,0,0,0", slide_idx, char_index, length));
+                } else {
+                    for rect in rects {
+                        results.push(format!(
+                            "{},{},{},{:.3},{:.3},{:.3},{:.3}",
+                            slide_idx, char_index, length, rect.x, rect.y, rect.width, rect.height
+                        ));
                     }
                 }
-            }
-            
-            let search_text = if case_sensitive {
-                slide_text.clone()
-            } else {
-                slide_text.to_lowercase()
-            };
-            
-            // Find all occurrences in this slide
-            let mut start_pos = 0;
-            while let Some(pos) = search_text[start_pos..].find(&search_str) {
-                let actual_pos = start_pos + pos;
-                results.push(format!("{},{},{}", slide_idx, actual_pos, query_str.len()));
-                start_pos = actual_pos + 1;
             }
         }
         
         let result_str = results.join(";");
         let bytes = result_str.as_bytes();
+        if bytes.len() > buf_len { return bytes.len(); }
         let copy = bytes.len().min(buf_len);
         if copy == 0 { return 0; }
         
@@ -335,4 +425,29 @@ pub extern "C" fn dc_free_image(img: DcImage) {
 pub extern "C" fn dc_free_document(doc: *mut DcDocument) {
     if doc.is_null() { return; }
     unsafe { drop(Box::from_raw(doc)); }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::find_matches;
+
+    #[test]
+    fn finds_overlapping_matches() {
+        assert_eq!(find_matches("aaaa", "aa", true), vec![(0, 2), (1, 2), (2, 2)]);
+    }
+
+    #[test]
+    fn case_insensitive_search_finds_ascii_variants() {
+        assert_eq!(find_matches("Title title", "TITLE", false), vec![(0, 5), (6, 5)]);
+    }
+
+    #[test]
+    fn search_advances_at_utf8_character_boundaries() {
+        assert_eq!(find_matches("éaéa", "a", true), vec![(1, 1), (3, 1)]);
+    }
+
+    #[test]
+    fn case_insensitive_expanding_lowercase_keeps_source_character_offsets() {
+        assert_eq!(find_matches("İX", "x", false), vec![(1, 1)]);
+    }
 }

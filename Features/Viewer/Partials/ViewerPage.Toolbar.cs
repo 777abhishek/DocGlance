@@ -29,15 +29,13 @@ public sealed partial class ViewerPage
 
     private void Toolbar_FitWidthRequested(object? sender, EventArgs e)
     {
-        _fitMode = FitMode.FitWidth;
-        // fit mode set via IsFit*Checked;
+        SetFitMode(FitMode.FitWidth);
         ApplyFitWidth();
     }
 
     private void Toolbar_FitPageRequested(object? sender, EventArgs e)
     {
-        _fitMode = FitMode.FitPage;
-        // fit mode set via IsFit*Checked;
+        SetFitMode(FitMode.FitPage);
         ApplyFitPage();
     }
 

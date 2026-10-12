@@ -203,27 +203,12 @@ public sealed partial class ViewerPage
                 int newPage = i + 1;
                 if (newPage != _page)
                 {
-                    _page = newPage;
                     _viewportState.CurrentPageIndex = i;
                     int captured = i;
                     DispatcherQueue.TryEnqueue(() =>
                     {
-                        Toolbar.UpdatePageInfo(_page, _total);
-                        SyncToViewModel();
-                        
-                        // Update thumbnail selection and scroll into view
-                        for (int t = 0; t < Thumbnails.Count; t++)
-                            Thumbnails[t].IsSelected = t == captured;
-                        
-                        // Scroll thumbnail list to show current page
-                        _suppressThumbnailSync = true;
-                        if (captured >= 0 && captured < ThumbnailList.Items.Count)
-                        {
-                            ThumbnailList.SelectedIndex = captured;
-                            if (ThumbnailList.SelectedItem != null)
-                                ThumbnailList.ScrollIntoView(ThumbnailList.SelectedItem);
-                        }
-                        _suppressThumbnailSync = false;
+                        if (_viewportState?.CurrentPageIndex == captured)
+                            UpdateCurrentPage(captured + 1);
                     });
                 }
                 break;

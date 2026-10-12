@@ -33,7 +33,19 @@ public sealed partial class ViewerPage
         // PPTX: render the requested slide
         if (_pptxDocument != null)
         {
-            _ = RenderCurrentSlideAsync(_cts?.Token ?? default);
+            const double PptxPtToLp = 96.0 / 72.0;
+            const double PptxPageGapLp = 12.0;
+            const double VerticalPaddingLp = 20.0;
+            var (_, slideHeightPt) = _pptxDocument.GetSlideSize(0);
+            double slideHeightLp = slideHeightPt * PptxPtToLp;
+            double pptxOffsetLp = VerticalPaddingLp +
+                (pageNumber - 1) * (slideHeightLp + PptxPageGapLp);
+
+            DocumentScrollViewer.ChangeView(
+                null,
+                pptxOffsetLp * DocumentScrollViewer.ZoomFactor,
+                null,
+                disableAnimation: true);
             return;
         }
 
@@ -63,22 +75,44 @@ public sealed partial class ViewerPage
     {
         page = Math.Clamp(page, 1, Math.Max(1, _total));
         int index = page - 1;
+        int previousIndex = _page - 1;
         _page = page;
         Toolbar.UpdatePageInfo(_page, _total);
         SyncToViewModel();
 
-        for (int i = 0; i < Thumbnails.Count; i++)
-            Thumbnails[i].IsSelected = i == index;
+        if (previousIndex >= 0 && previousIndex < Thumbnails.Count && previousIndex != index)
+            Thumbnails[previousIndex].IsSelected = false;
+        if (index >= 0 && index < Thumbnails.Count)
+            Thumbnails[index].IsSelected = true;
 
-        // Guard prevents SelectedIndex → ItemClick → GoToPage re-entry
+        SyncThumbnailSelection(index);
+    }
+
+    private void SyncThumbnailSelection(int index)
+    {
         _suppressThumbnailSync = true;
-        if (index >= 0 && index < ThumbnailList.Items.Count)
+        try
         {
+            if (index < 0 || index >= ThumbnailList.Items.Count)
+                return;
+
             ThumbnailList.SelectedIndex = index;
-            if (ThumbnailList.SelectedItem != null)
+            if (ThumbnailList.ContainerFromIndex(index) is FrameworkElement thumbnail)
+            {
+                thumbnail.StartBringIntoView(new BringIntoViewOptions
+                {
+                    AnimationDesired = true,
+                });
+            }
+            else if (ThumbnailList.SelectedItem != null)
+            {
                 ThumbnailList.ScrollIntoView(ThumbnailList.SelectedItem);
+            }
         }
-        _suppressThumbnailSync = false;
+        finally
+        {
+            _suppressThumbnailSync = false;
+        }
     }
 
     // ── Scroll → page number + thumbnail sync ────────────────────────────────

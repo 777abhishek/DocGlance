@@ -229,6 +229,7 @@ name = "deckcraft_ffi"
 version = "0.1.0"
 dependencies = [
  "deckcraft-fonts",
+ "deckcraft-geom",
  "deckcraft-model",
  "deckcraft-pptx",
  "deckcraft-render",

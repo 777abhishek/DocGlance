@@ -12,6 +12,7 @@ deckcraft-pptx   = { git = "https://github.com/storytold/deckcraft" }
 deckcraft-render = { git = "https://github.com/storytold/deckcraft" }
 deckcraft-model  = { git = "https://github.com/storytold/deckcraft" }
 deckcraft-fonts  = { git = "https://github.com/storytold/deckcraft" }
+deckcraft-geom   = { git = "https://github.com/storytold/deckcraft" }
 
 [profile.release]
 opt-level     = 3
