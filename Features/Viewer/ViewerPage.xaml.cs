@@ -86,6 +86,47 @@ public sealed partial class ViewerPage : Page
         ViewModel.ZoomInRequested      += (_, _)     => { SetFitMode(FitMode.None); SetZoom(_zoom * 1.25); };
         ViewModel.ZoomOutRequested     += (_, _)     => { SetFitMode(FitMode.None); SetZoom(_zoom / 1.25); };
         ViewModel.ZoomResetRequested   += (_, _)     => { SetFitMode(FitMode.None); SetZoom(NaturalZoom); };
+
+        // Subscribe to settings changes for live updates
+        Infrastructure.Configuration.AppSettings.SettingsChanged += OnSettingsChanged;
+        
+        // Unsubscribe when page unloads
+        Unloaded += (_, _) => Infrastructure.Configuration.AppSettings.SettingsChanged -= OnSettingsChanged;
+    }
+
+    private void OnSettingsChanged(object? sender, EventArgs e)
+    {
+        // Apply settings changes immediately to the current viewer
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            ApplyViewerSettings();
+        });
+    }
+
+    private void ApplyViewerSettings()
+    {
+        // Apply show thumbnails setting via the ThumbnailList
+        if (ThumbnailList != null)
+        {
+            ThumbnailList.Visibility = Infrastructure.Configuration.AppSettings.ShowThumbnails 
+                ? Visibility.Visible 
+                : Visibility.Collapsed;
+        }
+        
+        // Apply show sidebar setting
+        if (SidebarCard != null && Infrastructure.Configuration.AppSettings.ShowSidebar)
+        {
+            if (SidebarColumn.Width.Value == 0)
+            {
+                SidebarColumn.Width = new GridLength(280);
+                SidebarCard.Visibility = Visibility.Visible;
+            }
+        }
+        else if (SidebarCard != null && !Infrastructure.Configuration.AppSettings.ShowSidebar)
+        {
+            SidebarColumn.Width = new GridLength(0);
+            SidebarCard.Visibility = Visibility.Collapsed;
+        }
     }
 
     private void ScheduleFitModeReapply()

@@ -319,6 +319,44 @@ pub extern "C" fn pc_split_pdf(
 }
 
 #[no_mangle]
+pub extern "C" fn pc_split_pdf_selected(
+    doc: *const PcDocument,
+    page_indices: *const u8,
+    page_indices_len: usize,
+    output_dir: *const u8,
+    output_dir_len: usize,
+) -> u32 {
+    ffi_opt!(0, {
+        let doc = unsafe { doc.as_ref() }?;
+        let indices = std::str::from_utf8(input(page_indices, page_indices_len)?).ok()?;
+        let dir = std::str::from_utf8(input(output_dir, output_dir_len)?).ok()?;
+        let selected: Vec<usize> = indices
+            .split(',')
+            .filter_map(|value| value.trim().parse::<usize>().ok())
+            .collect();
+        if selected.is_empty() {
+            0
+        } else {
+            std::fs::create_dir_all(dir).ok()?;
+            let source = Document::open(doc.bytes.clone()).ok()?;
+            let total = pdfcraft_organize::page_count(&source).ok()?;
+            let mut written = 0u32;
+            for (position, page_index) in selected.iter().enumerate() {
+                if *page_index >= total {
+                    continue;
+                }
+                let page = pdfcraft_organize::extract_pages(&source, &[*page_index]).ok()?;
+                let bytes = write_full(&page, &SaveOptions::default()).ok()?;
+                let path = Path::new(dir).join(format!("page-{}.pdf", position + 1));
+                std::fs::write(path, bytes).ok()?;
+                written = written.saturating_add(1);
+            }
+            written
+        }
+    })
+}
+
+#[no_mangle]
 pub extern "C" fn pc_free_image(image: PcImage) {
     if image.pixels.is_null() || image.len == 0 {
         return;

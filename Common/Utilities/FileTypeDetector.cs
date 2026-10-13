@@ -48,11 +48,11 @@ public static class FileTypeDetector
     public static string GetIconGlyph(string? extension) =>
         extension?.TrimStart('.').ToUpperInvariant() switch
         {
-            "PDF"  => "\uEA90",  // DocumentPdf
-            "DOCX" or "DOC"  => "\uE8A5",  // Page
-            "PPTX" or "PPT"  => "\uE8D1",  // PPT
-            "XLSX" or "XLS" or "CSV" => "\uE8F9",  // ExcelDocument
-            "PNG"  or "JPG" or "JPEG" or "GIF" or "BMP" or "WEBP" => "\uEB9F",  // Photo2
+            "PDF"  => "\uF3AD",  // DocumentPdf
+            "DOCX" or "DOC"  => "\uF0C22",  // Page
+            "PPTX" or "PPT"  => "\uF12B",  // PPT
+            "XLSX" or "XLS" or "CSV" => "\uE54C",  // ExcelDocument
+            "PNG"  or "JPG" or "JPEG" or "GIF" or "BMP" or "WEBP" => "\uF489",  // Photo2
             "MP4"  or "MKV" or "AVI" or "MOV" or "WMV" => "\uE8B2",  // Video
             "MP3"  or "WAV" or "FLAC" => "\uE8D6",  // MusicNote
             "ZIP"  or "RAR" or "7Z"   => "\uE8B1",  // ZipFolder

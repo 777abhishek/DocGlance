@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using QuickView.Common.Formatters;
 using QuickView.Core.Models;
 using System;
@@ -80,6 +81,7 @@ internal static class DocumentInfoDialog
         {
             Glyph              = glyph,
             FontSize           = 16,
+            FontFamily         = new FontFamily("ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"),
             VerticalAlignment  = VerticalAlignment.Top,
             Margin             = new Thickness(0, 2, 0, 0),
             Foreground         = (Microsoft.UI.Xaml.Media.Brush)

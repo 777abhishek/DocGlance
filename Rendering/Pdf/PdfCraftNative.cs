@@ -16,6 +16,20 @@ internal static class PdfCraftNative
         internal nuint Len;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct PcPngBuffer
+    {
+        internal IntPtr Data;
+        internal nuint Len;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct PcPdfBuffer
+    {
+        internal IntPtr Data;
+        internal nuint Len;
+    }
+
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     internal static extern IntPtr pc_open_pdf_from_path(IntPtr path, nuint pathLen);
 
@@ -34,6 +48,26 @@ internal static class PdfCraftNative
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     internal static extern void pc_free_image(PcImage image);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern PcPngBuffer pc_export_to_png(IntPtr doc, uint pageIndex, double dpi);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void pc_free_png_buffer(PcPngBuffer buffer);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern PcPdfBuffer pc_merge_pdfs(IntPtr inputPaths, nuint inputPathsLen);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void pc_free_pdf_buffer(PcPdfBuffer buffer);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern uint pc_split_pdf(IntPtr doc, IntPtr outputDir, nuint outputDirLen);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern uint pc_split_pdf_selected(
+        IntPtr doc, IntPtr pageIndices, nuint pageIndicesLen,
+        IntPtr outputDir, nuint outputDirLen);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     internal static extern nuint pc_extract_page_text(

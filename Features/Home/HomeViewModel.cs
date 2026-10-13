@@ -48,6 +48,13 @@ public sealed partial class HomeViewModel : ObservableObject
     [ObservableProperty]
     private string _typeFilterTag = string.Empty;
 
+    [ObservableProperty]
+    private string _groupByMode = "None";
+
+    // ── Grouped Data ──────────────────────────────────────────────────────────
+
+    public ObservableCollection<DocumentGroup> GroupedDocuments { get; } = new();
+
     // ── Scan Cancellation ────────────────────────────────────────────────────
 
     private readonly Dictionary<string, CancellationTokenSource> _scanTokens    = new();
@@ -59,7 +66,10 @@ public sealed partial class HomeViewModel : ObservableObject
     {
         get
         {
-            int count = FilteredDocuments.Count;
+            int count = GroupByMode != "None" && GroupedDocuments.Count > 0
+                ? GroupedDocuments.Sum(g => g.ItemCount)
+                : FilteredDocuments.Count;
+                
             return ShowingRecent
                 ? count == 0 ? "No recent files"
                 : count == 1 ? "1 recent file"
@@ -84,6 +94,7 @@ public sealed partial class HomeViewModel : ObservableObject
     public void RefreshFilter()
     {
         FilteredDocuments.Clear();
+        GroupedDocuments.Clear();
 
         IEnumerable<DocumentItem> source = ShowingRecent
             ? RecentDocuments
@@ -114,13 +125,78 @@ public sealed partial class HomeViewModel : ObservableObject
             source = SortDescending ? sorted.Reverse() : sorted;
         }
 
-        foreach (var item in source)
-            FilteredDocuments.Add(item);
+        // Group by mode
+        if (!ShowingRecent && GroupByMode != "None")
+        {
+            var groups = GroupByMode switch
+            {
+                "Folder" => source.GroupBy(d => d.FolderPath)
+                                  .OrderBy(g => g.Key)
+                                  .Select(g => new DocumentGroup(g.Key, g.ToList())),
+                "FileType" => source.GroupBy(d => d.FileType)
+                                    .OrderBy(g => g.Key)
+                                    .Select(g => new DocumentGroup(GetFileTypeGroupName(g.Key), g.ToList())),
+                "Date" => source.GroupBy(d => GetDateGroup(d.LastWriteTime))
+                                .OrderBy(g => GetDateGroupOrder(g.Key))
+                                .Select(g => new DocumentGroup(g.Key, g.ToList())),
+                _ => Enumerable.Empty<DocumentGroup>()
+            };
+
+            foreach (var group in groups)
+                GroupedDocuments.Add(group);
+        }
+        else
+        {
+            foreach (var item in source)
+                FilteredDocuments.Add(item);
+        }
 
         // Notify derived display strings
         OnPropertyChanged(nameof(DocumentCountText));
         OnPropertyChanged(nameof(TotalFilesText));
         OnPropertyChanged(nameof(TotalSizeText));
+    }
+
+    private static string GetFileTypeGroupName(string fileType)
+    {
+        return fileType switch
+        {
+            "PDF" => "PDF Documents",
+            "DOCX" or "DOC" => "Word Documents",
+            "XLSX" or "XLS" or "CSV" => "Excel Spreadsheets",
+            "PPTX" or "PPT" => "PowerPoint Presentations",
+            "PNG" or "JPG" or "JPEG" or "BMP" or "GIF" or "WEBP" => "Images",
+            "MP4" or "MKV" or "AVI" or "MOV" or "WMV" => "Videos",
+            "TXT" or "MD" or "LOG" or "RTF" => "Text Files",
+            "ZIP" or "RAR" or "7Z" or "TAR" or "GZ" => "Archives",
+            "CS" or "CPP" or "PY" or "JS" or "TS" or "HTML" or "CSS" => "Code Files",
+            _ => fileType.ToUpperInvariant() + " Files"
+        };
+    }
+
+    private static string GetDateGroup(DateTime date)
+    {
+        var now = DateTime.Now;
+        var diff = now - date;
+
+        if (date.Date == now.Date) return "Today";
+        if (date.Date == now.Date.AddDays(-1)) return "Yesterday";
+        if (diff.TotalDays < 7) return "This Week";
+        if (diff.TotalDays < 30) return "This Month";
+        if (date.Year == now.Year) return date.ToString("MMMM yyyy");
+        return date.ToString("yyyy");
+    }
+
+    private static int GetDateGroupOrder(string groupName)
+    {
+        return groupName switch
+        {
+            "Today" => 0,
+            "Yesterday" => 1,
+            "This Week" => 2,
+            "This Month" => 3,
+            _ => 4
+        };
     }
 
     // ── Scan Token Management ─────────────────────────────────────────────────

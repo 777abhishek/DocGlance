@@ -148,6 +148,34 @@ public sealed partial class ViewerPage
             ViewModel.TotalPages  = _total;
             ViewModel.CurrentPage = _page;
 
+            Infrastructure.Logging.Logger.Log("[PDF] Applying viewer settings");
+            
+            // Apply default zoom and UI settings from configuration
+            double targetZoom = Infrastructure.Configuration.AppSettings.DefaultZoomPercent / 100.0;
+            _zoom = targetZoom;
+            DocumentScrollViewer.ChangeView(null, null, (float)targetZoom, disableAnimation: true);
+            ZoomLabel.Text = $"{Infrastructure.Configuration.AppSettings.DefaultZoomPercent}%";
+            ViewModel.NaturalZoom = NaturalZoom;
+            ViewModel.Zoom        = _zoom;
+            
+            // Apply default zoom mode from settings
+            string zoomMode = Infrastructure.Configuration.AppSettings.DefaultZoomMode;
+            if (zoomMode == "FitWidth")
+            {
+                SetFitMode(FitMode.FitWidth);
+                ApplyFitWidth();
+            }
+            else if (zoomMode == "FitPage")
+            {
+                SetFitMode(FitMode.FitPage);
+                ApplyFitPage();
+            }
+            else if (zoomMode == "ActualSize")
+            {
+                SetFitMode(FitMode.None);
+                SetZoom(1.0);
+            }
+
             // Auto-hide the sidebar for single-page documents
             if (_total == 1)
             {
@@ -158,20 +186,13 @@ public sealed partial class ViewerPage
             }
             else
             {
-                Toolbar.SidebarIsChecked = true;
-                SidebarCard.Visibility   = Visibility.Visible;
-                SidebarColumn.Width      = new Microsoft.UI.Xaml.GridLength(240);
-                ViewModel.SidebarOpen    = true;
+                // For multi-page documents, use settings
+                bool showSidebar = Infrastructure.Configuration.AppSettings.ShowSidebar;
+                Toolbar.SidebarIsChecked = showSidebar;
+                SidebarCard.Visibility   = showSidebar ? Visibility.Visible : Visibility.Collapsed;
+                SidebarColumn.Width      = showSidebar ? new Microsoft.UI.Xaml.GridLength(240) : new Microsoft.UI.Xaml.GridLength(0);
+                ViewModel.SidebarOpen    = showSidebar;
             }
-
-            Infrastructure.Logging.Logger.Log("[PDF] Setting zoom");
-            
-            // Apply 100% zoom
-            _zoom = NaturalZoom;
-            DocumentScrollViewer.ChangeView(null, null, (float)NaturalZoom, disableAnimation: true);
-            ZoomLabel.Text = "100%";
-            ViewModel.NaturalZoom = NaturalZoom;
-            ViewModel.Zoom        = _zoom;
 
             Infrastructure.Logging.Logger.Log("[PDF] Creating thumbnail placeholders");
             

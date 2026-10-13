@@ -5,9 +5,11 @@
 
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Windows.ApplicationModel.DataTransfer;
@@ -46,6 +48,9 @@ public sealed partial class TitleBarWindow : Window
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBarDragArea);
         Title = "QuickView";
+        
+        // Always use DesktopAcrylic backdrop for consistent gray appearance
+        SystemBackdrop = new Microsoft.UI.Xaml.Media.DesktopAcrylicBackdrop();
 
         // Track active window
         Activated += (s, e) =>
@@ -55,6 +60,9 @@ public sealed partial class TitleBarWindow : Window
                 Current = this;
             }
         };
+        
+        // Save session when window closes
+        Closed += (s, e) => SaveSession();
 
         // Set the window icon
         SetWindowIcon();
@@ -131,8 +139,9 @@ public sealed partial class TitleBarWindow : Window
             IsClosable = true,
             IconSource = new FontIconSource
             {
-                Glyph    = doc.FileGlyph,
-                FontSize = 12,
+                Glyph      = doc.FileGlyph,
+                FontSize   = 12,
+                FontFamily = new FontFamily("ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"),
             },
         };
 
@@ -149,6 +158,9 @@ public sealed partial class TitleBarWindow : Window
         Infrastructure.Logging.Logger.Log($"[TitleBarWindow] Calling viewer.LoadDocument");
         viewer.LoadDocument(doc);
         Infrastructure.Logging.Logger.Log($"[TitleBarWindow] OpenDocument complete");
+        
+        // Save session after opening new tab
+        SaveSession();
     }
 
     // ── Legacy NavigateTo — kept so old call sites compile ───────────────────
@@ -172,7 +184,7 @@ public sealed partial class TitleBarWindow : Window
         Tabs.SelectedItem = _homeTab;
     }
     
-    private void OpenSettingsTab()
+    public void OpenSettingsTab()
     {
         // Check if Settings tab already exists
         foreach (var item in Tabs.TabItems)
@@ -224,7 +236,12 @@ public sealed partial class TitleBarWindow : Window
         {
             Header = "Tools",
             IsClosable = true,
-            IconSource = new FontIconSource { Glyph = "\uE90F", FontSize = 12 },
+            IconSource = new FontIconSource 
+            { 
+                Glyph = "\uE90F", 
+                FontSize = 12,
+                FontFamily = new FontFamily("ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"),
+            },
         };
 
         _specialTabs[toolsTab] = new Features.Tools.ToolsPage();
@@ -370,6 +387,9 @@ public sealed partial class TitleBarWindow : Window
         {
             Tabs.SelectedItem = _homeTab;
         }
+        
+        // Save session state after closing tab
+        SaveSession();
     }
 
     // ── Tab tear-out: drag tab out → new window ──────────────────────────────
@@ -471,6 +491,9 @@ public sealed partial class TitleBarWindow : Window
         // If no more document tabs, select Home
         if (_tabData.Count == 0)
             Tabs.SelectedItem = _homeTab;
+        
+        // Save session state when tabs change
+        SaveSession();
 
         // Open the document in the detached window once it is activated.
         if (newWindow == null || doc == null) return;
@@ -707,6 +730,94 @@ public sealed partial class TitleBarWindow : Window
         {
             QuickView.Infrastructure.Logging.Logger.Log(
                 $"[Theme] ConfigureTitleBarTheme failed: {ex.Message}");
+        }
+    }
+
+    // ── Session State Management ──────────────────────────────────────────────
+
+    /// <summary>
+    /// Saves the current session state (open tabs) so it can be restored on next launch.
+    /// </summary>
+    public void SaveSession()
+    {
+        try
+        {
+            var filePaths = _tabData.Values
+                .Where(v => !string.IsNullOrEmpty(v.doc.FilePath) && File.Exists(v.doc.FilePath))
+                .Select(v => v.doc.FilePath)
+                .ToList();
+
+            int selectedIndex = -1;
+            if (Tabs.SelectedItem is TabViewItem selectedTab && _tabData.ContainsKey(selectedTab))
+            {
+                selectedIndex = _tabData.Keys.ToList().IndexOf(selectedTab);
+            }
+
+            Services.Storage.SessionStateStore.SaveOpenTabs(filePaths, selectedIndex);
+            Logger.Log($"[Session] Saved {filePaths.Count} open tabs");
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("SaveSession failed", ex);
+        }
+    }
+
+    /// <summary>
+    /// Restores the previous session (reopens tabs that were open when the app closed).
+    /// </summary>
+    public void RestoreSession()
+    {
+        try
+        {
+            var state = Services.Storage.SessionStateStore.LoadSessionState();
+            if (state == null || state.OpenFiles.Count == 0)
+            {
+                Logger.Log("[Session] No previous session to restore");
+                return;
+            }
+
+            Logger.Log($"[Session] Restoring {state.OpenFiles.Count} tabs");
+
+            TabViewItem? tabToSelect = null;
+            int currentIndex = 0;
+
+            foreach (var filePath in state.OpenFiles)
+            {
+                if (!File.Exists(filePath))
+                {
+                    Logger.Log($"[Session] Skipping missing file: {filePath}");
+                    continue;
+                }
+
+                try
+                {
+                    var fi = new FileInfo(filePath);
+                    var doc = DocumentItem.FromFileInfo(fi);
+                    OpenDocument(doc);
+
+                    // Track which tab to select
+                    if (currentIndex == state.SelectedTabIndex && _tabData.Count > 0)
+                    {
+                        tabToSelect = _tabData.Keys.Last();
+                    }
+
+                    currentIndex++;
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"Failed to restore tab for: {filePath}", ex);
+                }
+            }
+
+            // Select the previously selected tab
+            if (tabToSelect != null)
+            {
+                Tabs.SelectedItem = tabToSelect;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("RestoreSession failed", ex);
         }
     }
 

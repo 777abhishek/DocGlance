@@ -59,6 +59,7 @@ public sealed class ViewerInfoCard : ContentControl
         {
             Glyph               = doc.FileGlyph,
             FontSize            = 48,
+            FontFamily          = new FontFamily("ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"),
             Foreground          = doc.TypeColor,
             HorizontalAlignment = HorizontalAlignment.Center,
             Opacity             = 0.6,

@@ -323,6 +323,7 @@
                     Visibility="Collapsed">
                     <FontIcon
                         x:Name="UnsupportedIcon"
+                        FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
                         Glyph="&#xE8A5;"
                         FontSize="48"
                         HorizontalAlignment="Center"
@@ -575,7 +576,7 @@
         <!-- ── LOADING INDICATOR (overlay) ── -->
         <Grid x:Name="LoadingOverlay"
               Grid.Row="1"
-              Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+              Background="Transparent"
               Visibility="Collapsed">
             <Grid.OpacityTransition>
                 <ScalarTransition Duration="0:0:0.2" />

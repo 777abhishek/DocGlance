@@ -92,8 +92,8 @@
                                                     <GradientStop Color="#E23350" Offset="1" />
                                                 </LinearGradientBrush>
                                             </Border.Background>
-                                            <FontIcon 
-                                                Glyph="&#xEA90;" 
+                                            <FontIcon FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
+                                                Glyph="&#xF3AD;" 
                                                 FontSize="48"
                                                 Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                                 Opacity="0.3"

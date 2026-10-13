@@ -23,6 +23,41 @@
             <Setter Property="CornerRadius" Value="7"/>
             <Setter Property="FontSize" Value="13"/>
         </Style>
+        <!-- Segmented button style reused from HomePage for Split mode selector -->
+        <Style x:Key="SegmentedButtonStyle" TargetType="RadioButton">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="Normal"/>
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Grid x:Name="RootGrid" Background="{TemplateBinding Background}"
+                              CornerRadius="{TemplateBinding CornerRadius}">
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CheckedStates">
+                                    <VisualState x:Name="Checked">
+                                        <VisualState.Setters>
+                                            <Setter Target="RootGrid.Background" Value="{ThemeResource ControlFillColorDefaultBrush}"/>
+                                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Unchecked"/>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                            <ContentPresenter x:Name="ContentPresenter"
+                                              Content="{TemplateBinding Content}"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              Padding="{TemplateBinding Padding}"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Page.Resources>
 
     <Grid>
@@ -319,121 +354,174 @@
                         </Grid>
                     </StackPanel>
 
-                    <StackPanel x:Name="PdfMergeFilesPanel" Spacing="8" Visibility="Collapsed">
+                    <StackPanel x:Name="PdfMergeFilesPanel" Spacing="10" Visibility="Collapsed">
                         <TextBlock Text="PDF files to merge (drag to reorder)"
                                    FontSize="13" FontWeight="SemiBold"/>
-                        <ListView x:Name="PdfMergeFilesList" 
-                                  ItemsSource="{x:Bind _pdfMergeFiles, Mode=OneWay}"
-                                  MaxHeight="360"
-                                  SelectionMode="None"
-                                  CanReorderItems="True"
-                                  AllowDrop="True"
-                                  CanDragItems="True"
-                                  ReorderMode="Enabled"
-                                  DragItemsCompleted="PdfMergeFiles_DragItemsCompleted">
-                            <ListView.ItemTemplate>
+                        <!-- Cards wrap in a row, each ~200px wide -->
+                        <ItemsRepeater x:Name="PdfMergeFilesRepeater"
+                                       ItemsSource="{x:Bind _pdfMergeItems, Mode=OneWay}">
+                            <ItemsRepeater.Layout>
+                                <UniformGridLayout MinItemWidth="200" MinItemHeight="120"
+                                                   MinColumnSpacing="10" MinRowSpacing="10"
+                                                   ItemsStretch="Fill" Orientation="Horizontal"/>
+                            </ItemsRepeater.Layout>
+                            <ItemsRepeater.ItemTemplate>
                                 <DataTemplate x:DataType="local:PdfMergeFileItem">
                                     <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                            BorderThickness="1"
-                                            CornerRadius="8"
-                                            Padding="12,10"
-                                            Margin="0,4">
-                                        <Grid ColumnSpacing="12">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            
-                                            <!-- Badge number -->
-                                            <Border Grid.Column="0"
-                                                    Background="{ThemeResource AccentFillColorDefaultBrush}"
-                                                    CornerRadius="12"
-                                                    Width="24"
-                                                    Height="24"
-                                                    VerticalAlignment="Center">
-                                                <TextBlock Text="{x:Bind OrderIndex}"
-                                                           HorizontalAlignment="Center"
-                                                           VerticalAlignment="Center"
-                                                           FontSize="11"
-                                                           FontWeight="SemiBold"
-                                                           Foreground="White"/>
-                                            </Border>
-                                            
-                                            <!-- Left: PDF icon -->
-                                            <FontIcon Grid.Column="1"
+                                            BorderThickness="1" CornerRadius="8" Padding="14,12">
+                                        <Grid RowSpacing="8">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="*"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+
+                                            <!-- Top row: order badge + remove button -->
+                                            <Grid Grid.Row="0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0"
+                                                        Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                                        CornerRadius="10" Width="22" Height="22">
+                                                    <TextBlock Text="{x:Bind OrderIndex}"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"
+                                                               FontSize="11" FontWeight="SemiBold"
+                                                               Foreground="White"/>
+                                                </Border>
+                                                <Button Grid.Column="2"
+                                                        Tag="{x:Bind FilePath}"
+                                                        Click="RemovePdfMergeFile_Click"
+                                                        Width="24" Height="24" Padding="0"
+                                                        Background="Transparent" BorderThickness="0">
+                                                    <FontIcon Glyph="&#xE711;" FontSize="12"
+                                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                </Button>
+                                            </Grid>
+
+                                            <!-- PDF icon -->
+                                            <FontIcon Grid.Row="1"
                                                       FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
-                                                      Glyph="&#xF3AD;"
-                                                      FontSize="24"
-                                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                      VerticalAlignment="Center"/>
-                                            
-                                            <!-- Center: Filename -->
-                                            <TextBlock Grid.Column="2"
+                                                      Glyph="&#xF3AD;" FontSize="32"
+                                                      HorizontalAlignment="Center"
+                                                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+
+                                            <!-- Filename -->
+                                            <TextBlock Grid.Row="2"
                                                        Text="{x:Bind FileName}"
-                                                       FontSize="13"
+                                                       FontSize="12" TextAlignment="Center"
                                                        TextTrimming="CharacterEllipsis"
-                                                       VerticalAlignment="Center"/>
-                                            
-                                            <!-- Right: Remove button -->
-                                            <Button Grid.Column="3"
-                                                    Click="RemovePdfMergeFile_Click"
-                                                    Width="32"
-                                                    Height="32"
-                                                    Padding="0"
-                                                    Background="Transparent"
-                                                    BorderThickness="0"
-                                                    VerticalAlignment="Center">
-                                                <Button.Resources>
-                                                    <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="Transparent"/>
-                                                    <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="Transparent"/>
-                                                </Button.Resources>
-                                                <FontIcon FontFamily="Segoe Fluent Icons"
-                                                          Glyph="&#xE711;"
-                                                          FontSize="14"
-                                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                            </Button>
+                                                       MaxLines="2" TextWrapping="Wrap"
+                                                       HorizontalAlignment="Center"/>
                                         </Grid>
                                     </Border>
                                 </DataTemplate>
-                            </ListView.ItemTemplate>
-                        </ListView>
-                        <Button Content="Add another PDF" Click="AddPdfMergeFile_Click"
-                                HorizontalAlignment="Left" Padding="16,8"/>
+                            </ItemsRepeater.ItemTemplate>
+                        </ItemsRepeater>
+                        <Button Content="+ Add PDF files" Click="AddPdfMergeFile_Click"
+                                HorizontalAlignment="Left" Padding="14,8"/>
                     </StackPanel>
 
-                    <GridView x:Name="PdfSplitPagesGrid"
-                              Visibility="Collapsed"
-                              SelectionMode="Multiple"
-                              SelectionChanged="PdfSplitPagesGrid_SelectionChanged"
-                              IsItemClickEnabled="False"
-                              MaxHeight="420">
-                        <GridView.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <ItemsWrapGrid Orientation="Horizontal"/>
-                            </ItemsPanelTemplate>
-                        </GridView.ItemsPanel>
-                        <GridView.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel Width="150" Spacing="6">
-                                    <Border BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                            BorderThickness="1" CornerRadius="6" Padding="5">
-                                        <Image Source="{Binding Preview}" Stretch="Uniform" Height="190"/>
-                                    </Border>
-                                    <TextBlock Text="{Binding Label}" HorizontalAlignment="Center"
-                                               FontSize="12"/>
-                                </StackPanel>
-                            </DataTemplate>
-                        </GridView.ItemTemplate>
-                    </GridView>
-                    <StackPanel x:Name="PdfSplitSelectionPanel" Orientation="Horizontal"
-                                Spacing="8" Visibility="Collapsed">
-                        <Button Content="Select all pages" Click="SelectAllPdfPages_Click"/>
-                        <Button Content="Clear selection" Click="ClearPdfPages_Click"/>
-                        <TextBlock x:Name="PdfSplitSelectionStatus" VerticalAlignment="Center"
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    <!-- Split mode: page range input OR visual grid -->
+                    <StackPanel x:Name="PdfSplitOptionsPanel" Spacing="14" Visibility="Collapsed">
+
+                        <!-- Mode selector tabs -->
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Split method" FontSize="13" FontWeight="SemiBold"/>
+                            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1" CornerRadius="8" Padding="3" Height="38"
+                                    HorizontalAlignment="Left">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <RadioButton x:Name="SplitByRangeButton"
+                                                 Grid.Column="0"
+                                                 Content="Page range"
+                                                 IsChecked="True"
+                                                 MinWidth="110" Height="32" Padding="12,0"
+                                                 CornerRadius="6"
+                                                 Checked="SplitMode_Checked"
+                                                 Style="{StaticResource SegmentedButtonStyle}"/>
+                                    <RadioButton x:Name="SplitByPickButton"
+                                                 Grid.Column="1"
+                                                 Content="Pick pages"
+                                                 MinWidth="110" Height="32" Padding="12,0"
+                                                 CornerRadius="6"
+                                                 Checked="SplitMode_Checked"
+                                                 Style="{StaticResource SegmentedButtonStyle}"/>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Page range entry -->
+                        <StackPanel x:Name="SplitPageRangePanel" Spacing="8">
+                            <TextBlock Text="Page range" FontSize="13" FontWeight="SemiBold"/>
+                            <TextBlock FontSize="12" TextWrapping="Wrap"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       Text="Enter a range like 1-5 or individual pages like 1,3,7 or combine: 1-3,5,8-10"/>
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0"
+                                         x:Name="SplitPageRangeInput"
+                                         PlaceholderText="e.g. 1-5 or 1,3,7 or 1-3,5,8-10"
+                                         Height="36"
+                                         TextChanged="SplitPageRangeInput_TextChanged"/>
+                                <TextBlock Grid.Column="1"
+                                           x:Name="SplitRangePageCount"
+                                           VerticalAlignment="Center"
+                                           FontSize="12"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            </Grid>
+                            <TextBlock x:Name="SplitRangeError"
+                                       FontSize="12" TextWrapping="Wrap"
+                                       Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                       Visibility="Collapsed"/>
+                        </StackPanel>
+
+                        <!-- Visual page picker -->
+                        <StackPanel x:Name="SplitPagePickerPanel" Spacing="8" Visibility="Collapsed">
+                            <GridView x:Name="PdfSplitPagesGrid"
+                                      SelectionMode="Multiple"
+                                      SelectionChanged="PdfSplitPagesGrid_SelectionChanged"
+                                      IsItemClickEnabled="False"
+                                      MaxHeight="460">
+                                <GridView.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <ItemsWrapGrid Orientation="Horizontal" ItemWidth="160" ItemHeight="230"/>
+                                    </ItemsPanelTemplate>
+                                </GridView.ItemsPanel>
+                                <GridView.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Width="148" Spacing="6" Margin="0,4">
+                                            <Border BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                    BorderThickness="1" CornerRadius="6" Padding="4">
+                                                <Image Source="{Binding Preview}" Stretch="Uniform" Height="180"/>
+                                            </Border>
+                                            <TextBlock Text="{Binding Label}" HorizontalAlignment="Center"
+                                                       FontSize="12"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </GridView.ItemTemplate>
+                            </GridView>
+                            <StackPanel x:Name="PdfSplitSelectionPanel" Orientation="Horizontal"
+                                        Spacing="8">
+                                <Button Content="Select all" Click="SelectAllPdfPages_Click"/>
+                                <Button Content="Clear" Click="ClearPdfPages_Click"/>
+                                <TextBlock x:Name="PdfSplitSelectionStatus" VerticalAlignment="Center"
+                                           FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            </StackPanel>
+                        </StackPanel>
+
                     </StackPanel>
 
                     <StackPanel Spacing="8">

@@ -52,13 +52,13 @@ public class DocumentItem : INotifyPropertyChanged
     // Segoe MDL2 glyph per file category
     public string FileGlyph => FileType switch
     {
-        "PDF"                                           => "\uEA90",
-        "DOCX" or "DOC"                                 => "\uE8A5",
-        "PPTX" or "PPT"                                 => "\uE8D1",
-        "XLSX" or "XLS" or "CSV"                        => "\uE8F9",
+        "PDF"                                           => "\uF3AD",
+        "DOCX" or "DOC"                                 => "\uF0C22",
+        "PPTX" or "PPT"                                 => "\uF12B",
+        "XLSX" or "XLS" or "CSV"                        => "\uE54C",
         "TXT"  or "MD"  or "LOG" or "RTF"               => "\uE8A5",
         "PNG"  or "JPG" or "JPEG" or "BMP"
-            or "GIF"   or "WEBP" or "TIFF"              => "\uEB9F",
+            or "GIF"   or "WEBP" or "TIFF"              => "\uF489",
         "MP4"  or "MKV" or "AVI" or "MOV" or "WMV"     => "\uE8B2",
         "MP3"  or "WAV" or "FLAC" or "AAC" or "OGG"    => "\uE8D6",
         "ZIP"  or "RAR" or "7Z"  or "TAR" or "GZ"      => "\uE8B1",

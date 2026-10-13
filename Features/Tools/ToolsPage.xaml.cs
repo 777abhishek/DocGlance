@@ -28,7 +28,7 @@ namespace QuickView.Features.Tools;
 
 public sealed class PdfMergeFileItem
 {
-    public required string Path { get; init; }
+    public required string FilePath { get; init; }
     public required string FileName { get; init; }
     public int OrderIndex { get; set; }
 }
@@ -44,6 +44,8 @@ public sealed partial class ToolsPage : Page
     private string? _pdfInputFile;
     private string? _pdfOutputFile;
     private readonly ObservableCollection<PdfMergeFileItem> _pdfMergeFiles = new();
+    // alias so XAML x:Bind works (ItemsRepeater needs a field/property name)
+    private ObservableCollection<PdfMergeFileItem> _pdfMergeItems => _pdfMergeFiles;
     private PdfDocumentState? _pdfSplitPreviewDocument;
     private readonly List<PdfSplitPageItem> _pdfSplitPages = new();
     private string _selectedTool = "WordToPdf";
@@ -131,7 +133,12 @@ public sealed partial class ToolsPage : Page
 
     private void UpdateToolPresentation()
     {
-        if (WordToolTitle is null || PptToolTitle is null || ExcelToolTitle is null)
+        // Ensure all required controls are loaded before updating
+        if (WordToolTitle is null || PptToolTitle is null || ExcelToolTitle is null || PdfToolTitle is null ||
+            WordToolDescription is null || PptToolDescription is null || ExcelToolDescription is null || PdfToolDescription is null ||
+            ConvertWordButton is null || ConvertPptButton is null || ConvertExcelButton is null || ProcessPdfButton is null ||
+            WordOutputPath is null || PptOutputPath is null || ExcelOutputPath is null ||
+            PdfInputLabel is null || PdfInputPath is null || PdfOutputLabel is null || PdfOutputPath is null)
             return;
 
         bool wordPng = _selectedTool == "WordToPng";
@@ -150,7 +157,7 @@ public sealed partial class ToolsPage : Page
 
         PptToolTitle.Text = pptPng ? "PowerPoint → PNG (ZIP)" : "PowerPoint → PDF";
         PptToolDescription.Text = pptPng
-            ? "Export every presentation slide as a PNG inside a ZIP archive."
+            ? "Export every presentation slide as a PNG inside a PNG archive."
             : "PowerPoint to PDF export is not supported by DeckCraft yet.";
         ConvertPptButton.Content = pptPng ? "Export PNG ZIP" : "PDF export unavailable";
         ConvertPptButton.IsEnabled = pptPng && !string.IsNullOrEmpty(_pptInputFile) && !string.IsNullOrEmpty(_pptOutputFile);
@@ -171,9 +178,13 @@ public sealed partial class ToolsPage : Page
                 : "Export every PDF page as a PNG inside a ZIP archive using PdfCraft.";
         PdfInputLabel.Text = pdfMerge ? "PDF files to merge" : "Input PDF";
         PdfInputPath.PlaceholderText = pdfMerge ? "Select the first PDF file..." : "Select PDF file...";
-        PdfMergeFilesPanel.Visibility = pdfMerge ? Visibility.Visible : Visibility.Collapsed;
-        PdfSplitPagesGrid.Visibility = pdfSplit ? Visibility.Visible : Visibility.Collapsed;
-        PdfSplitSelectionPanel.Visibility = pdfSplit ? Visibility.Visible : Visibility.Collapsed;
+        
+        if (PdfMergeFilesPanel != null)
+            PdfMergeFilesPanel.Visibility = pdfMerge ? Visibility.Visible : Visibility.Collapsed;
+        
+        if (PdfSplitOptionsPanel != null)
+            PdfSplitOptionsPanel.Visibility = pdfSplit ? Visibility.Visible : Visibility.Collapsed;
+        
         PdfOutputLabel.Text = "Output file";
         PdfOutputPath.PlaceholderText = pdfMerge ? "Merged PDF will be saved here..." :
             pdfSplit ? "ZIP of selected pages will be saved here..." : "PNG ZIP will be saved here...";
@@ -454,11 +465,11 @@ public sealed partial class ToolsPage : Page
             var files = await picker.PickMultipleFilesAsync();
             foreach (var file in files)
             {
-                if (!_pdfMergeFiles.Any(f => f.Path.Equals(file.Path, StringComparison.OrdinalIgnoreCase)))
+                if (!_pdfMergeFiles.Any(f => f.FilePath.Equals(file.Path, StringComparison.OrdinalIgnoreCase)))
                 {
                     _pdfMergeFiles.Add(new PdfMergeFileItem
                     {
-                        Path = file.Path,
+                        FilePath = file.Path,
                         FileName = file.Name,
                         OrderIndex = _pdfMergeFiles.Count + 1
                     });
@@ -466,7 +477,7 @@ public sealed partial class ToolsPage : Page
             }
             RefreshPdfMergeFiles();
             if (_pdfMergeFiles.Count > 0)
-                _pdfInputFile = _pdfMergeFiles[0].Path;
+                _pdfInputFile = _pdfMergeFiles[0].FilePath;
         }
         else
         {
@@ -500,11 +511,11 @@ public sealed partial class ToolsPage : Page
         var files = await picker.PickMultipleFilesAsync();
         foreach (var file in files)
         {
-            if (!_pdfMergeFiles.Any(f => f.Path.Equals(file.Path, StringComparison.OrdinalIgnoreCase)))
+            if (!_pdfMergeFiles.Any(f => f.FilePath.Equals(file.Path, StringComparison.OrdinalIgnoreCase)))
             {
                 _pdfMergeFiles.Add(new PdfMergeFileItem
                 {
-                    Path = file.Path,
+                    FilePath = file.Path,
                     FileName = file.Name,
                     OrderIndex = _pdfMergeFiles.Count + 1
                 });
@@ -512,7 +523,7 @@ public sealed partial class ToolsPage : Page
         }
         RefreshPdfMergeFiles();
         if (_pdfMergeFiles.Count > 0)
-            _pdfInputFile = _pdfMergeFiles[0].Path;
+            _pdfInputFile = _pdfMergeFiles[0].FilePath;
         UpdatePdfProcessButton();
     }
 
@@ -522,20 +533,6 @@ public sealed partial class ToolsPage : Page
             ? string.Empty
             : $"{_pdfMergeFiles.Count} PDF file(s) selected";
         UpdatePdfProcessButton();
-    }
-
-    private void RemovePdfMergeFile_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is FrameworkElement element && element.DataContext is PdfMergeFileItem item)
-        {
-            _pdfMergeFiles.Remove(item);
-            // Re-index remaining items
-            for (int i = 0; i < _pdfMergeFiles.Count; i++)
-            {
-                _pdfMergeFiles[i].OrderIndex = i + 1;
-            }
-            RefreshPdfMergeFiles();
-        }
     }
 
     private void PdfMergeFiles_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
@@ -600,7 +597,7 @@ public sealed partial class ToolsPage : Page
 
     private async Task MergePdfsAsync()
     {
-        string paths = string.Join(";", _pdfMergeFiles.Select(f => f.Path));
+        string paths = string.Join(";", _pdfMergeFiles.Select(f => f.FilePath));
         IntPtr pathBuffer = Marshal.StringToCoTaskMemUTF8(paths);
         try
         {
@@ -628,22 +625,47 @@ public sealed partial class ToolsPage : Page
 
     private async Task SplitPdfAsync()
     {
-        var selected = PdfSplitPagesGrid.SelectedItems
-            .OfType<PdfSplitPageItem>()
-            .OrderBy(page => page.PageIndex)
-            .ToArray();
-        if (selected.Length == 0)
-            throw new InvalidOperationException("Select at least one page to split.");
+        // Determine which mode we're in
+        bool isRangeMode = SplitByRangeButton?.IsChecked == true;
+        int[] selectedIndices;
+
+        if (isRangeMode)
+        {
+            // Parse page range from text input (1-based to 0-based)
+            string input = SplitPageRangeInput.Text.Trim();
+            var pageNumbers = ParsePageRange(input);
+            selectedIndices = pageNumbers.Select(p => p - 1).OrderBy(i => i).ToArray();
+            
+            if (selectedIndices.Length == 0)
+                throw new InvalidOperationException("Enter at least one page number.");
+        }
+        else
+        {
+            // Use selected pages from grid
+            selectedIndices = PdfSplitPagesGrid.SelectedItems
+                .OfType<PdfSplitPageItem>()
+                .Select(page => page.PageIndex)
+                .OrderBy(i => i)
+                .ToArray();
+            
+            if (selectedIndices.Length == 0)
+                throw new InvalidOperationException("Select at least one page to split.");
+        }
 
         byte[] bytes = await File.ReadAllBytesAsync(_pdfInputFile!);
         var opened = await PdfRenderer.OpenDocumentFromBytesAsync(bytes);
         if (!opened.Ok)
             throw new InvalidOperationException(opened.Error ?? "PdfCraft could not open the PDF.");
         using var document = opened.Document!;
+        
+        // Validate page indices
+        if (selectedIndices.Any(i => i < 0 || i >= document.PageCount))
+            throw new InvalidOperationException("One or more page numbers are out of range.");
+        
         string outputDirectory = Path.Combine(Path.GetTempPath(), "QuickView", "pdf-split-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(outputDirectory);
         IntPtr outputDir = Marshal.StringToCoTaskMemUTF8(outputDirectory);
-        string indices = string.Join(",", selected.Select(page => page.PageIndex));
+        string indices = string.Join(",", selectedIndices);
         IntPtr pageIndices = Marshal.StringToCoTaskMemUTF8(indices);
         try
         {
@@ -762,22 +784,154 @@ public sealed partial class ToolsPage : Page
         UpdatePdfProcessButton();
     }
 
+    private void SplitMode_Checked(object sender, RoutedEventArgs e)
+    {
+        // Toggle between page range input and page picker grid
+        if (sender is RadioButton radio)
+        {
+            bool isRangeMode = radio.Name == "SplitByRangeButton";
+            
+            if (SplitPageRangePanel != null)
+                SplitPageRangePanel.Visibility = isRangeMode ? Visibility.Visible : Visibility.Collapsed;
+            
+            if (SplitPagePickerPanel != null)
+                SplitPagePickerPanel.Visibility = isRangeMode ? Visibility.Collapsed : Visibility.Visible;
+            
+            UpdatePdfProcessButton();
+        }
+    }
+
+    private void SplitPageRangeInput_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (SplitRangePageCount == null) return;
+        
+        string input = SplitPageRangeInput.Text.Trim();
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            SplitRangePageCount.Text = "0 pages";
+            UpdatePdfProcessButton();
+            return;
+        }
+
+        try
+        {
+            var pages = ParsePageRange(input);
+            int validPages = _pdfSplitPreviewDocument != null
+                ? pages.Count(p => p >= 1 && p <= _pdfSplitPreviewDocument.PageCount)
+                : pages.Count;
+            
+            SplitRangePageCount.Text = validPages > 0 
+                ? $"{validPages} page{(validPages == 1 ? "" : "s")}"
+                : "Invalid range";
+        }
+        catch
+        {
+            SplitRangePageCount.Text = "Invalid format";
+        }
+        
+        UpdatePdfProcessButton();
+    }
+
+    private List<int> ParsePageRange(string input)
+    {
+        // Parse formats like "1-5", "1,3,7", "1-3,5,8-10"
+        var pages = new HashSet<int>();
+        var parts = input.Split(',', StringSplitOptions.RemoveEmptyEntries);
+        
+        foreach (var part in parts)
+        {
+            var trimmed = part.Trim();
+            if (trimmed.Contains('-'))
+            {
+                var range = trimmed.Split('-', StringSplitOptions.RemoveEmptyEntries);
+                if (range.Length == 2 && int.TryParse(range[0].Trim(), out int start) 
+                    && int.TryParse(range[1].Trim(), out int end))
+                {
+                    for (int i = start; i <= end; i++)
+                        pages.Add(i);
+                }
+                else
+                {
+                    throw new FormatException("Invalid range format");
+                }
+            }
+            else if (int.TryParse(trimmed, out int page))
+            {
+                pages.Add(page);
+            }
+            else
+            {
+                throw new FormatException("Invalid page number");
+            }
+        }
+        
+        return pages.OrderBy(p => p).ToList();
+    }
+
     private bool CanProcessPdf()
-        => _selectedTool == "PdfMerge"
-            ? _pdfMergeFiles.Count >= 2 && !string.IsNullOrWhiteSpace(_pdfOutputFile)
-            : !string.IsNullOrWhiteSpace(_pdfInputFile) &&
-              !string.IsNullOrWhiteSpace(_pdfOutputFile) &&
-              (_selectedTool != "PdfSplit" || PdfSplitPagesGrid.SelectedItems.Count > 0);
+    {
+        if (_selectedTool == "PdfMerge")
+            return _pdfMergeFiles.Count >= 2 && !string.IsNullOrWhiteSpace(_pdfOutputFile);
+        
+        if (!string.IsNullOrWhiteSpace(_pdfInputFile) && !string.IsNullOrWhiteSpace(_pdfOutputFile))
+        {
+            if (_selectedTool == "PdfSplit")
+            {
+                // Check if controls are loaded
+                if (SplitByRangeButton == null || SplitPageRangeInput == null || PdfSplitPagesGrid == null)
+                    return false;
+                
+                // Check if we're in range mode or picker mode
+                bool isRangeMode = SplitByRangeButton.IsChecked == true;
+                if (isRangeMode)
+                {
+                    // Validate page range input
+                    string input = SplitPageRangeInput.Text?.Trim() ?? "";
+                    if (string.IsNullOrWhiteSpace(input))
+                        return false;
+                    
+                    try
+                    {
+                        var pages = ParsePageRange(input);
+                        return pages.Count > 0 && _pdfSplitPreviewDocument != null
+                            && pages.All(p => p >= 1 && p <= _pdfSplitPreviewDocument.PageCount);
+                    }
+                    catch
+                    {
+                        return false;
+                    }
+                }
+                else
+                {
+                    // Picker mode: need at least one selected page
+                    return PdfSplitPagesGrid.SelectedItems.Count > 0;
+                }
+            }
+            return true;
+        }
+        
+        return false;
+    }
 
     private void UpdatePdfProcessButton()
         => ProcessPdfButton.IsEnabled = CanProcessPdf();
 
-    private void RemoveMergeFile_Click(object sender, RoutedEventArgs e)
+    private void RemovePdfMergeFile_Click(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is PdfMergeFileItem item)
+        // ItemsRepeater doesn't set DataContext, so we use Tag (set via x:Bind in XAML)
+        if (sender is Button button && button.Tag is string filePath)
         {
-            _pdfMergeFiles.Remove(item);
-            RefreshPdfMergeFiles();
+            var item = _pdfMergeFiles.FirstOrDefault(f => f.FilePath == filePath);
+            if (item != null)
+            {
+                _pdfMergeFiles.Remove(item);
+                // Re-index remaining items
+                for (int i = 0; i < _pdfMergeFiles.Count; i++)
+                {
+                    _pdfMergeFiles[i].OrderIndex = i + 1;
+                }
+                RefreshPdfMergeFiles();
+            }
         }
     }
 

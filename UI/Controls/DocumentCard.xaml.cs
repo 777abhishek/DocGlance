@@ -172,11 +172,11 @@ public sealed partial class DocumentCard : UserControl
         string ext = NormalizeExt(fileType).TrimStart('.').ToUpperInvariant();
         return ext switch
         {
-            "DOC"  or "DOCX" => new("Word Document",            "\uE8A5", Color.FromArgb(255,15,61,145),   Color.FromArgb(255,47,111,228)),
-            "PDF"            => new("PDF Document",             "\uEA90", Color.FromArgb(255,166,24,47),   Color.FromArgb(255,226,51,80)),
-            "XLS"  or "XLSX" or "CSV"  => new("Excel Spreadsheet",  "\uE8F9", Color.FromArgb(255,15,107,61),  Color.FromArgb(255,47,174,110)),
-            "PPT"  or "PPTX" => new("PowerPoint",               "\uE8D1", Color.FromArgb(255,184,70,10),   Color.FromArgb(255,240,129,42)),
-            "JPG"  or "JPEG" or "PNG" or "GIF" or "BMP" or "WEBP" or "SVG" => new("Image", "\uEB9F", Color.FromArgb(255,91,42,158), Color.FromArgb(255,155,79,224)),
+            "DOC"  or "DOCX" => new("Word Document",            "\uF0C22", Color.FromArgb(255,15,61,145),   Color.FromArgb(255,47,111,228)),
+            "PDF"            => new("PDF Document",             "\uF3AD", Color.FromArgb(255,166,24,47),   Color.FromArgb(255,226,51,80)),
+            "XLS"  or "XLSX" or "CSV"  => new("Excel Spreadsheet",  "\uE54C", Color.FromArgb(255,15,107,61),  Color.FromArgb(255,47,174,110)),
+            "PPT"  or "PPTX" => new("PowerPoint",               "\uF12B", Color.FromArgb(255,184,70,10),   Color.FromArgb(255,240,129,42)),
+            "JPG"  or "JPEG" or "PNG" or "GIF" or "BMP" or "WEBP" or "SVG" => new("Image", "\uF489", Color.FromArgb(255,91,42,158), Color.FromArgb(255,155,79,224)),
             "MP4"  or "AVI"  or "MKV" or "MOV" or "WMV" or "WEBM" => new("Video", "\uE8B2", Color.FromArgb(255,61,31,140), Color.FromArgb(255,122,79,224)),
             "ZIP"  or "RAR"  or "7Z"  or "TAR" or "GZ"  => new("Archive", "\uE8B1", Color.FromArgb(255,11,95,114),  Color.FromArgb(255,34,166,194)),
             "CS"   or "CPP"  or "C"   or "H"   or "PY"  or "JS" or "TS" or "HTML" or "CSS" or "JSON" or "XML" => new("Code File", "\uE943", Color.FromArgb(255,13,77,130), Color.FromArgb(255,36,150,214)),

@@ -4,6 +4,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
 using QuickView.Infrastructure.Logging;
+using QuickView.Infrastructure.Configuration;
 using QuickView.Services.Registration;
 using QuickView.Core.Models;
 using QuickView.Common.Validators;
@@ -84,14 +85,7 @@ public partial class App : Application
             App.AllWindows.Add((TitleBarWindow)m_window);
             m_window.Closed += (_, _) => App.AllWindows.Remove((TitleBarWindow)m_window);
             
-            // UI-08: Apply backdrop setting from storage
-            var micaSetting = Services.Storage.SettingsStore.Load<bool?>("UseMicaBackdrop");
-            bool useMica = micaSetting ?? true;
-            if (useMica)
-            {
-                // Use DesktopAcrylic for gray appearance matching Windows 11 File Explorer
-                m_window.SystemBackdrop = new Microsoft.UI.Xaml.Media.DesktopAcrylicBackdrop();
-            }
+            // Backdrop is already applied in TitleBarWindow constructor based on user setting
             
             m_window.Activate();
             Logger.Log("Window activated");
@@ -105,7 +99,15 @@ public partial class App : Application
             // Check for file-open activation
             var activatedArgs = AppInstance.GetCurrent().GetActivatedEventArgs();
             if (!TryOpenFromActivationArgs(activatedArgs))
+            {
                 TryOpenFromCommandLine();
+                
+                // If no files opened and RestoreLastSession is enabled, restore previous session
+                if (m_window is TitleBarWindow titleBarWindow && AppSettings.RestoreLastSession)
+                {
+                    titleBarWindow.RestoreSession();
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -151,19 +153,22 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// Inspects AppActivationArguments and opens the file if a path is found.
-    /// Returns true when a file was opened.
+    /// Inspects AppActivationArguments and opens all files found.
+    /// Returns true when at least one file was opened.
     /// </summary>
     private static bool TryOpenFromActivationArgs(AppActivationArguments? args)
     {
         if (args == null) return false;
 
-        string? filePath = null;
+        var filePaths = new System.Collections.Generic.List<string>();
 
         if (args.Data is Windows.ApplicationModel.Activation.IFileActivatedEventArgs fileArgs)
         {
-            filePath = fileArgs.Files.OfType<Windows.Storage.StorageFile>()
-                                     .FirstOrDefault()?.Path;
+            // Handle multiple files from File Explorer
+            filePaths.AddRange(fileArgs.Files
+                .OfType<Windows.Storage.StorageFile>()
+                .Select(f => f.Path)
+                .Where(p => !string.IsNullOrEmpty(p)));
         }
         else if (args.Data is Windows.ApplicationModel.Activation.ILaunchActivatedEventArgs launchArgs)
         {
@@ -173,7 +178,7 @@ public partial class App : Application
                 !string.Equals(raw, Environment.ProcessPath, StringComparison.OrdinalIgnoreCase) &&
                 File.Exists(raw))
             {
-                filePath = raw;
+                filePaths.Add(raw);
             }
         }
         else if (args.Data is Windows.ApplicationModel.Activation.ICommandLineActivatedEventArgs cmdArgs)
@@ -184,21 +189,22 @@ public partial class App : Application
                 !string.Equals(raw, Environment.ProcessPath, StringComparison.OrdinalIgnoreCase) &&
                 File.Exists(raw))
             {
-                filePath = raw;
+                filePaths.Add(raw);
             }
         }
 
-        if (filePath != null)
+        if (filePaths.Count > 0)
         {
-            OpenFilePath(filePath);
+            foreach (var path in filePaths)
+                OpenFilePath(path);
             return true;
         }
         return false;
     }
 
     /// <summary>
-    /// Fallback: read file path from process command-line arguments.
-    /// Handles: QuickView.exe "C:\path\to\file.pdf"
+    /// Fallback: read file path(s) from process command-line arguments.
+    /// Handles: QuickView.exe "C:\path\to\file.pdf" "C:\path\to\file2.docx"
     /// </summary>
     private static void TryOpenFromCommandLine()
     {
@@ -214,7 +220,6 @@ public partial class App : Application
                     File.Exists(path))
                 {
                     OpenFilePath(path);
-                    return; // open only the first valid file
                 }
             }
         }

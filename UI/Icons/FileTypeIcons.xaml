@@ -5,11 +5,11 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <x:String x:Key="GlyphPdf">&#xEA90;</x:String>
-    <x:String x:Key="GlyphDocx">&#xE8A5;</x:String>
-    <x:String x:Key="GlyphXlsx">&#xE8F9;</x:String>
-    <x:String x:Key="GlyphPptx">&#xE8D1;</x:String>
-    <x:String x:Key="GlyphImage">&#xEB9F;</x:String>
+    <x:String x:Key="GlyphPdf">&#xF3AD;</x:String>
+    <x:String x:Key="GlyphDocx">&#xF0C22;</x:String>
+    <x:String x:Key="GlyphXlsx">&#xE54C;</x:String>
+    <x:String x:Key="GlyphPptx">&#xF12B;</x:String>
+    <x:String x:Key="GlyphImage">&#xF489;</x:String>
     <x:String x:Key="GlyphVideo">&#xE8B2;</x:String>
     <x:String x:Key="GlyphAudio">&#xE8D6;</x:String>
     <x:String x:Key="GlyphCode">&#xE943;</x:String>
