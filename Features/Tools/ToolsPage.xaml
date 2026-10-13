@@ -423,11 +423,7 @@
                                                            HorizontalAlignment="Center"
                                                            VerticalAlignment="Center"/>
                                                     
-                                                    <!-- Loading indicator when thumbnail is being generated -->
-                                                    <ProgressRing IsActive="True" Width="32" Height="32"
-                                                                  Visibility="{x:Bind PreviewThumbnail, Mode=OneWay, Converter={StaticResource NullToVisibilityConverter}}"/>
-                                                    
-                                                    <!-- Fallback PDF icon if no thumbnail -->
+                                                    <!-- Fallback PDF icon when no thumbnail loaded yet -->
                                                     <FontIcon FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
                                                               Glyph="&#xF3AD;" FontSize="48"
                                                               Foreground="{ThemeResource AccentTextFillColorSecondaryBrush}"

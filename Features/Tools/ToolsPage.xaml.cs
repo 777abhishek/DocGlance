@@ -42,8 +42,8 @@ public sealed class PdfMergeFileItem : System.ComponentModel.INotifyPropertyChan
     public required string FileName { get; init; }
     public int OrderIndex { get; set; }
     
-    private Microsoft.UI.Xaml.Media.Imaging.BitmapImage? _previewThumbnail;
-    public Microsoft.UI.Xaml.Media.Imaging.BitmapImage? PreviewThumbnail
+    private WriteableBitmap? _previewThumbnail;
+    public WriteableBitmap? PreviewThumbnail
     {
         get => _previewThumbnail;
         set
@@ -809,17 +809,11 @@ public sealed partial class ToolsPage : Page
             var thumbnail = await PdfRenderer.RenderPageAsync(document, 0, PdfRenderer.ThumbnailDpi);
             if (thumbnail != null)
             {
-                // Convert WriteableBitmap to BitmapImage for binding
-                var bitmapImage = new BitmapImage();
-                using var stream = new InMemoryRandomAccessStream();
-                await thumbnail.ToStreamAsync(stream, BitmapEncoder.PngEncoderId);
-                stream.Seek(0);
-                await bitmapImage.SetSourceAsync(stream);
-                
+                // Use the WriteableBitmap directly - WinUI3 Image control can bind to it
                 // Update on UI thread
                 DispatcherQueue.TryEnqueue(() =>
                 {
-                    item.PreviewThumbnail = bitmapImage;
+                    item.PreviewThumbnail = thumbnail;
                 });
             }
         }
