@@ -278,12 +278,6 @@
             <Grid Grid.Column="1" Background="Transparent"
                   HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
 
-                <ProgressRing x:Name="LoadingRing"
-                    Width="48" Height="48"
-                    IsActive="False" Visibility="Collapsed"
-                    HorizontalAlignment="Center" VerticalAlignment="Center"
-                    Canvas.ZIndex="30"/>
-
                 <ScrollViewer x:Name="DocumentScrollViewer"
                     HorizontalScrollBarVisibility="Auto"
                     VerticalScrollBarVisibility="Auto"

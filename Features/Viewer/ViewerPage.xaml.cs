@@ -220,11 +220,9 @@ public sealed partial class ViewerPage : Page
     // UI-04 fix: animate Opacity instead of toggling Visibility for smooth fade
     internal void ShowLoading(bool on)
     {
-        LoadingRing.IsActive   = on;
-        LoadingRing.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
         LoadingOverlay.Opacity = on ? 1.0 : 0.0;
         LoadingOverlay.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
-        ViewModel.IsLoading    = on;
+        ViewModel.IsLoading = on;
     }
 
     // ── Public API (used by TitleBarWindow) ───────────────────────────────────
