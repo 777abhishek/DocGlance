@@ -34,6 +34,7 @@ desktop.ini
 appsettings.Development.json
 *.pfx
 *.p12
+# Rust FFI build artifacts (keep vendor patches)
 native/*_ffi/target/
 .agents
 docs
