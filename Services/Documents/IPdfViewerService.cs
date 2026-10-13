@@ -93,11 +93,4 @@ public interface IPdfViewerService
     /// <summary>Natural zoom factor (always 1.0 with dynamic DPI rendering).</summary>
     double NaturalZoom { get; }
 
-    // ── PDF Metadata & Permissions ────────────────────────────────────────
-
-    /// <summary>Gets PDF document permissions (print, copy, modify, etc.).</summary>
-    PdfPermissions GetPermissions();
-
-    /// <summary>Gets PDF document metadata (title, author, dates, etc.).</summary>
-    PdfMetadata GetMetadata();
 }

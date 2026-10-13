@@ -148,11 +148,6 @@ public sealed partial class ViewerPage
             ViewModel.TotalPages  = _total;
             ViewModel.CurrentPage = _page;
 
-            Infrastructure.Logging.Logger.Log("[PDF] Loading outline");
-            
-            // Load outline from the open document
-            _ = Task.Run(() => LoadOutline(_pdfState), ct);
-
             // Auto-hide the sidebar for single-page documents
             if (_total == 1)
             {

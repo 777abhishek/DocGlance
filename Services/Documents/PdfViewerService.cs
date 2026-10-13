@@ -235,51 +235,6 @@ public sealed class PdfViewerService : IPdfViewerService, IDisposable
 
     public double NaturalZoom => 1.0; // Always 1.0 with dynamic DPI rendering
 
-    // ── PDF Metadata & Permissions ────────────────────────────────────────
-
-    public PdfPermissions GetPermissions()
-    {
-        if (_document == null)
-            return PdfPermissions.Unrestricted;
-
-        lock (Pdfium.Gate)
-        {
-            IntPtr doc = _document.Handle;
-            if (doc == IntPtr.Zero)
-                return PdfPermissions.Unrestricted;
-
-            int revision = Pdfium.FPDF_GetSecurityHandlerRevision(doc);
-            
-            // Unencrypted PDFs return revision -1
-            if (revision == -1)
-                return PdfPermissions.Unrestricted;
-
-            uint perms = Pdfium.FPDF_GetDocPermissions(doc);
-            
-            // 0xFFFFFFFF means all permissions granted
-            if (perms == 0xFFFFFFFF)
-                return PdfPermissions.Unrestricted;
-
-            return new PdfPermissions
-            {
-                CanPrint = (perms & Pdfium.FPDF_PERM_PRINT) != 0,
-                CanModify = (perms & Pdfium.FPDF_PERM_MODIFY) != 0,
-                CanCopy = (perms & Pdfium.FPDF_PERM_EXTRACT) != 0,
-                CanAnnotate = (perms & Pdfium.FPDF_PERM_ANNOTATE) != 0,
-                CanFillForms = (perms & Pdfium.FPDF_PERM_FILL_FORM) != 0,
-                IsEncrypted = true,
-            };
-        }
-    }
-
-    public PdfMetadata GetMetadata()
-    {
-        if (_document == null)
-            return new PdfMetadata();
-
-        return PdfMetadataService.GetMetadata(_document);
-    }
-
     // ── IDisposable ───────────────────────────────────────────────────────
 
     public void Dispose() => CloseDocument();

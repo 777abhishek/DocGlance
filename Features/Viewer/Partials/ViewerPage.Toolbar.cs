@@ -47,8 +47,7 @@ public sealed partial class ViewerPage
         ViewModel.Rotation = _rotation;
 
         // VIEWPORT ARCHITECTURE: rotation swaps page axes (90°/270°), so the
-        // canvas extent changes and the region must be re-rendered with the
-        // PDFium rotate flag.
+        // canvas extent changes and the region must be re-rendered.
         if (_pdfState != null && _viewportState != null)
         {
             UpdateCanvasSize();
@@ -141,12 +140,6 @@ public sealed partial class ViewerPage
             return;
         }
 
-        if (_pdfState == null) return;
-        string text = await Rendering.Pdf.PdfTextService.ExtractTextAsync(_pdfState, _page - 1);
-        if (text.Length == 0) return;
-        var package = new DataPackage();
-        package.SetText(text);
-        Clipboard.SetContent(package);
     }
 
     private void PresentationModeMenuItem_Click(object? sender, EventArgs e)

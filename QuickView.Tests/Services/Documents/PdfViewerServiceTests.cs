@@ -170,7 +170,7 @@ public sealed class PdfViewerServiceTests : IDisposable
     }
 
     // ── Rendering ─────────────────────────────────────────────────────────
-    // NOTE: RenderPageProgressiveAsync and RenderThumbnailAsync call PDFium
+    // NOTE: RenderPageProgressiveAsync and RenderThumbnailAsync call the native renderer
     // which requires a UI thread for WriteableBitmap creation. In the headless
     // test runner these return null (no bitmap). We test the service's tracking
     // logic (HashSet guard, eviction, invalidation) independently of the bitmap.

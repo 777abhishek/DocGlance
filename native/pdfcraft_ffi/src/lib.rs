@@ -226,6 +226,7 @@ pub extern "C" fn pc_search_text(
             return Some(0);
         }
         let mut output = String::new();
+        let mut match_index = 0usize;
         for page_index in 0..doc.info.pages.len() {
             let Some(text) = text_for_page(doc, page_index) else { continue };
             for range in text.find_opts(query, case_sensitive, false) {
@@ -235,7 +236,7 @@ pub extern "C" fn pc_search_text(
                     let _ = writeln!(
                         output,
                         "{},{},{:.2},{:.2},{:.2},{:.2};",
-                        output.matches(';').count(),
+                        match_index,
                         page_index,
                         rect[0],
                         rect[1],
@@ -243,6 +244,7 @@ pub extern "C" fn pc_search_text(
                         rect[3] - rect[1]
                     );
                 }
+                match_index += 1;
             }
         }
         let bytes = output.as_bytes();

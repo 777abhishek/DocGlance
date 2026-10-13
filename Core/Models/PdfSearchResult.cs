@@ -4,10 +4,10 @@ namespace QuickView.Core.Models;
 
 /// <summary>
 /// One search hit on a page.
-/// CharIndex and Length are the PDFium text-layer indices for the matched span —
+/// CharIndex and Length identify the matched span in the native PDF text layer —
 /// used to identify the active hit across pages without relying on list position.
 /// Rects are in top-left-origin page points (1 pt = 1 px at 72 DPI), already
-/// converted from PDFium's bottom-left origin at extraction time.
+/// converted to the viewer's top-left origin at extraction time.
 /// </summary>
 public sealed record PdfSearchResult(
     int PageIndex,

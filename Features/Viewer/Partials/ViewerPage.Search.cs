@@ -78,7 +78,7 @@ public sealed partial class ViewerPage
             return;
         }
 
-        // 300 ms debounce — prevents hammering PDFium on every keystroke
+        // 300 ms debounce — prevents hammering the native text layer on every keystroke
         try { await Task.Delay(300, debounceCt); }
         catch (OperationCanceledException) { return; }
 
@@ -134,9 +134,7 @@ public sealed partial class ViewerPage
 
             if (_pdfState == null) { SetSearchLoading(false); return; }
             
-            // FEAT-003: Pass rotation to search so rectangles are in correct coordinate space
-            int rotationDegrees = ((int)Math.Round(_rotation) % 360 + 360) % 360;
-            var results = await PdfTextService.SearchAsync(_pdfState, query, caseSensitive, rotationDegrees, ct);
+            var results = await PdfTextService.SearchAsync(_pdfState, query, caseSensitive, ct);
             if (ct.IsCancellationRequested) return;
 
             _searchResults     = results;
@@ -192,7 +190,6 @@ public sealed partial class ViewerPage
 
         SearchHighlightCanvas.Children.Clear();
 
-        // FEAT-003: Removed early return for rotation - highlights now work at any rotation
         var visiblePages = _viewportState.GetVisiblePages(_pdfState);
 
         for (int resultIndex = 0; resultIndex < _searchResults.Count; resultIndex++)
@@ -221,28 +218,30 @@ public sealed partial class ViewerPage
             // Get page position in document to offset highlight coordinates
             double pageOffsetY = GetPageOffsetInDocument(result.PageIndex);
 
-            double zoom = _zoom;
             foreach (var rect in result.Rects)
             {
-                // PDF points → canvas layout pixels (× zoom, canvas is zoom-scaled)
-                double canvasX = rect.X * PtToLp * zoom;
-                double canvasY = (pageOffsetY + rect.Y) * PtToLp * zoom;
+                // SearchHighlightCanvas is inside the zoomed ScrollViewer, like the
+                // Wordcraft and Deckcraft highlight layers. Coordinates stay in layout pixels.
+                double canvasX = rect.X * PtToLp;
+                double canvasY = (pageOffsetY + rect.Y) * PtToLp;
 
                 var highlight = new Border
                 {
-                    Width         = Math.Max(1, rect.Width  * PtToLp * zoom),
-                    Height        = Math.Max(1, rect.Height * PtToLp * zoom),
+                    Width         = Math.Max(2, rect.Width  * PtToLp),
+                    Height        = Math.Max(2, rect.Height * PtToLp),
                     CornerRadius  = new CornerRadius(2),
                     Background    = new SolidColorBrush(active
-                        ? Color.FromArgb(160, 255, 140, 0)   // orange — active hit
-                        : Color.FromArgb(100, 255, 220, 0)), // yellow — passive hit
+                        ? Color.FromArgb(145, 255, 105, 97)
+                        : Color.FromArgb(105, 255, 224, 102)),
                     BorderBrush   = new SolidColorBrush(active
-                        ? Color.FromArgb(230, 210, 90, 0)
-                        : Color.FromArgb(140, 200, 180, 0)),
-                    BorderThickness = new Thickness(1),
+                        ? Color.FromArgb(190, 210, 70, 65)
+                        : Color.FromArgb(145, 205, 160, 40)),
+                    BorderThickness = new Thickness(active ? 1 : 0.5),
+                    IsHitTestVisible = false,
                 };
                 Canvas.SetLeft(highlight, canvasX);
                 Canvas.SetTop(highlight, canvasY);
+                Canvas.SetZIndex(highlight, 10);
                 SearchHighlightCanvas.Children.Add(highlight);
             }
         }
@@ -464,13 +463,6 @@ public sealed partial class ViewerPage
         }
 
         if (_pdfState == null) return;
-        string text = await PdfTextService.ExtractTextAsync(_pdfState, _page - 1);
-        if (text.Length == 0) return;
-
-        var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
-        package.SetText(text);
-        Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
-        e.Handled = true;
     }
 
     // ── Helper: true when either text viewer (plain or code) is active ────────

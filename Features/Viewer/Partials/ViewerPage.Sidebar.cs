@@ -195,22 +195,6 @@ public sealed partial class ViewerPage
         RefreshBookmarkList();
     }
 
-    // ── Outline (TOC) population ──────────────────────────────────────────────
-
-    internal void LoadOutline(PdfDocumentState? state)
-    {
-        if (state == null) return;
-        var items = PdfOutlineReader.Read(state);
-        DispatcherQueue.TryEnqueue(() =>
-        {
-            if (!ReferenceEquals(_pdfState, state)) return;
-            _outline = items;
-            OutlineTree.RootNodes.Clear();
-            foreach (var item in _outline)
-                OutlineTree.RootNodes.Add(BuildNode(item));
-        });
-    }
-
     private static TreeViewNode BuildNode(OutlineItem item)
     {
         var node = new TreeViewNode
