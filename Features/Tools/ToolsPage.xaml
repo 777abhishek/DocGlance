@@ -3,24 +3,25 @@
     x:Class="QuickView.Features.Tools.ToolsPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:QuickView.Features.Tools"
     Background="Transparent">
 
     <Page.Resources>
         <Style TargetType="TextBox">
-            <Setter Property="MinHeight" Value="38"/>
+            <Setter Property="MinHeight" Value="36"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="CornerRadius" Value="8"/>
         </Style>
         <Style TargetType="Button">
-            <Setter Property="MinHeight" Value="38"/>
-            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="MinHeight" Value="36"/>
+            <Setter Property="CornerRadius" Value="7"/>
         </Style>
         <Style TargetType="ListViewItem">
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-            <Setter Property="Padding" Value="14,12"/>
-            <Setter Property="Margin" Value="0,0,0,6"/>
-            <Setter Property="CornerRadius" Value="10"/>
-            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Padding" Value="10,9"/>
+            <Setter Property="Margin" Value="0,0,0,3"/>
+            <Setter Property="CornerRadius" Value="7"/>
+            <Setter Property="FontSize" Value="13"/>
         </Style>
     </Page.Resources>
 
@@ -31,12 +32,7 @@
         </Grid.ColumnDefinitions>
 
         <!-- Transparent navigation rail, matching the rest of the app shell. -->
-        <Border Grid.Column="0"
-                Margin="16,16,0,16"
-                Padding="16"
-                Background="Transparent"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="0,0,1,0">
+        <Border Grid.Column="0" Margin="10,10,0,10" Padding="8" Background="Transparent">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -44,22 +40,15 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <StackPanel Grid.Row="0" Spacing="4" Margin="0,4,0,18">
-                    <TextBlock Text="DOCUMENT TOOLS" FontSize="12" FontWeight="SemiBold"
-                               CharacterSpacing="80"/>
-                    <TextBlock Text="Quick conversions" FontSize="12"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                </StackPanel>
-                
                 <ListView x:Name="ToolsList" 
-                          Grid.Row="1"
+                          Grid.RowSpan="3"
                           SelectionMode="Single" 
                           SelectedIndex="0"
                           SelectionChanged="ToolsList_SelectionChanged">
                     <!-- Word → PDF -->
                     <ListViewItem Tag="WordToPdf">
                         <StackPanel Orientation="Horizontal" Spacing="10">
-                            <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE8A5;" FontSize="18"
+                            <FontIcon FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular" Glyph="&#xF0C22;" FontSize="18"
                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                       VerticalAlignment="Center"/>
                             <TextBlock Text="Word → PDF" FontSize="14" VerticalAlignment="Center"/>
@@ -67,7 +56,7 @@
                     </ListViewItem>
                     <ListViewItem Tag="WordToPng">
                         <StackPanel Orientation="Horizontal" Spacing="10">
-                            <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE8A5;" FontSize="18"
+                            <FontIcon FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular" Glyph="&#xF0C22;" FontSize="18"
                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                             <TextBlock Text="Word → PNG" FontSize="14"/>
                         </StackPanel>
@@ -76,7 +65,7 @@
                     <!-- PowerPoint → PDF -->
                     <ListViewItem Tag="PptToPdf">
                         <StackPanel Orientation="Horizontal" Spacing="10">
-                            <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE8FD;" FontSize="18"
+                            <FontIcon FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular" Glyph="&#xF12B;" FontSize="18"
                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                       VerticalAlignment="Center"/>
                             <TextBlock Text="PowerPoint → PDF" FontSize="14" VerticalAlignment="Center"/>
@@ -84,7 +73,7 @@
                     </ListViewItem>
                     <ListViewItem Tag="PptToPng">
                         <StackPanel Orientation="Horizontal" Spacing="10">
-                            <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE8FD;" FontSize="18"
+                            <FontIcon FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular" Glyph="&#xF12B;" FontSize="18"
                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                             <TextBlock Text="PowerPoint → PNG" FontSize="14"/>
                         </StackPanel>
@@ -93,7 +82,7 @@
                     <!-- Excel → CSV -->
                     <ListViewItem Tag="ExcelToCsv">
                         <StackPanel Orientation="Horizontal" Spacing="10">
-                            <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE8D2;" FontSize="18"
+                            <FontIcon FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular" Glyph="&#xE54C;" FontSize="18"
                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                       VerticalAlignment="Center"/>
                             <TextBlock Text="Excel → CSV" FontSize="14" VerticalAlignment="Center"/>
@@ -101,20 +90,35 @@
                     </ListViewItem>
                     <ListViewItem Tag="ExcelToPdf">
                         <StackPanel Orientation="Horizontal" Spacing="10">
-                            <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE8D2;" FontSize="18"
+                            <FontIcon FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular" Glyph="&#xE54C;" FontSize="18"
                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                             <TextBlock Text="Excel → PDF" FontSize="14"/>
                         </StackPanel>
                     </ListViewItem>
+
+                    <ListViewItem Tag="PdfMerge">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <FontIcon FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular" Glyph="&#xF53E;" FontSize="18"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <TextBlock Text="Merge PDFs" FontSize="14"/>
+                        </StackPanel>
+                    </ListViewItem>
+                    <ListViewItem Tag="PdfSplit">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <FontIcon FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular" Glyph="&#xF423;" FontSize="18"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <TextBlock Text="Split PDF" FontSize="14"/>
+                        </StackPanel>
+                    </ListViewItem>
+                    <ListViewItem Tag="PdfToPng">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <FontIcon FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular" Glyph="&#xF3AD;" FontSize="18"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <TextBlock Text="PDF → PNG" FontSize="14"/>
+                        </StackPanel>
+                    </ListViewItem>
                 </ListView>
 
-                <StackPanel Grid.Row="2" Spacing="6" Margin="0,16,0,4">
-                    <TextBlock Text="Powered by ArtCraft Libraries" FontSize="11" FontWeight="SemiBold"/>
-                    <TextBlock Text="Native Rust performance with C# FFI interop." 
-                               TextWrapping="Wrap" 
-                               FontSize="11"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                </StackPanel>
             </Grid>
         </Border>
 
@@ -122,10 +126,10 @@
         <ScrollViewer Grid.Column="1"
                       HorizontalScrollBarVisibility="Disabled"
                       VerticalScrollBarVisibility="Auto">
-            <Grid Padding="40,28,40,40">
+            <Grid Padding="32,24,32,32" HorizontalAlignment="Stretch">
             
             <!-- Word → PDF -->
-            <StackPanel x:Name="WordToPdfPanel" Spacing="20" MaxWidth="720" HorizontalAlignment="Left" Visibility="Visible">
+            <StackPanel x:Name="WordToPdfPanel" Spacing="18" HorizontalAlignment="Stretch" Visibility="Visible">
                 <TextBlock x:Name="WordToolTitle" Text="Word → PDF" FontSize="24" FontWeight="SemiBold"/>
                 <TextBlock x:Name="WordToolDescription" Text="Convert Word documents to PDF format using WordCraft."
                            FontSize="13"
@@ -181,7 +185,7 @@
             </StackPanel>
 
             <!-- PowerPoint → PDF -->
-            <StackPanel x:Name="PptToPdfPanel" Spacing="20" MaxWidth="720" HorizontalAlignment="Left" Visibility="Collapsed">
+            <StackPanel x:Name="PptToPdfPanel" Spacing="18" HorizontalAlignment="Stretch" Visibility="Collapsed">
                 <TextBlock x:Name="PptToolTitle" Text="PowerPoint → PDF" FontSize="24" FontWeight="SemiBold"/>
                 <TextBlock x:Name="PptToolDescription" Text="Convert PowerPoint presentations to PDF format using DeckCraft."
                            FontSize="13"
@@ -237,7 +241,7 @@
             </StackPanel>
 
             <!-- Excel → CSV -->
-            <StackPanel x:Name="ExcelToCsvPanel" Spacing="20" MaxWidth="720" HorizontalAlignment="Left" Visibility="Collapsed">
+            <StackPanel x:Name="ExcelToCsvPanel" Spacing="18" HorizontalAlignment="Stretch" Visibility="Collapsed">
                 <TextBlock x:Name="ExcelToolTitle" Text="Excel → CSV" FontSize="24" FontWeight="SemiBold"/>
                 <TextBlock x:Name="ExcelToolDescription" Text="Convert Excel spreadsheets to CSV format using GridCraft."
                            FontSize="13"
@@ -287,6 +291,183 @@
                             <Button x:Name="OpenExcelOutputButton" Content="Open file" Click="OpenExcelOutput_Click" IsEnabled="False"/>
                             <Button x:Name="ShowExcelOutputButton" Content="Show in folder" Click="ShowExcelOutput_Click" IsEnabled="False"/>
                             <Button x:Name="CopyExcelOutputButton" Content="Copy path" Click="CopyExcelOutput_Click" IsEnabled="False"/>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+
+            <StackPanel x:Name="PdfToolsPanel" Spacing="18" HorizontalAlignment="Stretch" Visibility="Collapsed">
+                <TextBlock x:Name="PdfToolTitle" Text="PDF tools" FontSize="24" FontWeight="SemiBold"/>
+                <TextBlock x:Name="PdfToolDescription"
+                           Text="Organize and export PDF files using PdfCraft."
+                           FontSize="13"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           TextWrapping="Wrap"/>
+
+                <StackPanel Spacing="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock x:Name="PdfInputLabel" Text="Input file" FontSize="13" FontWeight="SemiBold"/>
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0" x:Name="PdfInputPath"
+                                     PlaceholderText="Select PDF file..." IsReadOnly="True" Height="36"/>
+                            <Button Grid.Column="1" Content="Browse" Click="BrowsePdfInput_Click"
+                                    Height="36" Padding="16,8"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <StackPanel x:Name="PdfMergeFilesPanel" Spacing="8" Visibility="Collapsed">
+                        <TextBlock Text="PDF files to merge (drag to reorder)"
+                                   FontSize="13" FontWeight="SemiBold"/>
+                        <ListView x:Name="PdfMergeFilesList" 
+                                  ItemsSource="{x:Bind _pdfMergeFiles, Mode=OneWay}"
+                                  MaxHeight="360"
+                                  SelectionMode="None"
+                                  CanReorderItems="True"
+                                  AllowDrop="True"
+                                  CanDragItems="True"
+                                  ReorderMode="Enabled"
+                                  DragItemsCompleted="PdfMergeFiles_DragItemsCompleted">
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="local:PdfMergeFileItem">
+                                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="8"
+                                            Padding="12,10"
+                                            Margin="0,4">
+                                        <Grid ColumnSpacing="12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            
+                                            <!-- Badge number -->
+                                            <Border Grid.Column="0"
+                                                    Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                                    CornerRadius="12"
+                                                    Width="24"
+                                                    Height="24"
+                                                    VerticalAlignment="Center">
+                                                <TextBlock Text="{x:Bind OrderIndex}"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"
+                                                           FontSize="11"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="White"/>
+                                            </Border>
+                                            
+                                            <!-- Left: PDF icon -->
+                                            <FontIcon Grid.Column="1"
+                                                      FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
+                                                      Glyph="&#xF3AD;"
+                                                      FontSize="24"
+                                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                      VerticalAlignment="Center"/>
+                                            
+                                            <!-- Center: Filename -->
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{x:Bind FileName}"
+                                                       FontSize="13"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       VerticalAlignment="Center"/>
+                                            
+                                            <!-- Right: Remove button -->
+                                            <Button Grid.Column="3"
+                                                    Click="RemovePdfMergeFile_Click"
+                                                    Width="32"
+                                                    Height="32"
+                                                    Padding="0"
+                                                    Background="Transparent"
+                                                    BorderThickness="0"
+                                                    VerticalAlignment="Center">
+                                                <Button.Resources>
+                                                    <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="Transparent"/>
+                                                    <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="Transparent"/>
+                                                </Button.Resources>
+                                                <FontIcon FontFamily="Segoe Fluent Icons"
+                                                          Glyph="&#xE711;"
+                                                          FontSize="14"
+                                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                        <Button Content="Add another PDF" Click="AddPdfMergeFile_Click"
+                                HorizontalAlignment="Left" Padding="16,8"/>
+                    </StackPanel>
+
+                    <GridView x:Name="PdfSplitPagesGrid"
+                              Visibility="Collapsed"
+                              SelectionMode="Multiple"
+                              SelectionChanged="PdfSplitPagesGrid_SelectionChanged"
+                              IsItemClickEnabled="False"
+                              MaxHeight="420">
+                        <GridView.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <ItemsWrapGrid Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </GridView.ItemsPanel>
+                        <GridView.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Width="150" Spacing="6">
+                                    <Border BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1" CornerRadius="6" Padding="5">
+                                        <Image Source="{Binding Preview}" Stretch="Uniform" Height="190"/>
+                                    </Border>
+                                    <TextBlock Text="{Binding Label}" HorizontalAlignment="Center"
+                                               FontSize="12"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </GridView.ItemTemplate>
+                    </GridView>
+                    <StackPanel x:Name="PdfSplitSelectionPanel" Orientation="Horizontal"
+                                Spacing="8" Visibility="Collapsed">
+                        <Button Content="Select all pages" Click="SelectAllPdfPages_Click"/>
+                        <Button Content="Clear selection" Click="ClearPdfPages_Click"/>
+                        <TextBlock x:Name="PdfSplitSelectionStatus" VerticalAlignment="Center"
+                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    </StackPanel>
+
+                    <StackPanel Spacing="8">
+                        <TextBlock x:Name="PdfOutputLabel" Text="Output file"
+                                   FontSize="13" FontWeight="SemiBold"/>
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0" x:Name="PdfOutputPath"
+                                     PlaceholderText="Output will be saved here..." IsReadOnly="True" Height="36"/>
+                            <Button Grid.Column="1" Content="Browse" Click="BrowsePdfOutput_Click"
+                                    Height="36" Padding="16,8"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <StackPanel Spacing="12">
+                        <Button x:Name="ProcessPdfButton" Content="Process PDF"
+                                Click="ProcessPdf_Click" IsEnabled="False" Height="40"
+                                Padding="24,10" Style="{StaticResource AccentButtonStyle}"/>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <ProgressRing x:Name="PdfProgress" Width="20" Height="20"
+                                          IsActive="False" Visibility="Collapsed"/>
+                            <TextBlock x:Name="PdfStatus" FontSize="13"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="OpenPdfOutputButton" Content="Open file"
+                                    Click="OpenPdfOutput_Click" IsEnabled="False"/>
+                            <Button x:Name="ShowPdfOutputButton" Content="Show in folder"
+                                    Click="ShowPdfOutput_Click" IsEnabled="False"/>
+                            <Button x:Name="CopyPdfOutputButton" Content="Copy path"
+                                    Click="CopyPdfOutput_Click" IsEnabled="False"/>
                         </StackPanel>
                     </StackPanel>
                 </StackPanel>

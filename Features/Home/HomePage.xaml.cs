@@ -204,6 +204,12 @@ public sealed partial class HomePage : Page
         if (_loaded) RefreshDisplay();
     }
 
+    private void GroupByOptions_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        ViewModel.GroupByMode = (GroupByOptions?.SelectedItem as ComboBoxItem)?.Tag as string ?? "None";
+        if (_loaded) RefreshDisplay();
+    }
+
 
     // ═════════════════════════════════════════════════════════════════════════
     // CORE: RefreshDisplay — single method that rebuilds FilteredDocuments
@@ -381,17 +387,20 @@ public sealed partial class HomePage : Page
 
         bool hasFolders = ViewModel.ScannedFolders.Count > 0;
         bool hasItems   = ViewModel.FilteredDocuments.Count > 0;
+        bool hasGroups  = ViewModel.GroupedDocuments.Count > 0;
         bool hasIndex   = ViewModel.BackgroundIndex.Count > 0;
+        bool isGrouped  = !ViewModel.ShowingRecent && ViewModel.GroupByMode != "None";
 
         EmptyState.Visibility =
             (!hasFolders && (!ViewModel.ShowingRecent || ViewModel.RecentDocuments.Count == 0))
                 ? Visibility.Visible : Visibility.Collapsed;
 
         NoResultsState.Visibility =
-            (!ViewModel.ShowingRecent && hasFolders && hasIndex && !hasItems)
+            (!ViewModel.ShowingRecent && hasFolders && hasIndex && !hasItems && !hasGroups)
                 ? Visibility.Visible : Visibility.Collapsed;
 
-        DocumentsGridView.Visibility = hasItems ? Visibility.Visible : Visibility.Collapsed;
+        DocumentsGridView.Visibility = (!isGrouped && hasItems) ? Visibility.Visible : Visibility.Collapsed;
+        GroupedDocumentsView.Visibility = (isGrouped && hasGroups) ? Visibility.Visible : Visibility.Collapsed;
 
         if (DocumentCountLabel != null)
             DocumentCountLabel.Text = ViewModel.DocumentCountText;
@@ -414,4 +423,16 @@ public sealed partial class HomePage : Page
 
     private static string FormatSize(long bytes)
         => FileSizeFormatter.Format(bytes);
+
+    // ── Quick Access Navigation ────────────────────────────────────────────────
+
+    private void NavigateToSettings_Click(object sender, RoutedEventArgs e)
+    {
+        UI.Shell.TitleBarWindow.Current?.OpenSettingsTab();
+    }
+
+    private void NavigateToTools_Click(object sender, RoutedEventArgs e)
+    {
+        UI.Shell.TitleBarWindow.Current?.OpenToolsPage();
+    }
 }
