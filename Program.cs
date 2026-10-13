@@ -70,6 +70,26 @@ public static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        // STEP 0 — Crash capture before anything else can fail silently. The static
+        // Logger is usable without XAML; a bootstrap crash must still reach app.log.
+        try
+        {
+            AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            {
+                if (e.ExceptionObject is Exception ex)
+                    QuickView.Infrastructure.Logging.Logger.Write(
+                        QuickView.Infrastructure.Logging.LogLevel.Fatal,
+                        $"Event=BootstrapUnhandledException IsTerminating={e.IsTerminating}", ex);
+                QuickView.Infrastructure.Logging.Logger.Flush(TimeSpan.FromSeconds(2));
+            };
+            QuickView.Infrastructure.Logging.Logger.Log("Process started");
+            QuickView.Infrastructure.Diagnostics.DiagnosticsService.Milestone("ProcessStart");
+        }
+        catch
+        {
+            // Logging infrastructure unavailable — proceed; WER will still capture the crash.
+        }
+
         // STEP 1 — DPI awareness: must be the absolute first call, before any
         // Win32, WinUI, or Windows App SDK initialisation occurs.
         EnsurePerMonitorDpiAwareness();

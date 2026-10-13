@@ -84,6 +84,18 @@ public static class AppSettings
         set { _data.RestoreWindowSize = value; Save(); }
     }
 
+    // ── Diagnostics ───────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// When true, Debug-level entries are written to app.log (render pipeline detail,
+    /// memory checkpoints). Off by default; see docs/reliability/CRASH_DIAGNOSTICS.md.
+    /// </summary>
+    public static bool VerboseLogging
+    {
+        get => _data.VerboseLogging;
+        set { _data.VerboseLogging = value; Save(); }
+    }
+
     // ── Performance ───────────────────────────────────────────────────────────
 
     public static long ThumbnailCacheSize
@@ -135,5 +147,8 @@ public static class AppSettings
 
         // Performance
         public int ThumbnailCacheSizeMB { get; set; } = 200;
+
+        // Diagnostics
+        public bool VerboseLogging { get; set; } = false;
     }
 }

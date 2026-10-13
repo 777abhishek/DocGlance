@@ -27,44 +27,57 @@
                     BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                     BorderThickness="0,0,1,1"/>
 
-            <!-- Column header host -->
-            <ScrollViewer Grid.Row="0" Grid.Column="1"
-                x:Name="ColHeaderScroll"
-                HorizontalScrollBarVisibility="Hidden"
-                VerticalScrollBarVisibility="Disabled"
-                HorizontalScrollMode="Enabled"
-                VerticalScrollMode="Disabled"
-                ZoomMode="Enabled">
-                <!-- CanvasControl injected at runtime -->
-                <Grid x:Name="ColHeaderCanvasHost" Height="26"/>
-            </ScrollViewer>
+            <!-- Column header: scroll host defines extent; overlay canvas renders viewport-sized.
+                 CanvasControls must never be sized to the full sheet — a large sheet exceeds the
+                 GPU's 16384px max texture size (CanvasImageSource allocation failure → crash). -->
+            <Grid Grid.Row="0" Grid.Column="1">
+                <ScrollViewer
+                    x:Name="ColHeaderScroll"
+                    HorizontalScrollBarVisibility="Hidden"
+                    VerticalScrollBarVisibility="Disabled"
+                    HorizontalScrollMode="Enabled"
+                    VerticalScrollMode="Disabled"
+                    ZoomMode="Enabled">
+                    <Grid x:Name="ColHeaderCanvasHost" Height="26"/>
+                </ScrollViewer>
+                <!-- CanvasControl injected at runtime (viewport-sized overlay) -->
+                <Grid x:Name="ColHeaderOverlay" IsHitTestVisible="False"/>
+            </Grid>
 
             <!-- Row header host -->
-            <ScrollViewer Grid.Row="1" Grid.Column="0"
-                x:Name="RowHeaderScroll"
-                HorizontalScrollBarVisibility="Disabled"
-                VerticalScrollBarVisibility="Hidden"
-                HorizontalScrollMode="Disabled"
-                VerticalScrollMode="Enabled"
-                ZoomMode="Enabled">
-                <!-- CanvasControl injected at runtime -->
-                <Grid x:Name="RowHeaderCanvasHost" Width="50"/>
-            </ScrollViewer>
+            <Grid Grid.Row="1" Grid.Column="0">
+                <ScrollViewer
+                    x:Name="RowHeaderScroll"
+                    HorizontalScrollBarVisibility="Disabled"
+                    VerticalScrollBarVisibility="Hidden"
+                    HorizontalScrollMode="Disabled"
+                    VerticalScrollMode="Enabled"
+                    ZoomMode="Enabled">
+                    <Grid x:Name="RowHeaderCanvasHost" Width="50"/>
+                </ScrollViewer>
+                <!-- CanvasControl injected at runtime (viewport-sized overlay) -->
+                <Grid x:Name="RowHeaderOverlay" IsHitTestVisible="False"/>
+            </Grid>
 
             <!-- Main cell scroll area -->
-            <ScrollViewer Grid.Row="1" Grid.Column="1"
-                x:Name="CellScroll"
-                HorizontalScrollBarVisibility="Auto"
-                VerticalScrollBarVisibility="Auto"
-                HorizontalScrollMode="Enabled"
-                VerticalScrollMode="Enabled"
-                ZoomMode="Enabled"
-                MinZoomFactor="0.1"
-                MaxZoomFactor="6.0"
-                ViewChanged="CellScroll_ViewChanged">
-                <!-- CanvasControl injected at runtime -->
-                <Grid x:Name="CellCanvasHost"/>
-            </ScrollViewer>
+            <Grid Grid.Row="1" Grid.Column="1">
+                <ScrollViewer
+                    x:Name="CellScroll"
+                    HorizontalScrollBarVisibility="Auto"
+                    VerticalScrollBarVisibility="Auto"
+                    HorizontalScrollMode="Enabled"
+                    VerticalScrollMode="Enabled"
+                    ZoomMode="Enabled"
+                    MinZoomFactor="0.1"
+                    MaxZoomFactor="6.0"
+                    ViewChanged="CellScroll_ViewChanged">
+                    <!-- Sized to the full sheet in code — defines scroll extents only -->
+                    <Grid x:Name="CellCanvasHost"/>
+                </ScrollViewer>
+                <!-- CanvasControl injected at runtime (viewport-sized overlay;
+                     cell selection is handled by CellScroll.PointerPressed) -->
+                <Grid x:Name="CellOverlay" IsHitTestVisible="False"/>
+            </Grid>
         </Grid>
 
         <!-- Sheet tab bar -->

@@ -611,11 +611,19 @@ public sealed partial class TitleBarWindow : Window
 
     private async void RootGrid_Drop(object sender, DragEventArgs e)
     {
-        if (!e.DataView.Contains(StandardDataFormats.StorageItems)) return;
-        var items = await e.DataView.GetStorageItemsAsync();
-        foreach (var item in items)
-            if (item is StorageFile file)
-                OpenDocument(await DocumentItemFromStorageFile(file));
+        try
+        {
+            if (!e.DataView.Contains(StandardDataFormats.StorageItems)) return;
+            var items = await e.DataView.GetStorageItemsAsync();
+            foreach (var item in items)
+                if (item is StorageFile file)
+                    OpenDocument(await DocumentItemFromStorageFile(file));
+        }
+        catch (Exception ex)
+        {
+            // Unguarded async void here crashed straight into the XAML handler.
+            Infrastructure.Logging.Logger.Error("RootGrid_Drop failed", ex);
+        }
     }
 
     // ── Window icon (unpackaged) ──────────────────────────────────────────────

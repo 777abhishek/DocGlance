@@ -29,9 +29,18 @@ public partial class App : Application
         {
             InitializeComponent();
 
-            // Global exception handlers
+            // Global exception handlers (see docs/reliability/CRASH_DIAGNOSTICS.md):
+            //  - XAML UnhandledException: logged FATAL, NOT marked handled. Marking handled
+            //    previously kept a broken visual tree alive — the reported transparent/blank
+            //    window. Letting it crash produces a WER dump and a clean failure instead.
+            //  - AppDomain.UnhandledException: last-gasp log + flush before termination.
+            //  - UnobservedTaskException: GC-finalizer observation; logged, marked observed
+            //    (.NET 8 does not crash on these — preserving that semantics).
             UnhandledException += App_UnhandledException;
             AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
+            System.Threading.Tasks.TaskScheduler.UnobservedTaskException += UnobservedTaskException;
+
+            Infrastructure.Diagnostics.DiagnosticsService.LogEnvironment();
 
             // Handle file-open activations that arrive while the app is already
             // running (e.g. user double-clicks a second file in Explorer while
@@ -45,14 +54,8 @@ public partial class App : Application
         {
             try
             {
-                // Write crash log to the same place as the regular log for consistency.
-                var logDir = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "QuickView", "Logs");
-                Directory.CreateDirectory(logDir);
-                File.WriteAllText(
-                    Path.Combine(logDir, "crash.txt"),
-                    $"App constructor crashed:\n{ex.Message}\n{ex.StackTrace}");
+                Logger.Fatal("App constructor crashed", ex);
+                Logger.Flush(TimeSpan.FromSeconds(3));
             }
             catch { }
             throw;
@@ -61,14 +64,31 @@ public partial class App : Application
 
     private void App_UnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
     {
-        Logger.Error("UNHANDLED EXCEPTION", e.Exception);
-        e.Handled = true;
+        Logger.Write(LogLevel.Fatal,
+            $"Event=XamlUnhandledException Message={e.Message} HandledRequested=false",
+            e.Exception);
+        // Flush synchronously — if this exception terminates the process, the queue
+        // writer thread may die before flushing its batch.
+        Logger.Flush(TimeSpan.FromSeconds(2));
+        // Deliberately NOT setting e.Handled = true (see constructor comment).
     }
 
     private void CurrentDomain_UnhandledException(object sender, System.UnhandledExceptionEventArgs e)
     {
         if (e.ExceptionObject is Exception ex)
-            Logger.Error("DOMAIN UNHANDLED EXCEPTION", ex);
+            Logger.Write(LogLevel.Fatal,
+                $"Event=DomainUnhandledException IsTerminating={e.IsTerminating}", ex);
+        else
+            Logger.Fatal($"Event=DomainUnhandledException IsTerminating={e.IsTerminating} " +
+                         $"ExceptionObject={e.ExceptionObject}");
+
+        Logger.Flush(TimeSpan.FromSeconds(2));
+    }
+
+    private void UnobservedTaskException(object? sender, System.Threading.Tasks.UnobservedTaskExceptionEventArgs e)
+    {
+        Logger.Write(LogLevel.Warning, "Event=UnobservedTaskException", e.Exception);
+        e.SetObserved();
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
@@ -76,7 +96,11 @@ public partial class App : Application
         try
         {
             Logger.Log("OnLaunched called");
-            
+            Infrastructure.Diagnostics.DiagnosticsService.Milestone("OnLaunched");
+
+            // Verbose diagnostic logging opt-in (Settings → written to app settings file).
+            Logger.VerboseEnabled = Infrastructure.Configuration.AppSettings.VerboseLogging;
+
             // Register file renderers FIRST (needed for file opening)
             RegisterRenderers();
             
@@ -89,6 +113,7 @@ public partial class App : Application
             
             m_window.Activate();
             Logger.Log("Window activated");
+            Infrastructure.Diagnostics.DiagnosticsService.Milestone("WindowActivated");
 
 #if !PACKAGED
             // Register file associations in background (non-blocking)

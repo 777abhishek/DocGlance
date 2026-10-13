@@ -58,12 +58,15 @@ public sealed partial class HomePage : Page
         LoadRecentDocuments();
         RefreshDisplay();
 
-        try
+        // Initialize database in background - don't block UI
+        _ = Task.Run(async () =>
         {
-            await FileIndexService.InitializeDatabaseAsync();
-            await LoadCachedIndexAsync();
-        }
-        catch (Exception ex) { Logger.Log($"[DB ERROR] {ex.Message}"); }
+            try
+            {
+                await FileIndexService.InitializeDatabaseAsync();
+            }
+            catch (Exception ex) { Logger.Log($"[DB ERROR] {ex.Message}"); }
+        });
     }
 
 
@@ -103,11 +106,18 @@ public sealed partial class HomePage : Page
     // MODE TOGGLE — Recent ↔ All Documents
     // ═════════════════════════════════════════════════════════════════════════
 
-    private void ViewModeToggle_Checked(object sender, RoutedEventArgs e)
+    private async void ViewModeToggle_Checked(object sender, RoutedEventArgs e)
     {
         if (!_loaded) return;
         ViewModel.ShowingRecent = ReferenceEquals(sender, RecentModeButton);
         ClearButton.Visibility = ViewModel.ShowingRecent ? Visibility.Visible : Visibility.Collapsed;
+        
+        // Lazy load: only load index when switching to All Documents mode for the first time
+        if (!ViewModel.ShowingRecent && ViewModel.BackgroundIndex.IsEmpty && ViewModel.ScannedFolders.Count == 0)
+        {
+            await LoadCachedIndexAsync();
+        }
+        
         RefreshDisplay();
     }
 

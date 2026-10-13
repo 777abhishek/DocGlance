@@ -29,13 +29,19 @@ public static class PdfTextService
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+
+                // Lease guarantees the document is not freed while the native search runs.
+                var (handle, lease) = state.BeginNativeCall();
+                if (lease == null)
+                    return Array.Empty<PdfSearchResult>();
+
                 IntPtr queryPtr = Marshal.AllocHGlobal(queryBytes.Length);
                 IntPtr outputPtr = Marshal.AllocHGlobal(output.Length);
                 try
                 {
                     Marshal.Copy(queryBytes, 0, queryPtr, queryBytes.Length);
                     nuint written = PdfCraftNative.pc_search_text(
-                        state.Handle,
+                        handle,
                         queryPtr,
                         (nuint)queryBytes.Length,
                         caseSensitive,
@@ -53,6 +59,7 @@ public static class PdfTextService
                 }
                 finally
                 {
+                    lease.Dispose();
                     Marshal.FreeHGlobal(queryPtr);
                     Marshal.FreeHGlobal(outputPtr);
                 }

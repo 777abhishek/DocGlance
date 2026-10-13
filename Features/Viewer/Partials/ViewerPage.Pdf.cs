@@ -33,6 +33,31 @@ public sealed partial class ViewerPage
 
     private async Task LoadDocumentAsync(DocumentItem doc)
     {
+        // Top-level boundary: every caller is fire-and-forget, so an exception escaping
+        // this method would be lost. Log it and show the error card instead.
+        try
+        {
+            await LoadDocumentCoreAsync(doc);
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when switching documents or closing a tab mid-load.
+        }
+        catch (Exception ex)
+        {
+            Infrastructure.Logging.Logger.Error($"[Viewer] LoadDocumentAsync failed for {doc.FilePath}", ex);
+            ShowErrorCard($"Cannot open document: {ex.Message}");
+        }
+    }
+
+    private async Task LoadDocumentCoreAsync(DocumentItem doc)
+    {
+        // Correlated trace for this open attempt: every log entry inside can be tied
+        // back via OperationId; duration and outcome are recorded on dispose.
+        using var openOp = Logger.BeginOperation("OpenDocument", ("FilePath", doc.FilePath));
+        Infrastructure.Diagnostics.DiagnosticsService.SetCurrentOperation(
+            $"OpenDocument {System.IO.Path.GetExtension(doc.FilePath ?? string.Empty)}");
+
         _doc = doc;
         _cts?.Cancel();
 
@@ -100,6 +125,9 @@ public sealed partial class ViewerPage
             else
                 ShowInfoCard(doc);
         }
+
+        Infrastructure.Diagnostics.DiagnosticsService.SetCurrentOperation(null);
+        Infrastructure.Diagnostics.DiagnosticsService.MemoryCheckpoint("DocumentOpened");
     }
 
     private async Task LoadPdfAsync(string filePath, CancellationToken ct)
@@ -225,7 +253,7 @@ public sealed partial class ViewerPage
 
             Infrastructure.Logging.Logger.Log("[PDF] Starting thumbnail prefetch");
             
-            _ = PrefetchThumbnailsAroundAsync(0, _pdfState, ct);
+            PrefetchThumbnailsAroundAsync(0, _pdfState, ct).SafeFireAndForget("PdfThumbnailPrefetch");
             
             Infrastructure.Logging.Logger.Log("[PDF] LoadPdfAsync completed successfully");
         }
@@ -531,12 +559,13 @@ public sealed partial class ViewerPage
             
             // Trigger initial viewport render
             _pptxRenderCts?.Cancel();
-            _pptxRenderCts?.Dispose();
+            // Deliberately not disposing: in-flight render tasks still hold tokens
+            // from this CTS; disposing would make their WaitAsync/Register throw.
             _pptxRenderCts = new CancellationTokenSource();
             await RenderPptxViewportAsync(_pptxRenderCts.Token);
             
             Logger.Log("PPTX loaded, initial render complete");
-            LoadSlideThumbnails();
+            LoadSlideThumbnailsAsync().SafeFireAndForget("PptxThumbnails");
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
@@ -766,16 +795,16 @@ public sealed partial class ViewerPage
         }
     }
 
-    private async void OnPptxRenderDebounceTimerTick(object? sender, object e)
+    private void OnPptxRenderDebounceTimerTick(object? sender, object e)
     {
         _pptxRenderDebounceTimer?.Stop();
-        
-        // Cancel any in-flight render
+
+        // Cancel any in-flight render (not disposing — tokens may still be in flight)
         _pptxRenderCts?.Cancel();
-        _pptxRenderCts?.Dispose();
         _pptxRenderCts = new CancellationTokenSource();
 
-        await RenderPptxViewportAsync(_pptxRenderCts.Token);
+        // Fire and forget - don't await in event handler to avoid deadlocks
+        RenderPptxViewportAsync(_pptxRenderCts.Token).SafeFireAndForget("PptxViewportRender");
     }
     
     private void UpdateCurrentPptxPage()
@@ -801,7 +830,6 @@ public sealed partial class ViewerPage
     {
         _pptxRenderDebounceTimer?.Stop();
         _pptxRenderCts?.Cancel();
-        _pptxRenderCts?.Dispose();
         _pptxRenderCts = null;
 
         ClearPptxSearchHighlights();
@@ -885,22 +913,28 @@ public sealed partial class ViewerPage
         }
     }
     
-    private async void LoadSlideThumbnails()
+    private async Task LoadSlideThumbnailsAsync()
     {
-        if (_pptxDocument == null) return;
-        
-        // Render thumbnails sequentially on UI thread (WriteableBitmap requires it)
-        for (int i = 0; i < _pptxDocument.SlideCount && i < 50; i++)
+        // Capture the document so a file switch mid-loop cannot touch the new one,
+        // and bind to the page token so closing the tab stops the loop early.
+        var document = _pptxDocument;
+        var ct = _cts?.Token ?? default;
+        if (document == null) return;
+
+        for (int i = 0; i < document.SlideCount && i < 50; i++)
         {
+            if (ct.IsCancellationRequested) return;
             try
             {
                 // Render thumbnail at low resolution (0.3x for better quality than 0.2x)
-                var thumb = await _pptxDocument.RenderSlideAsync(i, scale: RenderBudget.ThumbnailOfficeScale, default);
-                if (thumb != null && i < Thumbnails.Count)
-                {
-                    Thumbnails[i].Thumbnail = thumb;
-                }
+                var thumb = await document.RenderSlideAsync(i, scale: RenderBudget.ThumbnailOfficeScale, ct);
+                if (thumb == null || ct.IsCancellationRequested) return;
+
+                // Only publish if this document is still the one being displayed
+                if (!ReferenceEquals(_pptxDocument, document) || i >= Thumbnails.Count) return;
+                Thumbnails[i].Thumbnail = thumb;
             }
+            catch (OperationCanceledException) { return; }
             catch (Exception ex)
             {
                 Logger.Error($"LoadSlideThumbnails: slide {i}", ex);
@@ -1064,13 +1098,12 @@ public sealed partial class ViewerPage
 
             // Render visible pages
             _docxRenderCts?.Cancel();
-            _docxRenderCts?.Dispose();
             _docxRenderCts = new CancellationTokenSource();
             await RenderDocxViewportAsync(_docxRenderCts.Token);
             DocumentScrollViewer.ViewChanged += OnDocxViewportChanged;
 
             // Load thumbnails in background
-            LoadDocxThumbnails();
+            LoadDocxThumbnailsAsync().SafeFireAndForget("DocxThumbnails");
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
@@ -1117,16 +1150,16 @@ public sealed partial class ViewerPage
         }
     }
 
-    private async void OnDocxRenderDebounceTimerTick(object? sender, object e)
+    private void OnDocxRenderDebounceTimerTick(object? sender, object e)
     {
         _docxRenderDebounceTimer?.Stop();
-        
-        // Cancel any in-flight render
+
+        // Cancel any in-flight render (not disposing — tokens may still be in flight)
         _docxRenderCts?.Cancel();
-        _docxRenderCts?.Dispose();
         _docxRenderCts = new CancellationTokenSource();
 
-        await RenderDocxViewportAsync(_docxRenderCts.Token);
+        // Fire and forget - don't await in event handler to avoid deadlocks
+        RenderDocxViewportAsync(_docxRenderCts.Token).SafeFireAndForget("DocxViewportRender");
     }
 
     private void UpdateDocxCanvasSize()
@@ -1305,7 +1338,6 @@ public sealed partial class ViewerPage
     {
         _docxRenderDebounceTimer?.Stop();
         _docxRenderCts?.Cancel();
-        _docxRenderCts?.Dispose();
         _docxRenderCts = null;
 
         foreach (var img in _docxPageCache.Values)
@@ -1317,20 +1349,27 @@ public sealed partial class ViewerPage
         _docxPageCache.Clear();
     }
 
-    private async void LoadDocxThumbnails()
+    private async Task LoadDocxThumbnailsAsync()
     {
-        if (_docxDocument == null) return;
+        // Capture the document so a file switch mid-loop cannot touch the new one,
+        // and bind to the page token so closing the tab stops the loop early.
+        var document = _docxDocument;
+        var ct = _cts?.Token ?? default;
+        if (document == null) return;
 
-        for (int i = 0; i < _docxDocument.PageCount && i < 50; i++)
+        for (int i = 0; i < document.PageCount && i < 50; i++)
         {
+            if (ct.IsCancellationRequested) return;
             try
             {
-                var thumb = await _docxDocument.RenderPageAsync(i, scale: RenderBudget.ThumbnailOfficeScale, default);
-                if (thumb != null && i < Thumbnails.Count)
-                {
-                    Thumbnails[i].Thumbnail = thumb;
-                }
+                var thumb = await document.RenderPageAsync(i, scale: RenderBudget.ThumbnailOfficeScale, ct);
+                if (thumb == null || ct.IsCancellationRequested) return;
+
+                // Only publish if this document is still the one being displayed
+                if (!ReferenceEquals(_docxDocument, document) || i >= Thumbnails.Count) return;
+                Thumbnails[i].Thumbnail = thumb;
             }
+            catch (OperationCanceledException) { return; }
             catch (Exception ex)
             {
                 Logger.Error($"LoadDocxThumbnails: page {i}", ex);

@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Media.Imaging;
 using QuickView.Core.Models;
 using QuickView.Rendering;
 using QuickView.Rendering.Pdf;
+using QuickView.Infrastructure.Logging;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
@@ -77,14 +78,15 @@ public sealed partial class ViewerPage
         DocumentScrollViewer.ViewChanged -= OnViewportViewChanged;
         DocumentScrollViewer.ViewChanged += OnViewportViewChanged;
 
-        _ = RenderPagesAsync();
+        RenderPagesAsync().SafeFireAndForget("PdfViewportRender");
     }
 
     private void CleanupViewportRendering()
     {
         DocumentScrollViewer.ViewChanged -= OnViewportViewChanged;
+        // Cancel only — in-flight render tasks hold tokens from this CTS and would
+        // throw ObjectDisposedException if we disposed it out from under them.
         _renderCts?.Cancel();
-        _renderCts?.Dispose();
         _renderCts = null;
         _viewportState = null;
         _lastRenderZoom = -1f;
@@ -171,7 +173,7 @@ public sealed partial class ViewerPage
             {
                 _lastRenderZoom = zoom;
                 DrawAllHighlights();
-                _ = RenderPagesAsync();
+                RenderPagesAsync().SafeFireAndForget("PdfViewportRender");
             }
         }
         catch (Exception ex)
@@ -221,7 +223,7 @@ public sealed partial class ViewerPage
         // Must start on UI thread to access ScrollViewer properties and manipulate canvas safely
         if (!DispatcherQueue.HasThreadAccess)
         {
-            DispatcherQueue.TryEnqueue(() => _ = RenderPagesAsync());
+            DispatcherQueue.TryEnqueue(() => RenderPagesAsync().SafeFireAndForget("PdfViewportRender"));
             return;
         }
 
@@ -235,9 +237,9 @@ public sealed partial class ViewerPage
                 return;
             }
 
-            // Cancel any in-flight render (safe on UI thread)
+            // Cancel any in-flight render (safe on UI thread; not disposing —
+            // buffer-page tasks still hold tokens from the old CTS)
             _renderCts?.Cancel();
-            _renderCts?.Dispose();
             _renderCts = new CancellationTokenSource();
             var ct = _renderCts.Token;
 
@@ -391,8 +393,9 @@ public sealed partial class ViewerPage
         }
         catch (Exception ex)
         {
+            // Logged here, NOT rethrown: every caller is fire-and-forget, so a rethrow
+            // would surface only as an unobserved task exception on the finalizer thread.
             Infrastructure.Logging.Logger.Error("[Render] RenderPagesAsync failed", ex);
-            throw; // Re-throw to see crash
         }
     }
 

@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml.Media.Imaging;
 using QuickView.Core.Models;
 using QuickView.Rendering.Pdf;
+using QuickView.Infrastructure.Logging;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -29,6 +30,7 @@ public sealed class PdfViewerService : IPdfViewerService, IDisposable
         Func<Task<string?>>? passwordPrompt = null,
         CancellationToken ct = default)
     {
+        using var op = Logger.BeginOperation("PdfOpen", ("FilePath", filePath));
         CloseDocument();
 
         try
@@ -37,7 +39,10 @@ public sealed class PdfViewerService : IPdfViewerService, IDisposable
             var openResult = await PdfRenderer.OpenDocumentAsync(filePath, ct);
 
             if (ct.IsCancellationRequested)
+            {
+                op.MarkCancelled();
                 return PdfLoadResult.Error("Operation cancelled");
+            }
 
             // Handle password-protected PDFs
             if (!openResult.Ok && openResult.NeedsPassword && passwordPrompt != null)
@@ -52,12 +57,14 @@ public sealed class PdfViewerService : IPdfViewerService, IDisposable
 
             if (ct.IsCancellationRequested)
             {
+                op.MarkCancelled();
                 openResult.Document?.Dispose();
                 return PdfLoadResult.Error("Operation cancelled");
             }
 
             if (!openResult.Ok || openResult.Document == null)
             {
+                op.Fail();
                 return PdfLoadResult.Error(openResult.Error ?? "Cannot open PDF");
             }
 
@@ -69,10 +76,13 @@ public sealed class PdfViewerService : IPdfViewerService, IDisposable
         }
         catch (OperationCanceledException)
         {
+            op.MarkCancelled();
             return PdfLoadResult.Error("Operation cancelled");
         }
         catch (Exception ex)
         {
+            op.Fail();
+            Logger.Write(LogLevel.Error, "Event=PdfOpenFailed", ex);
             return PdfLoadResult.Error($"Failed to load PDF: {ex.Message}");
         }
     }
@@ -112,11 +122,17 @@ public sealed class PdfViewerService : IPdfViewerService, IDisposable
 
     public void CloseDocument()
     {
+        // Cancel only — a render task may still hold a token from this CTS.
         _prefetchCts?.Cancel();
-        _prefetchCts?.Dispose();
         _prefetchCts = null;
-        _document?.Dispose();
-        _document = null;
+
+        if (_document != null)
+        {
+            Logger.Write(LogLevel.Debug,
+                $"Event=PdfDocumentClosed | PageCount={_pageCount}");
+            _document.Dispose();
+            _document = null;
+        }
         _pageCount = 0;
         _renderedPages.Clear();
         _renderedThumbs.Clear();
@@ -212,7 +228,6 @@ public sealed class PdfViewerService : IPdfViewerService, IDisposable
     public void CancelPrefetch()
     {
         _prefetchCts?.Cancel();
-        _prefetchCts?.Dispose();
         _prefetchCts = null;
     }
 

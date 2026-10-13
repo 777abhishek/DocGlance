@@ -1,12 +1,25 @@
 using System;
 using System.Collections.Generic;
+using QuickView.Infrastructure.Concurrency;
+using QuickView.Infrastructure.Logging;
 
 namespace QuickView.Rendering.Pdf;
 
-/// <summary>Owns an open PdfCraft document and its cached page dimensions.</summary>
+/// <summary>
+/// Owns an open PdfCraft document and its cached page dimensions.
+///
+/// Lifetime contract: every native call must run under a lease from <see cref="_gate"/>
+/// (see <see cref="BeginNativeCall"/>). Disposal waits (bounded) for in-flight native
+/// calls before freeing the Rust document — otherwise `pc_free_document` can race an
+/// in-flight `pc_render_page` and the process dies with an access violation.
+/// </summary>
 public sealed class PdfDocumentState : IDisposable
 {
+    /// <summary>How long Dispose waits for in-flight native calls before refusing to free.</summary>
+    private static readonly TimeSpan DrainTimeout = TimeSpan.FromSeconds(30);
+
     private IntPtr _document;
+    private readonly NativeCallGate _gate = new();
     private int _generation;
     private bool _disposed;
 
@@ -14,7 +27,14 @@ public sealed class PdfDocumentState : IDisposable
     public IReadOnlyList<(double Width, double Height)> PageSizes { get; }
     public int Generation => _generation;
 
+    /// <summary>
+    /// Native handle for callers that already hold a gate lease. Zero when disposed.
+    /// Do not call native functions with this directly — use <see cref="BeginNativeCall"/>.
+    /// </summary>
     internal IntPtr Handle => _disposed ? IntPtr.Zero : _document;
+
+    /// <summary>True once <see cref="Dispose"/> has started.</summary>
+    public bool IsDisposed => _gate.IsDisposed;
 
     internal PdfDocumentState(
         IntPtr document,
@@ -34,13 +54,40 @@ public sealed class PdfDocumentState : IDisposable
 
     public void IncrementGeneration() => System.Threading.Interlocked.Increment(ref _generation);
 
+    /// <summary>
+    /// Takes a gate lease and returns the native handle for exactly one native call.
+    /// Returns (IntPtr.Zero, null) when the document is disposed — the caller must
+    /// treat that as "render failed" and skip. The lease must be disposed in a finally.
+    /// </summary>
+    internal (IntPtr Handle, NativeCallGate.Lease? Lease) BeginNativeCall()
+    {
+        var lease = _gate.TryEnter();
+        if (lease == null)
+            return (IntPtr.Zero, null);
+
+        // Safe read: _document is only zeroed after the gate drains, and we hold a lease.
+        return (_document, lease);
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
         IncrementGeneration();
+        _disposed = true;
+
+        if (!_gate.Dispose(DrainTimeout))
+        {
+            // In-flight native calls did not finish within the timeout (pathological page,
+            // wedged renderer). Freeing now would crash the process, and waiting forever
+            // would hang the caller — leak the native document instead and say so loudly.
+            Logger.Write(LogLevel.Error,
+                "Event=PdfDocumentDisposeLeaked | " +
+                $"ActiveCalls={_gate.ActiveCallCount} PageCount={PageCount}");
+            return;
+        }
+
         IntPtr document = _document;
         _document = IntPtr.Zero;
-        _disposed = true;
         if (document != IntPtr.Zero)
             PdfCraftNative.pc_free_document(document);
     }

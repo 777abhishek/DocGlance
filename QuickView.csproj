@@ -71,6 +71,9 @@
     <PackageReference Include="System.Security.Permissions" Version="8.0.0" />
   </ItemGroup>
 
+  <!-- Exclude Properties\AssemblyInfo.cs is NOT needed: GenerateAssemblyInfo=false means
+       only our manual file emits attributes, no CS0579 duplicates. -->
+
   <ItemGroup>
     <Content Include="Assets\**\*" Exclude="Assets\SampleMedia\**">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

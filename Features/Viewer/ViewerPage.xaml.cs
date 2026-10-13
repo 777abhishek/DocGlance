@@ -9,8 +9,10 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 using QuickView.Services;
+using QuickView.Services.Documents;
 using QuickView.Core.Models;
 using QuickView.Rendering.Pdf;
+using QuickView.Infrastructure.Logging;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -138,7 +140,7 @@ public sealed partial class ViewerPage : Page
             {
                 _resizeDebounceTimer?.Stop();
                 ReapplyFitMode();
-                if (_pdfState != null) _ = RenderPagesAsync();
+                if (_pdfState != null) RenderPagesAsync().SafeFireAndForget("PdfViewportRender");
             };
         }
 
@@ -168,7 +170,7 @@ public sealed partial class ViewerPage : Page
     {
         base.OnNavigatedTo(e);
         if (e.Parameter is DocumentItem doc)
-            _ = LoadDocumentAsync(doc);
+            LoadDocumentAsync(doc).SafeFireAndForget("ViewerOnNavigatedTo");
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
@@ -186,7 +188,7 @@ public sealed partial class ViewerPage : Page
         _searchCts?.Cancel();
         _spreadsheetSearchCts?.Cancel();
         _spreadsheetSearchGeneration++;
-        
+
         // PERF-05: Clean up WebView2 and other resources
         if (_currentRenderer != null && _currentRenderedElement != null)
         {
@@ -202,18 +204,31 @@ public sealed partial class ViewerPage : Page
             _currentRenderedElement = null;
         }
 
-        // Clean up spreadsheet viewer
+        // Release every native document this page owns. Without this, closing a tab
+        // leaked the Rust-side document (whole file buffer + renderer + font caches)
+        // until GC — the reported "memory grows when opening documents" symptom.
+        CleanupViewportRendering();
+        ClearPptxCache();
+        ClearDocxCache();
         SpreadsheetViewerControl?.Cleanup();
         _spreadsheetDocument?.Dispose();
         _spreadsheetDocument = null;
-        
-        // Service owns document lifecycle — just clear our reference
+        _pptxDocument?.Dispose();
+        _pptxDocument = null;
+        _docxDocument?.Dispose();
+        _docxDocument = null;
+
+        // The per-page service owns the PDF document — closing it frees the native handle.
+        // A fresh service keeps the page usable if it is reattached later.
+        if (_pdfService is IDisposable disposableService)
+            disposableService.Dispose();
+        _pdfService = new PdfViewerService();
         _pdfState = null;
         ViewModel.Reset();
     }
 
     // Public entry point called by TitleBarWindow.OpenDocument
-    public void LoadDocument(DocumentItem doc) => _ = LoadDocumentAsync(doc);
+    public void LoadDocument(DocumentItem doc) => LoadDocumentAsync(doc).SafeFireAndForget("ViewerLoadDocument");
 
     // ── Shared helpers ────────────────────────────────────────────────────────
 

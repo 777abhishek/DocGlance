@@ -120,7 +120,20 @@ public static class PdfRenderer
         var image = await Task.Run(() =>
         {
             ct.ThrowIfCancellationRequested();
-            return PdfCraftNative.pc_render_page(state.Handle, (uint)pageIndex, dpi);
+
+            // Lease guarantees the document is not freed while the native render runs.
+            var (handle, lease) = state.BeginNativeCall();
+            if (lease == null)
+                return default(PdfCraftNative.PcImage);
+
+            try
+            {
+                return PdfCraftNative.pc_render_page(handle, (uint)pageIndex, dpi);
+            }
+            finally
+            {
+                lease.Dispose();
+            }
         }, ct);
 
         if (image.Pixels == IntPtr.Zero || image.Width == 0 || image.Height == 0 ||

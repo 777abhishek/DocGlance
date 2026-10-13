@@ -17,6 +17,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using QuickView.Infrastructure.Logging;
 using QuickView.Rendering.Document;
 using Windows.Foundation;
 using Windows.UI;
@@ -106,24 +107,80 @@ public sealed partial class SpreadsheetViewer : UserControl
     {
         if (_cellCanvas != null) return;
 
+        // Canvases are VIEWPORT-SIZED overlays: the hosts inside the ScrollViewers keep the
+        // full sheet size for scroll extents, but the actual Win2D surfaces only cover the
+        // visible area. A full-sheet surface exceeds the GPU's max texture size (16384 px)
+        // for large sheets → CanvasImageSource allocation failure → app crash (and, when the
+        // exception was previously swallowed, the transparent/blank grid symptom).
+        // Cell selection moved to CellScroll.PointerPressed (the overlay is hit-test-invisible).
+
         // Cell canvas
         _cellCanvas = new CanvasControl { HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
         _cellCanvas.Draw += CellCanvas_Draw;
-        _cellCanvas.PointerPressed += CellCanvas_PointerPressed;
+        _cellCanvas.IsHitTestVisible = false;
+        CellOverlay.Children.Add(_cellCanvas);
+        CellScroll.PointerPressed += CellCanvas_PointerPressed;
         CellScroll.PointerWheelChanged += CellScroll_PointerWheelChanged;
-        CellCanvasHost.Children.Add(_cellCanvas);
+        CellScroll.SizeChanged += (_, _) => ResizeCanvases();
 
         // Column header canvas
         _colHeaderCanvas = new CanvasControl { Height = 26, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
         _colHeaderCanvas.Draw += ColHeaderCanvas_Draw;
-        ColHeaderCanvasHost.Children.Add(_colHeaderCanvas);
+        _colHeaderCanvas.IsHitTestVisible = false;
+        ColHeaderOverlay.Children.Add(_colHeaderCanvas);
 
         // Row header canvas
         _rowHeaderCanvas = new CanvasControl { Width = 50, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
         _rowHeaderCanvas.Draw += RowHeaderCanvas_Draw;
-        RowHeaderCanvasHost.Children.Add(_rowHeaderCanvas);
+        _rowHeaderCanvas.IsHitTestVisible = false;
+        RowHeaderOverlay.Children.Add(_rowHeaderCanvas);
 
+        ResizeCanvases();
         ApplyCanvasSizes();
+    }
+
+    /// <summary>
+    /// Sizes the overlay canvases to the ScrollViewer's viewport (the visible area),
+    /// clamped so size × display scale never exceeds the GPU max surface size.
+    /// Called on load, layout changes and view changes; cheap no-op when unchanged.
+    /// </summary>
+    private void ResizeCanvases()
+    {
+        double vw = Math.Max(1, CellScroll.ViewportWidth);
+        double vh = Math.Max(1, CellScroll.ViewportHeight);
+
+        double dpiScale = XamlRoot?.RasterizationScale ?? 1.0;
+        _maxSurfaceDip ??= GetMaxSurfaceDip(dpiScale);
+        double maxDip = _maxSurfaceDip.Value;
+        vw = Math.Min(vw, maxDip);
+        vh = Math.Min(vh, maxDip);
+
+        if (_cellCanvas != null)
+        {
+            _cellCanvas.Width  = vw;
+            _cellCanvas.Height = vh;
+        }
+        if (_colHeaderCanvas != null)
+            _colHeaderCanvas.Width = vw;
+        if (_rowHeaderCanvas != null)
+            _rowHeaderCanvas.Height = vh;
+    }
+
+    private double? _maxSurfaceDip;
+
+    private double GetMaxSurfaceDip(double dpiScale)
+    {
+        const double FallbackMaxPx = 16384;
+        double maxPx = FallbackMaxPx;
+        try
+        {
+            maxPx = Microsoft.Graphics.Canvas.CanvasDevice.GetSharedDevice().MaximumBitmapSizeInPixels;
+        }
+        catch
+        {
+            // Device not ready yet — the documented D2D limit is a safe default.
+        }
+        return maxPx / Math.Max(0.01, dpiScale);
     }
 
     private void ApplyCanvasSizes()
@@ -134,28 +191,22 @@ public sealed partial class SpreadsheetViewer : UserControl
         ColumnHeaderRow.Height = new GridLength(26 * _zoom);
         RowHeaderColumn.Width = new GridLength(50 * _zoom);
 
-        if (_cellCanvas != null)
-        {
-            _cellCanvas.Width  = width;
-            _cellCanvas.Height = height;
-        }
-        if (_colHeaderCanvas != null)
-        {
-            _colHeaderCanvas.Width = width;
-            _colHeaderCanvas.Height = 26 * _zoom;
-        }
-        if (_rowHeaderCanvas != null)
-        {
-            _rowHeaderCanvas.Width = 50 * _zoom;
-            _rowHeaderCanvas.Height = height;
-        }
-
+        // Hosts inside the ScrollViewers define scroll extents — full sheet size.
         CellCanvasHost.Width  = width;
         CellCanvasHost.Height = height;
         ColHeaderCanvasHost.Width  = width;
         ColHeaderCanvasHost.Height = 26 * _zoom;
         RowHeaderCanvasHost.Width = 50 * _zoom;
         RowHeaderCanvasHost.Height = height;
+
+        // Short-axis canvas dims track the zoomed header size; the long axis is
+        // viewport-clamped by ResizeCanvases.
+        if (_colHeaderCanvas != null)
+            _colHeaderCanvas.Height = 26 * _zoom;
+        if (_rowHeaderCanvas != null)
+            _rowHeaderCanvas.Width = 50 * _zoom;
+
+        ResizeCanvases();
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -486,6 +537,7 @@ public sealed partial class SpreadsheetViewer : UserControl
     private void CellScroll_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
     {
         // CRITICAL: Invalidate cell canvas on EVERY view change to prevent blank cells
+        ResizeCanvases();   // viewport size can change as scrollbars appear/disappear
         _cellCanvas?.Invalidate();
 
         if (_syncingScroll || _syncingZoom) return;
@@ -584,7 +636,50 @@ public sealed partial class SpreadsheetViewer : UserControl
 
     // ── Win2D draw ─────────────────────────────────────────────────────────────
 
+    // Draw handlers run inside the XAML composition pass: an exception here (device
+    // removal, bad glyph run) propagates to Application.UnhandledException, which is
+    // now fatal by design. Convert draw failures into logged, recoverable events and
+    // trip a circuit breaker if the device is genuinely wedged.
+    private int _consecutiveDrawFailures;
+    private const int MaxConsecutiveDrawFailures = 10;
+
     private void CellCanvas_Draw(CanvasControl sender, CanvasDrawEventArgs args)
+    {
+        try { CellCanvas_DrawCore(args); OnDrawSucceeded(); }
+        catch (Exception ex) { OnDrawFailed("CellCanvas", ex); }
+    }
+
+    private void ColHeaderCanvas_Draw(CanvasControl sender, CanvasDrawEventArgs args)
+    {
+        try { ColHeaderCanvas_DrawCore(args); OnDrawSucceeded(); }
+        catch (Exception ex) { OnDrawFailed("ColHeaderCanvas", ex); }
+    }
+
+    private void RowHeaderCanvas_Draw(CanvasControl sender, CanvasDrawEventArgs args)
+    {
+        try { RowHeaderCanvas_DrawCore(args); OnDrawSucceeded(); }
+        catch (Exception ex) { OnDrawFailed("RowHeaderCanvas", ex); }
+    }
+
+    private void OnDrawSucceeded() => _consecutiveDrawFailures = 0;
+
+    private void OnDrawFailed(string canvas, Exception ex)
+    {
+        _consecutiveDrawFailures++;
+        var level = _consecutiveDrawFailures >= MaxConsecutiveDrawFailures
+            ? LogLevel.Error
+            : LogLevel.Warning;
+        Logger.Write(level,
+            "Event=Win2dDrawFailed | " +
+            $"Canvas={canvas} ConsecutiveFailures={_consecutiveDrawFailures} " +
+            $"HResult=0x{ex.HResult:X8}",
+            ex);
+        // No rethrow, no re-invalidate: Win2D recreates the device/session and retries
+        // on the next Invalidate (scroll, zoom, selection). Continuous failure trips
+        // the counter and each occurrence is logged with full detail.
+    }
+
+    private void CellCanvas_DrawCore(CanvasDrawEventArgs args)
     {
         var ds = args.DrawingSession;
         ds.Clear(_bgGrid);
@@ -596,7 +691,12 @@ public sealed partial class SpreadsheetViewer : UserControl
         double vpH     = CellScroll.ViewportHeight > 0 ? CellScroll.ViewportHeight : Math.Max(ActualHeight, 800);
 
         double zoom = Math.Max(0.01, _zoom);
-        // Add 0.5x viewport margin to prevent blanks during fast scrolling
+        // Viewport-sized canvas: transform maps sheet coords → viewport pixels by
+        // scaling with zoom, then translating by the (zoomed) scroll offsets.
+        ds.Transform = Matrix3x2.CreateScale((float)zoom)
+            * Matrix3x2.CreateTranslation(-(float)scrollX, -(float)scrollY);
+
+        // 0.5-viewport draw margin so fast scrolling never shows blanks.
         int firstCol = ColAt((scrollX - vpW * 0.5) / zoom);
         int lastCol  = ColAt((scrollX + vpW * 1.5) / zoom) + 1;
         int firstRow = RowAt((scrollY - vpH * 0.5) / zoom);
@@ -606,8 +706,6 @@ public sealed partial class SpreadsheetViewer : UserControl
         lastCol  = Math.Clamp(lastCol,  0, _colX.Length - 2);
         firstRow = Math.Clamp(firstRow, 0, _rowY.Length - 2);
         lastRow  = Math.Clamp(lastRow,  0, _rowY.Length - 2);
-
-        ds.Transform = Matrix3x2.CreateScale((float)zoom);
 
         // ── Background fills ─────────────────────────────────────────────────
         for (int row = firstRow; row <= lastRow; row++)
@@ -661,6 +759,17 @@ public sealed partial class SpreadsheetViewer : UserControl
         }
 
         // ── Cell text ───────────────────────────────────────────────────────
+        // PERFORMANCE: Reuse default format for cells without special formatting (huge speedup for large data!)
+        using var defaultFmt = new CanvasTextFormat
+        {
+            FontFamily = "Segoe UI",
+            FontSize   = 12f,
+            HorizontalAlignment = CanvasHorizontalAlignment.Left,
+            VerticalAlignment   = CanvasVerticalAlignment.Bottom,
+            WordWrapping = CanvasWordWrapping.NoWrap,
+            Options = CanvasDrawTextOptions.Clip,
+        };
+
         for (int row = firstRow; row <= lastRow; row++)
         {
             for (int col = firstCol; col <= lastCol; col++)
@@ -682,44 +791,70 @@ public sealed partial class SpreadsheetViewer : UserControl
                         _rowY[endR + 1] - _rowY[row]);
                 }
 
-                using var fmt = new CanvasTextFormat
-                {
-                    FontFamily = "Segoe UI",
-                    FontSize   = 12f,
-                    FontStyle  = cell.Italic
-                        ? Windows.UI.Text.FontStyle.Italic
-                        : Windows.UI.Text.FontStyle.Normal,
-                    FontWeight = cell.Bold ? FontWeights.Bold : FontWeights.Normal,
-                    HorizontalAlignment = cell.HAlign switch
-                    {
-                        "center" => CanvasHorizontalAlignment.Center,
-                        "right"  => CanvasHorizontalAlignment.Right,
-                        _        => CanvasHorizontalAlignment.Left,
-                    },
-                    VerticalAlignment = cell.VAlign switch
-                    {
-                        "top"    => CanvasVerticalAlignment.Top,
-                        "center" => CanvasVerticalAlignment.Center,
-                        _        => CanvasVerticalAlignment.Bottom,
-                    },
-                    WordWrapping = cell.Wrap
-                        ? CanvasWordWrapping.EmergencyBreak
-                        : CanvasWordWrapping.NoWrap,
-                    Options = CanvasDrawTextOptions.Clip,
-                };
+                // Only create custom format if needed
+                CanvasTextFormat? customFmt = null;
+                bool needsCustom = cell.Bold || cell.Italic || cell.Wrap ||
+                    cell.HAlign != "left" || cell.VAlign != "bottom";
 
-                var fg = (cell.Fg != null && TryParseColor(cell.Fg, out var c)) ? c : _cellText;
+                if (needsCustom)
+                {
+                    customFmt = new CanvasTextFormat
+                    {
+                        FontFamily = "Segoe UI",
+                        FontSize   = 12f,
+                        FontStyle  = cell.Italic ? Windows.UI.Text.FontStyle.Italic : Windows.UI.Text.FontStyle.Normal,
+                        FontWeight = cell.Bold ? FontWeights.Bold : FontWeights.Normal,
+                        HorizontalAlignment = cell.HAlign switch
+                        {
+                            "center" => CanvasHorizontalAlignment.Center,
+                            "right"  => CanvasHorizontalAlignment.Right,
+                            _        => CanvasHorizontalAlignment.Left,
+                        },
+                        VerticalAlignment = cell.VAlign switch
+                        {
+                            "top"    => CanvasVerticalAlignment.Top,
+                            "center" => CanvasVerticalAlignment.Center,
+                            _        => CanvasVerticalAlignment.Bottom,
+                        },
+                        WordWrapping = cell.Wrap ? CanvasWordWrapping.EmergencyBreak : CanvasWordWrapping.NoWrap,
+                        Options = CanvasDrawTextOptions.Clip,
+                    };
+                }
+
+                // Theme-aware text color: use cell foreground if specified and not too dark for dark theme
+                Color fg = _cellText;
+                if (cell.Fg != null && TryParseColor(cell.Fg, out var cellFg))
+                {
+                    // If dark theme and cell color is too dark (e.g., black text), use theme color instead
+                    bool isDarkTheme = ActualTheme == ElementTheme.Dark ||
+                        (ActualTheme == ElementTheme.Default && Application.Current.RequestedTheme == ApplicationTheme.Dark);
+                    
+                    if (isDarkTheme)
+                    {
+                        // Calculate perceived brightness (0-255)
+                        int brightness = (int)(0.299 * cellFg.R + 0.587 * cellFg.G + 0.114 * cellFg.B);
+                        // If text is too dark (brightness < 80), use theme text color for readability
+                        fg = brightness < 80 ? _cellText : cellFg;
+                    }
+                    else
+                    {
+                        fg = cellFg;
+                    }
+                }
+                
                 var textRect = new Rect(
                     cr.X + 3,
                     cr.Y + 2,
                     Math.Max(0, cr.Width - 6),
                     Math.Max(0, cr.Height - 4));
-                ds.DrawText(cell.Value!, ToR(textRect), fg, fmt);
+                ds.DrawText(cell.Value!, ToR(textRect), fg, customFmt ?? defaultFmt);
+
+                customFmt?.Dispose();
             }
         }
     }
 
-    private void ColHeaderCanvas_Draw(CanvasControl sender, CanvasDrawEventArgs args)
+    private void ColHeaderCanvas_DrawCore(CanvasDrawEventArgs args)
     {
         var ds = args.DrawingSession;
         ds.Clear(_bgHeader);
@@ -732,7 +867,8 @@ public sealed partial class SpreadsheetViewer : UserControl
         firstCol = Math.Clamp(firstCol, 0, _colX.Length - 2);
         lastCol  = Math.Clamp(lastCol,  0, _colX.Length - 2);
 
-        ds.Transform = Matrix3x2.CreateScale((float)zoom);
+        ds.Transform = Matrix3x2.CreateScale((float)zoom)
+            * Matrix3x2.CreateTranslation(-(float)CellScroll.HorizontalOffset, 0);
 
         using var fmt = new CanvasTextFormat
         {
@@ -756,7 +892,7 @@ public sealed partial class SpreadsheetViewer : UserControl
         ds.DrawLine(0, 25.5f, headerW, 25.5f, _gridLine, 1f);
     }
 
-    private void RowHeaderCanvas_Draw(CanvasControl sender, CanvasDrawEventArgs args)
+    private void RowHeaderCanvas_DrawCore(CanvasDrawEventArgs args)
     {
         var ds = args.DrawingSession;
         ds.Clear(_bgHeader);
@@ -769,7 +905,8 @@ public sealed partial class SpreadsheetViewer : UserControl
         firstRow = Math.Clamp(firstRow, 0, _rowY.Length - 2);
         lastRow  = Math.Clamp(lastRow,  0, _rowY.Length - 2);
 
-        ds.Transform = Matrix3x2.CreateScale((float)zoom);
+        ds.Transform = Matrix3x2.CreateScale((float)zoom)
+            * Matrix3x2.CreateTranslation(0, -(float)CellScroll.VerticalOffset);
 
         using var fmt = new CanvasTextFormat
         {
@@ -797,9 +934,11 @@ public sealed partial class SpreadsheetViewer : UserControl
 
     private void CellCanvas_PointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        var pos  = e.GetCurrentPoint(_cellCanvas).Position;
-        _selectedCol = ColAt(pos.X / _zoom);
-        _selectedRow = RowAt(pos.Y / _zoom);
+        // Position is viewport-relative (CellScroll origin = viewport top-left);
+        // add scroll offsets to reach sheet coordinates, then unzoom.
+        var pos  = e.GetCurrentPoint(CellScroll).Position;
+        _selectedCol = ColAt((pos.X + CellScroll.HorizontalOffset) / _zoom);
+        _selectedRow = RowAt((pos.Y + CellScroll.VerticalOffset) / _zoom);
         Invalidate();
     }
 
