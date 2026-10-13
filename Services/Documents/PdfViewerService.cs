@@ -10,9 +10,8 @@ using System.Threading.Tasks;
 namespace QuickView.Services.Documents;
 
 /// <summary>
-/// Skeleton implementation of IPdfViewerService.
-/// Phase 1: foundation only — methods throw NotImplementedException.
-/// Logic will be extracted from ViewerPage.Pdf.cs in Phases 2–5.
+/// Per-tab PDF document lifecycle and render bookkeeping (which pages/thumbnails have been
+/// rendered). Prefetch scheduling itself lives in ViewerPage.
 /// </summary>
 public sealed class PdfViewerService : IPdfViewerService, IDisposable
 {
@@ -21,7 +20,7 @@ public sealed class PdfViewerService : IPdfViewerService, IDisposable
     private readonly HashSet<int> _renderedPages = new();
     private readonly HashSet<int> _renderedThumbs = new();
     private CancellationTokenSource? _prefetchCts;
-    // _prefetchGeneration removed — was unused (CS0169). Will be added back in Phase 4 if needed for stale operation detection.
+
 
     // ── Document Lifecycle ────────────────────────────────────────────────
 
@@ -219,11 +218,6 @@ public sealed class PdfViewerService : IPdfViewerService, IDisposable
 
     // ── Prefetch & Memory Management ──────────────────────────────────────
 
-    public void PrefetchPagesAround(int centerPage)
-        => throw new NotImplementedException("Phase 4");
-
-    public void PrefetchThumbnailsAround(int centerPage)
-        => throw new NotImplementedException("Phase 4");
 
     public void CancelPrefetch()
     {

@@ -5,10 +5,12 @@ using Microsoft.UI.Composition.SystemBackdrops;
 using QuickView.Services.Registration;
 using QuickView.Services.Storage;
 using QuickView.Infrastructure.Configuration;
+using QuickView.Infrastructure.Logging;
 using QuickView.Core.Enums;
 using System;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 
 namespace QuickView.Features.Settings;
 
@@ -204,14 +206,18 @@ public sealed partial class SettingsPage : Page
 
     // ── Status display ────────────────────────────────────────────────────────
 
+    /// <summary>Looks up a theme brush; falls back to a solid colour when the key is missing or not a brush.</summary>
+    private static Brush ResourceBrush(string key, Windows.UI.Color fallback)
+        => Application.Current.Resources.TryGetValue(key, out var value) && value is Brush brush
+            ? brush
+            : new SolidColorBrush(fallback);
+
 #if PACKAGED
     private void RefreshAssocStatusForPackaged()
     {
         // Show that associations are managed by the package/Store
         AssocStatusIcon.Glyph      = "\uE73E"; // checkmark
-        AssocStatusIcon.Foreground = (Windows.UI.Color?)Application.Current.Resources["SystemFillColorSuccessBrush"] is null
-            ? new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Green)
-            : (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorSuccessBrush"];
+        AssocStatusIcon.Foreground = ResourceBrush("SystemFillColorSuccessBrush", Microsoft.UI.Colors.Green);
         AssocStatusText.Text       = "QuickView is a packaged app — file associations are managed automatically.";
         
         // Disable manual registration buttons (they're no-ops in packaged builds)
@@ -226,9 +232,7 @@ public sealed partial class SettingsPage : Page
         if (registered)
         {
             AssocStatusIcon.Glyph      = "\uE73E"; // checkmark
-            AssocStatusIcon.Foreground = (Windows.UI.Color?)Application.Current.Resources["SystemFillColorSuccessBrush"] is null
-                ? new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Green)
-                : (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorSuccessBrush"];
+            AssocStatusIcon.Foreground = ResourceBrush("SystemFillColorSuccessBrush", Microsoft.UI.Colors.Green);
             AssocStatusText.Text       = "QuickView is registered — it appears in 'Open with' for all supported file types.";
             RegisterButton.IsEnabled   = false;
             UnregisterButton.IsEnabled = true;
@@ -236,7 +240,7 @@ public sealed partial class SettingsPage : Page
         else
         {
             AssocStatusIcon.Glyph      = "\uE783"; // info
-            AssocStatusIcon.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+            AssocStatusIcon.Foreground = ResourceBrush("TextFillColorSecondaryBrush", Microsoft.UI.Colors.Gray);
             AssocStatusText.Text       = "Not registered. Click 'Register with Windows' to appear in 'Open with' menus.";
             RegisterButton.IsEnabled   = true;
             UnregisterButton.IsEnabled = false;
@@ -252,7 +256,9 @@ public sealed partial class SettingsPage : Page
         UnregisterButton.IsEnabled = false;
         AssocStatusText.Text       = "Registering…";
 
-        bool ok = await RegistrationHelper.RegisterAsync();
+        bool ok;
+        try { ok = await RegistrationHelper.RegisterAsync(); }
+        catch (Exception ex) { Logger.Error("RegisterButton_Click", ex); ok = false; }
 
         ShowInfoBar(
             ok ? "QuickView is now registered with Windows." : "Registration failed — check the log.",
@@ -273,7 +279,9 @@ public sealed partial class SettingsPage : Page
         UnregisterButton.IsEnabled = false;
         AssocStatusText.Text       = "Removing registration…";
 
-        bool ok = await RegistrationHelper.UnregisterAsync();
+        bool ok;
+        try { ok = await RegistrationHelper.UnregisterAsync(); }
+        catch (Exception ex) { Logger.Error("UnregisterButton_Click", ex); ok = false; }
 
         ShowInfoBar(
             ok ? "QuickView has been removed from Windows file associations."
@@ -292,8 +300,22 @@ public sealed partial class SettingsPage : Page
     private async void OpenDefaultApps_Click(object sender, RoutedEventArgs e)
     {
         // Opens Windows Settings → Default apps directly
-        await Windows.System.Launcher.LaunchUriAsync(
-            new Uri("ms-settings:defaultapps"));
+        await LaunchUriSafeAsync("ms-settings:defaultapps");
+    }
+
+    /// <summary>Launches a URI; failures are logged and shown, never thrown into an async-void handler.</summary>
+    private async Task LaunchUriSafeAsync(string uri)
+    {
+        try
+        {
+            if (!await Windows.System.Launcher.LaunchUriAsync(new Uri(uri)))
+                ShowInfoBar("Windows could not open the link.", InfoBarSeverity.Warning);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"LaunchUri({uri})", ex);
+            ShowInfoBar("Windows could not open the link.", InfoBarSeverity.Warning);
+        }
     }
 
     // ── InfoBar helper ────────────────────────────────────────────────────────
@@ -309,20 +331,17 @@ public sealed partial class SettingsPage : Page
 
     private async void GitHubLink_Click(object sender, RoutedEventArgs e)
     {
-        await Windows.System.Launcher.LaunchUriAsync(
-            new Uri($"https://github.com/{GitHubOwner}/{GitHubRepo}"));
+        await LaunchUriSafeAsync($"https://github.com/{GitHubOwner}/{GitHubRepo}");
     }
 
     private async void IssuesLink_Click(object sender, RoutedEventArgs e)
     {
-        await Windows.System.Launcher.LaunchUriAsync(
-            new Uri($"https://github.com/{GitHubOwner}/{GitHubRepo}/issues"));
+        await LaunchUriSafeAsync($"https://github.com/{GitHubOwner}/{GitHubRepo}/issues");
     }
 
     private async void ReleasesLink_Click(object sender, RoutedEventArgs e)
     {
-        await Windows.System.Launcher.LaunchUriAsync(
-            new Uri($"https://github.com/{GitHubOwner}/{GitHubRepo}/releases"));
+        await LaunchUriSafeAsync($"https://github.com/{GitHubOwner}/{GitHubRepo}/releases");
     }
 
     private async void ViewLicensesLink_Click(object sender, RoutedEventArgs e)

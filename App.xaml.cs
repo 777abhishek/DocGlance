@@ -162,8 +162,9 @@ public partial class App : Application
     /// </summary>
     private static void RegisterRenderers()
     {
-        // Office renderers (DOCX, XLSX, PPTX) currently show info cards only.
-        // Full Office rendering would require COM interop or third-party libraries.
+
+        // These registry renderers are info-card fallbacks only; actual DOCX/XLSX/PPTX
+        // rendering goes through the native wrappers (DocxDocument, SpreadsheetDocument, PptxDocument).
         var docxRenderer = new QuickView.Rendering.Office.DocxRenderer();
         var xlsxRenderer = new QuickView.Rendering.Office.XlsxRenderer();
         var pptxRenderer = new QuickView.Rendering.Office.PptxRenderer();
@@ -272,7 +273,7 @@ public partial class App : Application
             if (!FileSizeValidator.IsFileValidAndSafe(filePath, out var validationError))
             {
                 Logger.Error($"File validation failed for: {filePath} - {validationError}");
-                // TODO: Show error dialog to user
+                ShowOpenError(filePath, validationError);
                 return;
             }
 
@@ -284,6 +285,41 @@ public partial class App : Application
         catch (Exception ex)
         {
             Logger.Error($"OpenFilePath({filePath})", ex);
+        }
+    }
+
+    /// <summary>Tells the user why a file could not be opened (instead of failing silently).</summary>
+    private static void ShowOpenError(string filePath, string reason)
+    {
+        try
+        {
+            var window = TitleBarWindow.Current;
+            if (window?.Content is not FrameworkElement root || root.XamlRoot == null)
+                return;
+
+            window.DispatcherQueue.TryEnqueue(async () =>
+            {
+                try
+                {
+                    var dialog = new Microsoft.UI.Xaml.Controls.ContentDialog
+                    {
+                        Title           = "Can't open file",
+                        Content         = $"{Path.GetFileName(filePath)}\n\n{reason}",
+                        CloseButtonText = "OK",
+                        XamlRoot        = root.XamlRoot,
+                    };
+                    await dialog.ShowAsync();
+                }
+                catch (Exception ex)
+                {
+                    // e.g. another dialog is already open
+                    Logger.Warn($"ShowOpenError dialog failed: {ex.Message}");
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("ShowOpenError", ex);
         }
     }
 

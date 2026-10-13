@@ -115,19 +115,34 @@ public sealed partial class ViewerPage : Page
                 : Visibility.Collapsed;
         }
         
-        // Apply show sidebar setting
-        if (SidebarCard != null && Infrastructure.Configuration.AppSettings.ShowSidebar)
+        if (SidebarCard == null)
+            return;
+
+        // This runs for EVERY AppSettings change (including ones raised just by opening the
+        // Settings page) and on every open viewer tab. Only documents that have a sidebar
+        // (multi-page PDF, DOCX, PPTX) may have it opened; spreadsheets, text, Markdown and
+        // error/unsupported views must never get it back.
+        bool supportsSidebar =
+            Toolbar.SidebarButtonVisibility == Visibility.Visible &&
+            !IsSpreadsheetViewerActive() &&
+            _total > 1;
+
+        if (Infrastructure.Configuration.AppSettings.ShowSidebar)
         {
-            if (SidebarColumn.Width.Value == 0)
+            if (supportsSidebar && SidebarColumn.Width.Value == 0)
             {
-                SidebarColumn.Width = new GridLength(280);
+                SidebarColumn.Width = new GridLength(240);
                 SidebarCard.Visibility = Visibility.Visible;
+                Toolbar.SidebarIsChecked = true;
+                ViewModel.SidebarOpen = true;
             }
         }
-        else if (SidebarCard != null && !Infrastructure.Configuration.AppSettings.ShowSidebar)
+        else
         {
             SidebarColumn.Width = new GridLength(0);
             SidebarCard.Visibility = Visibility.Collapsed;
+            Toolbar.SidebarIsChecked = false;
+            ViewModel.SidebarOpen = false;
         }
     }
 

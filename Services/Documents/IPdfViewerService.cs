@@ -53,16 +53,6 @@ public interface IPdfViewerService
 
     // ── Prefetch & Memory Management ──────────────────────────────────────
 
-    /// <summary>
-    /// Prefetches pages around the current page for smooth scrolling.
-    /// Evicts pages outside the window to manage memory.
-    /// </summary>
-    void PrefetchPagesAround(int centerPage);
-
-    /// <summary>
-    /// Prefetches thumbnails around the current page for smooth sidebar scrolling.
-    /// </summary>
-    void PrefetchThumbnailsAround(int centerPage);
 
     /// <summary>Cancels all in-flight prefetch operations.</summary>
     void CancelPrefetch();

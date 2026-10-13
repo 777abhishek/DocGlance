@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using QuickView.Core.Constants;
 using QuickView.Infrastructure.Configuration;
 
 namespace QuickView.Common.Validators;
@@ -53,29 +54,15 @@ public static class FileSizeValidator
     /// </summary>
     private static long GetMaxSizeForExtension(string extension)
     {
-        return extension switch
-        {
-            // PDF files
-            ".pdf" => AppSettings.MaxPdfFileSizeBytes,
+        if (SupportedExtensions.IsPdf(extension))
+            return AppSettings.MaxPdfFileSizeBytes;
+        if (SupportedExtensions.IsOffice(extension))
+            return AppSettings.MaxOfficeFileSizeBytes;
+        if (SupportedExtensions.IsText(extension))
+            return AppSettings.MaxTextFileSizeBytes;
 
-            // Text files
-            ".txt" or ".log" or ".md" or ".json" or ".xml" or ".csv"
-                => AppSettings.MaxTextFileSizeBytes,
-
-            // Code files
-            ".cs" or ".js" or ".ts" or ".py" or ".java" or ".cpp" or ".h" or ".css" or ".html"
-                => AppSettings.MaxTextFileSizeBytes,
-
-            // Office files
-            ".docx" or ".xlsx" or ".pptx" or ".doc" or ".xls" or ".ppt"
-                => AppSettings.MaxOfficeFileSizeBytes,
-
-            // Rich text
-            ".rtf" => AppSettings.MaxTextFileSizeBytes,
-
-            // Default for unknown types
-            _ => AppSettings.MaxGeneralFileSizeBytes
-        };
+        // Default for unknown types
+        return AppSettings.MaxGeneralFileSizeBytes;
     }
 
     /// <summary>

@@ -109,6 +109,22 @@ public sealed class NativeCallGateTests
     }
 
     [Fact]
+    public void Dispose_ZeroTimeoutWithActiveCall_ReturnsFalseWithoutBlocking_ThenWaitForDrainSucceeds()
+    {
+        var gate = new NativeCallGate();
+        var lease = gate.TryEnter();
+        Assert.NotNull(lease);
+
+        // This is how PdfDocumentState disposes on the UI thread: never block.
+        Assert.False(gate.Dispose(TimeSpan.Zero));
+        Assert.False(gate.WaitForDrain(TimeSpan.FromMilliseconds(50)));
+
+        lease!.Dispose();
+
+        Assert.True(gate.WaitForDrain(TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
     public async Task TryEnter_DuringDisposalWindow_ReturnsNull()
     {
         var gate = new NativeCallGate();

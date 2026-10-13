@@ -52,7 +52,18 @@ public sealed partial class UpdateBanner : UserControl
         InstallButton.Content   = "Downloading…";
 #endif
 
-        await UpdateService.DownloadAndInstallAsync(_pending);
+        try
+        {
+            await UpdateService.DownloadAndInstallAsync(_pending);
+        }
+        catch (Exception ex)
+        {
+            // async void: an exception here would crash the app. Surface it in the banner instead.
+            Logger.Error("[Update] Install failed", ex);
+            InfoBar.Title    = "Update failed";
+            InfoBar.Message  = ex.Message;
+            InfoBar.Severity = InfoBarSeverity.Error;
+        }
 
         // Packaged: user went to Store page — re-enable the button.
         // Unpackaged: the installer will close the app; if something went wrong, re-enable.

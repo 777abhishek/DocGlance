@@ -23,6 +23,7 @@ public sealed class DocxDocument : IDisposable
     private readonly SemaphoreSlim _renderLock = new(1, 1);
     private readonly object _nativeGate = new();
     private bool _disposed;
+    private int _disposeStarted;
 
     private DocxDocument(WordCraftNative.WcDocumentHandle handle)
     {
@@ -117,7 +118,7 @@ public sealed class DocxDocument : IDisposable
 
             try
             {
-                return NativeBitmap.FromBgra(img.Pixels, img.Width, img.Height, img.Len);
+                return await NativeBitmap.FromBgraAsync(img.Pixels, img.Width, img.Height, img.Len);
             }
             finally
             {
@@ -137,17 +138,29 @@ public sealed class DocxDocument : IDisposable
     {
         byte[] buf = new byte[65536];
 
-        lock (_nativeGate)
+        // The native call returns the required size when the buffer is too small, so grow and
+        // retry instead of silently truncating long pages.
+        while (true)
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-            unsafe
+            nuint written;
+            lock (_nativeGate)
             {
-                fixed (byte* ptr = buf)
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                unsafe
                 {
-                    var written = (int)WordCraftNative.wc_extract_page_text(_handle, (uint)index, ptr, (nuint)buf.Length);
-                    return written > 0 ? Encoding.UTF8.GetString(buf, 0, written) : string.Empty;
+                    fixed (byte* ptr = buf)
+                    {
+                        written = WordCraftNative.wc_extract_page_text(_handle, (uint)index, ptr, (nuint)buf.Length);
+                    }
                 }
             }
+
+            if (written <= (nuint)buf.Length)
+                return written > 0 ? Encoding.UTF8.GetString(buf, 0, (int)written) : string.Empty;
+            if (written > 64 * 1024 * 1024)
+                return Encoding.UTF8.GetString(buf); // refuse absurd sizes; keep what we have
+
+            buf = new byte[(int)written];
         }
     }
 
@@ -235,17 +248,24 @@ public sealed class DocxDocument : IDisposable
 
     public void Dispose()
     {
-        lock (_nativeGate)
-        {
-            if (_disposed) return;
-            _disposed = true;
+        if (Interlocked.Exchange(ref _disposeStarted, 1) == 1) return;
 
-            if (_handle.IsValid)
+        // New callers fail fast; calls already inside the native gate finish first.
+        _disposed = true;
+
+        // Free on the thread pool so the caller (usually the UI thread) never blocks
+        // waiting for an in-flight native render.
+        _ = Task.Run(() =>
+        {
+            lock (_nativeGate)
             {
-                WordCraftNative.wc_free_document(_handle);
-                _handle = default;
+                if (_handle.IsValid)
+                {
+                    WordCraftNative.wc_free_document(_handle);
+                    _handle = default;
+                }
             }
-        }
+        });
     }
 
     /// <summary>

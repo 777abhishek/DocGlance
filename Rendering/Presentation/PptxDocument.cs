@@ -31,6 +31,7 @@ public sealed class PptxDocument : IDisposable
     private readonly SemaphoreSlim _renderLock = new(1, 1);
     private readonly object _nativeGate = new();
     private bool _disposed;
+    private int _disposeStarted;
 
     private PptxDocument(DeckCraftNative.DcDocumentHandle handle)
     {
@@ -129,7 +130,7 @@ public sealed class PptxDocument : IDisposable
 
             try
             {
-                return NativeBitmap.FromBgra(img.Pixels, img.Width, img.Height, img.Len);
+                return await NativeBitmap.FromBgraAsync(img.Pixels, img.Width, img.Height, img.Len);
             }
             finally
             {
@@ -258,17 +259,24 @@ public sealed class PptxDocument : IDisposable
 
     public void Dispose()
     {
-        lock (_nativeGate)
-        {
-            if (_disposed) return;
-            _disposed = true;
+        if (Interlocked.Exchange(ref _disposeStarted, 1) == 1) return;
 
-            if (_handle.IsValid)
+        // New callers fail fast; calls already inside the native gate finish first.
+        _disposed = true;
+
+        // Free on the thread pool so the caller (usually the UI thread) never blocks
+        // waiting for an in-flight native render.
+        _ = Task.Run(() =>
+        {
+            lock (_nativeGate)
             {
-                DeckCraftNative.dc_free_document(_handle);
-                _handle = default;
+                if (_handle.IsValid)
+                {
+                    DeckCraftNative.dc_free_document(_handle);
+                    _handle = default;
+                }
             }
-        }
+        });
 
         // A queued render may still need to release the semaphore after the
         // native call finishes; leave the managed semaphore for GC.

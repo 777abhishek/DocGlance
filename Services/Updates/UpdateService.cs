@@ -7,6 +7,7 @@ using System.Net.Http.Json;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using QuickView.Infrastructure.Logging;
@@ -94,21 +95,26 @@ public static class UpdateService
 #else
         try
         {
-            var tempPath = Path.Combine(Path.GetTempPath(), $"QuickView-Setup-{release.Version}.exe");
+            if (!IsTrustedDownloadUrl(release.InstallerUrl))
+                throw new InvalidOperationException("The release does not contain a trusted installer download URL.");
 
-            if (!File.Exists(tempPath))
+            // Fresh private directory per attempt: never reuse a pre-existing (possibly
+            // partial or planted) file at a predictable %TEMP% path.
+            var tempDir = Path.Combine(Path.GetTempPath(), "QuickView-Update-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDir);
+            var tempPath = Path.Combine(tempDir, "QuickView-Setup.exe");
+
+            Logger.Log($"[Update] Downloading {release.InstallerUrl}");
+            using (var resp = await _httpClient.GetAsync(release.InstallerUrl,
+                                  HttpCompletionOption.ResponseHeadersRead))
             {
-                Logger.Log($"[Update] Downloading {release.InstallerUrl}");
-                using var resp = await _httpClient.GetAsync(release.InstallerUrl,
-                                     HttpCompletionOption.ResponseHeadersRead);
                 resp.EnsureSuccessStatusCode();
 
                 await using var fs  = File.Create(tempPath);
                 await using var src = await resp.Content.ReadAsStreamAsync();
                 await src.CopyToAsync(fs);
-
-                Logger.Log($"[Update] Download complete: {tempPath}");
             }
+            Logger.Log($"[Update] Download complete: {tempPath}");
 
             // SEC-03: Verify SHA-256 checksum before signature verification
             if (!string.IsNullOrWhiteSpace(release.Sha256))
@@ -117,22 +123,31 @@ public static class UpdateService
                 if (!VerifySha256Checksum(tempPath, release.Sha256, out var checksumError))
                 {
                     Logger.Error($"[Update] SHA-256 verification failed: {checksumError}");
-                    try { File.Delete(tempPath); } catch { }
+                    try { Directory.Delete(tempDir, recursive: true); } catch { }
                     throw new InvalidOperationException($"Installer checksum verification failed: {checksumError}");
                 }
                 Logger.Log("[Update] SHA-256 checksum verified successfully");
             }
             else
             {
-                Logger.Log("[Update] WARNING: No SHA-256 checksum provided — skipping integrity check");
+                Logger.Log("[Update] No published SHA-256 checksum for this release — relying on pinned signer");
             }
 
             // CRITICAL: Verify Authenticode signature before executing
             if (!VerifyAuthenticodeSignature(tempPath, out var signatureError))
             {
                 Logger.Error($"[Update] Signature verification failed: {signatureError}");
-                try { File.Delete(tempPath); } catch { }
+                try { Directory.Delete(tempDir, recursive: true); } catch { }
                 throw new InvalidOperationException($"Installer signature verification failed: {signatureError}");
+            }
+
+            // WinVerifyTrust accepts ANY trusted publisher. Require the installer to be signed
+            // by the same publisher as the build that is currently running.
+            if (!VerifySameSigner(tempPath, out var signerError))
+            {
+                Logger.Error($"[Update] Publisher check failed: {signerError}");
+                try { Directory.Delete(tempDir, recursive: true); } catch { }
+                throw new InvalidOperationException($"Installer publisher verification failed: {signerError}");
             }
 
             Logger.Log($"[Update] Signature verified. Launching installer: {tempPath}");
@@ -154,6 +169,58 @@ public static class UpdateService
     // ── Private helpers ───────────────────────────────────────────────────────
 
 #if !PACKAGED
+    /// <summary>Only https downloads served by GitHub are accepted.</summary>
+    private static bool IsTrustedDownloadUrl(string? url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
+            return false;
+        var host = uri.Host;
+        return host.Equals("github.com", StringComparison.OrdinalIgnoreCase)
+            || host.EndsWith(".github.com", StringComparison.OrdinalIgnoreCase)
+            || host.EndsWith(".githubusercontent.com", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Looks for a checksum asset published next to the installer (<c>&lt;installer&gt;.sha256</c>,
+    /// <c>SHA256SUMS</c> or <c>checksums.txt</c>) and returns the installer's SHA-256, or empty.
+    /// </summary>
+    private static async Task<string> TryGetPublishedSha256Async(GitHubAsset[] assets, GitHubAsset installer)
+    {
+        try
+        {
+            var installerName = installer.Name ?? string.Empty;
+            var sumAsset = Array.Find(assets, a =>
+                a.Name is not null &&
+                (a.Name.Equals(installerName + ".sha256", StringComparison.OrdinalIgnoreCase) ||
+                 a.Name.StartsWith("SHA256SUMS", StringComparison.OrdinalIgnoreCase) ||
+                 a.Name.Equals("checksums.txt", StringComparison.OrdinalIgnoreCase)));
+
+            if (sumAsset?.BrowserDownloadUrl is null || !IsTrustedDownloadUrl(sumAsset.BrowserDownloadUrl))
+                return string.Empty;
+
+            var text = await _httpClient.GetStringAsync(sumAsset.BrowserDownloadUrl);
+            if (text.Length > 64 * 1024)
+                return string.Empty;
+
+            foreach (var line in text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                // "<hash>  <file>", "<hash> *<file>" or a bare "<hash>".
+                var parts = line.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 0 || parts[0].Length != 64 || !Array.TrueForAll(parts[0].ToCharArray(), Uri.IsHexDigit))
+                    continue;
+
+                var file = parts.Length > 1 ? parts[^1].TrimStart('*') : installerName;
+                if (file.Equals(installerName, StringComparison.OrdinalIgnoreCase))
+                    return parts[0];
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"[Update] Could not read published checksum: {ex.Message}");
+        }
+        return string.Empty;
+    }
+
     private static async Task CheckAsync()
     {
         // Wait 10 s after startup so we don't slow the initial load.
@@ -182,12 +249,17 @@ public static class UpdateService
             var asset = Array.Find(release.Assets ?? [],
                             a => a.Name?.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) == true);
 
+            var sha256 = asset is null
+                ? string.Empty
+                : await TryGetPublishedSha256Async(release.Assets ?? [], asset);
+
             var info = new ReleaseInfo
             {
                 Version      = tag,
                 ReleaseNotes = release.Body ?? string.Empty,
                 InstallerUrl = asset?.BrowserDownloadUrl ?? string.Empty,
                 ReleaseUrl   = release.HtmlUrl ?? string.Empty,
+                Sha256       = sha256,
             };
 
             Logger.Log($"[Update] New version available: {tag}");
@@ -210,6 +282,11 @@ public static class UpdateService
                 // Subscribers must handle cross-thread access themselves.
                 UpdateAvailable?.Invoke(null, new UpdateAvailableEventArgs(info));
             }
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            // GitHub returns 404 for /releases/latest when the repo has no published release yet.
+            Logger.Log("[Update] No published releases found — nothing to update to.");
         }
         catch (Exception ex)
         {
@@ -370,6 +447,66 @@ public static class UpdateService
         {
             error = $"Exception during signature verification: {ex.Message}";
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Publisher pinning: the installer must carry an Authenticode signature whose signing
+    /// certificate subject matches the certificate that signed the running executable.
+    /// Unsigned running builds (dev builds) cannot self-update.
+    /// </summary>
+    private static bool VerifySameSigner(string installerPath, out string error)
+    {
+        error = string.Empty;
+        try
+        {
+            var self = Environment.ProcessPath;
+            if (string.IsNullOrEmpty(self))
+            {
+                error = "Cannot determine the running executable.";
+                return false;
+            }
+
+            using var current = GetSignerCertificate(self);
+            if (current is null)
+            {
+                error = "This build of QuickView is not signed, so the update publisher cannot be verified. " +
+                        "Download the update manually from the releases page.";
+                return false;
+            }
+
+            using var candidate = GetSignerCertificate(installerPath);
+            if (candidate is null)
+            {
+                error = "The installer has no readable signing certificate.";
+                return false;
+            }
+
+            if (!string.Equals(current.Subject, candidate.Subject, StringComparison.OrdinalIgnoreCase))
+            {
+                error = $"Installer is signed by '{candidate.Subject}', expected '{current.Subject}'.";
+                return false;
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = $"Exception during publisher verification: {ex.Message}";
+            return false;
+        }
+    }
+
+    private static X509Certificate2? GetSignerCertificate(string path)
+    {
+        try
+        {
+            using var cert = X509Certificate.CreateFromSignedFile(path);
+            return new X509Certificate2(cert);
+        }
+        catch (CryptographicException)
+        {
+            return null;
         }
     }
 

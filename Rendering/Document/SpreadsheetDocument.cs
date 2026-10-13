@@ -24,6 +24,7 @@ public sealed class SpreadsheetDocument : IDisposable
     private readonly SemaphoreSlim _exportLock = new(1, 1);
     private readonly object _nativeGate = new();
     private bool _disposed;
+    private int _disposeStarted;
 
     private SpreadsheetDocument(GridCraftNative.GcDocumentHandle handle)
     {
@@ -264,16 +265,23 @@ public sealed class SpreadsheetDocument : IDisposable
 
     public void Dispose()
     {
-        lock (_nativeGate)
-        {
-            if (_disposed) return;
-            _disposed = true;
+        if (Interlocked.Exchange(ref _disposeStarted, 1) == 1) return;
 
-            if (_handle.IsValid)
+        // New callers fail fast; calls already inside the native gate finish first.
+        _disposed = true;
+
+        // Free on the thread pool so the caller (usually the UI thread) never blocks
+        // waiting for an in-flight native call.
+        _ = Task.Run(() =>
+        {
+            lock (_nativeGate)
             {
-                GridCraftNative.gc_free_document(_handle);
-                _handle = default;
+                if (_handle.IsValid)
+                {
+                    GridCraftNative.gc_free_document(_handle);
+                    _handle = default;
+                }
             }
-        }
+        });
     }
 }

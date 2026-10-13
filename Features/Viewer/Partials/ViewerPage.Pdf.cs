@@ -951,6 +951,15 @@ public sealed partial class ViewerPage
     private async Task LoadXlsxAsync(string filePath, CancellationToken ct)
     {
         ShowLoading(true);
+
+        // Spreadsheets have no sidebar. Hide it up-front so it doesn't flash open (the XAML
+        // default is 240 px) while the workbook is still loading.
+        SidebarCard.Visibility          = Visibility.Collapsed;
+        SidebarColumn.Width             = new GridLength(0);
+        Toolbar.SidebarButtonVisibility = Visibility.Collapsed;
+        Toolbar.SidebarIsChecked        = false;
+        ViewModel.SidebarOpen           = false;
+
         try
         {
             // Clean up any previous state (PPTX slides, PDF doc, etc.)

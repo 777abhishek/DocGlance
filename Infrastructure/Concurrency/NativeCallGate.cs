@@ -63,6 +63,13 @@ public sealed class NativeCallGate
         return _drained.Wait(drainTimeout);
     }
 
+    /// <summary>
+    /// Waits for in-flight calls to finish without changing the disposed state. Intended for a
+    /// background thread after <see cref="Dispose"/> returned false, so the original caller
+    /// (typically the UI thread) never blocks.
+    /// </summary>
+    public bool WaitForDrain(System.TimeSpan timeout) => _drained.Wait(timeout);
+
     private void Release()
     {
         if (Interlocked.Decrement(ref _active) == 0)

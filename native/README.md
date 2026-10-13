@@ -2,8 +2,9 @@
 
 ## Overview
 
-QuickView uses three Rust FFI libraries to render Office documents:
+QuickView uses four Rust FFI libraries to render documents:
 
+- **pdfcraft_ffi** - PDF rendering, text extraction, search, merge/split, PNG export
 - **deckcraft_ffi** - PowerPoint (PPTX) rendering, text extraction, search
 - **gridcraft_ffi** - Excel (XLSX) rendering, text extraction, search  
 - **wordcraft_ffi** - Word (DOCX) rendering, text extraction, search
@@ -14,7 +15,7 @@ QuickView uses three Rust FFI libraries to render Office documents:
 .\build-native.ps1
 ```
 
-This builds all three DLLs and copies them to the appropriate bin directories.
+This builds all the DLLs and copies them to the appropriate bin directories.
 
 ## Current Versions (Stable)
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using QuickView.Infrastructure.Concurrency;
 using QuickView.Infrastructure.Logging;
 
@@ -10,7 +11,7 @@ namespace QuickView.Rendering.Pdf;
 ///
 /// Lifetime contract: every native call must run under a lease from <see cref="_gate"/>
 /// (see <see cref="BeginNativeCall"/>). Disposal waits (bounded) for in-flight native
-/// calls before freeing the Rust document — otherwise `pc_free_document` can race an
+/// calls (on a background thread, never the caller's) before freeing the Rust document — otherwise `pc_free_document` can race an
 /// in-flight `pc_render_page` and the process dies with an access violation.
 /// </summary>
 public sealed class PdfDocumentState : IDisposable
@@ -75,19 +76,35 @@ public sealed class PdfDocumentState : IDisposable
         IncrementGeneration();
         _disposed = true;
 
-        if (!_gate.Dispose(DrainTimeout))
+        // Common case: nothing in flight, free right away on the caller's thread.
+        if (_gate.Dispose(TimeSpan.Zero))
         {
-            // In-flight native calls did not finish within the timeout (pathological page,
-            // wedged renderer). Freeing now would crash the process, and waiting forever
-            // would hang the caller — leak the native document instead and say so loudly.
-            Logger.Write(LogLevel.Error,
-                "Event=PdfDocumentDisposeLeaked | " +
-                $"ActiveCalls={_gate.ActiveCallCount} PageCount={PageCount}");
+            FreeNativeDocument();
             return;
         }
 
-        IntPtr document = _document;
-        _document = IntPtr.Zero;
+        // A native call is still running. Never block the caller (usually the UI thread):
+        // drain on a background thread, then free.
+        _ = Task.Run(() =>
+        {
+            if (_gate.WaitForDrain(DrainTimeout))
+            {
+                FreeNativeDocument();
+                return;
+            }
+
+            // In-flight native calls did not finish within the timeout (pathological page,
+            // wedged renderer). Freeing now would crash the process, and waiting forever
+            // would leak a thread — leak the native document instead and say so loudly.
+            Logger.Write(LogLevel.Error,
+                "Event=PdfDocumentDisposeLeaked | " +
+                $"ActiveCalls={_gate.ActiveCallCount} PageCount={PageCount}");
+        });
+    }
+
+    private void FreeNativeDocument()
+    {
+        IntPtr document = System.Threading.Interlocked.Exchange(ref _document, IntPtr.Zero);
         if (document != IntPtr.Zero)
             PdfCraftNative.pc_free_document(document);
     }

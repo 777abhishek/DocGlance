@@ -26,23 +26,8 @@ public static class AppRegistration
 {
     // ── Supported extensions (used by both builds for the Settings UI list) ──
 
-    public static readonly IReadOnlyList<string> SupportedExtensions = new[]
-    {
-        // Documents
-        ".pdf",
-        // Plain text / config
-        ".txt", ".log", ".csv", ".tsv", ".ini", ".cfg", ".conf",
-        ".env", ".toml", ".yaml", ".yml", ".properties",
-        ".gitignore", ".editorconfig",
-        // Code
-        ".cs", ".vb", ".fs", ".js", ".mjs", ".ts", ".tsx", ".jsx",
-        ".py", ".java", ".kt", ".cpp", ".c", ".h", ".go", ".rs",
-        ".swift", ".rb", ".php", ".sh", ".ps1", ".bat",
-        ".html", ".htm", ".css", ".scss", ".json", ".xml", ".xaml",
-        ".sql", ".md", ".markdown",
-        // Office
-        ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt", ".rtf",
-    };
+    public static readonly IReadOnlyList<string> SupportedExtensions =
+        QuickView.Core.Constants.SupportedExtensions.All;
 
 #if PACKAGED
 

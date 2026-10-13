@@ -106,7 +106,13 @@ public static class Program
             if (!mainInstance.IsCurrent)
             {
                 var activatedArgs = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs();
-                mainInstance.RedirectActivationToAsync(activatedArgs).AsTask().Wait();
+                // Redirect from a thread-pool thread: blocking an STA thread directly on this
+                // WinRT call can deadlock. Bounded wait so a hung primary instance can't hang us.
+                var redirected = System.Threading.Tasks.Task
+                    .Run(() => mainInstance.RedirectActivationToAsync(activatedArgs).AsTask())
+                    .Wait(TimeSpan.FromSeconds(10));
+                if (!redirected)
+                    Debug.WriteLine("[AppInstance] Activation redirect timed out");
                 return;
             }
         }

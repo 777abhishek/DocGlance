@@ -86,9 +86,35 @@ public static class PdfRenderer
         }
 
         if (document == IntPtr.Zero)
-            return new PdfOpenResult(null, "PdfCraft could not parse the PDF.");
+        {
+            // PdfCraft does not support encryption; give the user a precise reason instead of
+            // a generic parse failure.
+            return LooksEncrypted(bytes)
+                ? new PdfOpenResult(null, EncryptedMessage)
+                : new PdfOpenResult(null, "PdfCraft could not parse the PDF.");
+        }
 
         return FinishOpen(document);
+    }
+
+    private const string EncryptedMessage =
+        "This PDF is password-protected (encrypted). QuickView can't open encrypted PDFs yet.";
+
+    /// <summary>
+    /// Cheap heuristic: an encrypted PDF carries an <c>/Encrypt</c> entry in a trailer or
+    /// cross-reference stream dictionary, found near the start (linearized) or end of the file.
+    /// Only used after the native open has already failed.
+    /// </summary>
+    internal static bool LooksEncrypted(byte[] bytes)
+    {
+        ReadOnlySpan<byte> needle = "/Encrypt"u8;
+        const int head = 4 * 1024;
+        const int tail = 64 * 1024;
+
+        var span = bytes.AsSpan();
+        if (span[..Math.Min(head, span.Length)].IndexOf(needle) >= 0)
+            return true;
+        return span[Math.Max(0, span.Length - tail)..].IndexOf(needle) >= 0;
     }
 
     private static PdfOpenResult FinishOpen(IntPtr document)
@@ -146,7 +172,8 @@ public static class PdfRenderer
 
         try
         {
-            return NativeBitmap.FromRgba(image.Pixels, image.Width, image.Height, image.Len);
+            // Awaited inside the try so the native buffer outlives the UI-thread copy.
+            return await NativeBitmap.FromRgbaAsync(image.Pixels, image.Width, image.Height, image.Len);
         }
         finally
         {

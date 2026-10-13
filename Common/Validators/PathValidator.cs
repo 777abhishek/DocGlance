@@ -1,18 +1,14 @@
 using System;
 using System.IO;
-using System.Runtime.InteropServices;
 
 namespace QuickView.Common.Validators;
 
 /// <summary>
 /// Provides security validation for file paths to prevent symlink, junction, and UNC path attacks.
+/// Non-link reparse points (for example OneDrive / cloud-files placeholders) are allowed.
 /// </summary>
 public static class PathValidator
 {
-    private const int FILE_ATTRIBUTE_REPARSE_POINT = 0x400;
-
-    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern uint GetFileAttributes(string lpFileName);
 
     /// <summary>
     /// Validates that a file path is safe to open.
@@ -58,18 +54,18 @@ public static class PathValidator
                 return false;
             }
 
-            // Check for reparse points (symlinks, junctions, mount points)
-            if (IsReparsePoint(fullPath))
+            // Check for symlinks / junctions on the file itself
+            if (IsSymlinkOrJunction(new FileInfo(fullPath)))
             {
                 error = "Symbolic links and junctions are not supported for security reasons";
                 return false;
             }
 
-            // Check parent directories for reparse points
+            // Check parent directories for symlinks / junctions
             var directory = Path.GetDirectoryName(fullPath);
             while (!string.IsNullOrEmpty(directory))
             {
-                if (Directory.Exists(directory) && IsReparsePoint(directory))
+                if (Directory.Exists(directory) && IsSymlinkOrJunction(new DirectoryInfo(directory)))
                 {
                     error = "Parent directory contains symbolic links or junctions";
                     return false;
@@ -108,29 +104,22 @@ public static class PathValidator
     }
 
     /// <summary>
-    /// Checks if a path is a reparse point (symlink, junction, mount point).
-    /// Returns TRUE (fail-safe) on access-denied or other errors to block
-    /// potentially suspicious paths we can't verify.
+    /// True when the entry is a real symbolic link or junction. A reparse point that is not a
+    /// link (OneDrive Files On-Demand placeholders, dedup, etc.) has no <c>LinkTarget</c> and is
+    /// allowed. Returns TRUE (fail-safe) when the attributes cannot be read.
     /// </summary>
-    private static bool IsReparsePoint(string path)
+    private static bool IsSymlinkOrJunction(FileSystemInfo info)
     {
         try
         {
-            var attributes = GetFileAttributes(path);
-            
-            // INVALID_FILE_ATTRIBUTES = 0xFFFFFFFF (means GetFileAttributes failed)
-            if (attributes == 0xFFFFFFFF)
-            {
-                // Could be access-denied, non-existent path, or a protected symlink.
-                // Fail-safe: treat as suspicious and block it.
-                return true;
-            }
+            if ((info.Attributes & FileAttributes.ReparsePoint) == 0)
+                return false;
 
-            return (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+            return info.LinkTarget != null;
         }
         catch
         {
-            // Any exception (access-denied, security error, etc.) should block the path.
+            // Access-denied or other errors: block the path we cannot verify.
             return true;
         }
     }

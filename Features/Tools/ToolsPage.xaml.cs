@@ -19,6 +19,7 @@ using Windows.Storage.Streams;
 using Windows.Storage.Pickers;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.System;
+using QuickView.Common.Validators;
 using QuickView.Rendering.Document;
 using QuickView.Rendering.Presentation;
 using QuickView.Infrastructure.Logging;
@@ -262,6 +263,18 @@ public sealed partial class ToolsPage : Page
         ConvertWordButton.IsEnabled = !string.IsNullOrEmpty(_wordInputFile) && !string.IsNullOrEmpty(_wordOutputFile);
     }
 
+    /// <summary>
+    /// Applies the same path-safety and size limits as the viewer to a tool input file.
+    /// Throws <see cref="InvalidOperationException"/> with a user-presentable message.
+    /// </summary>
+    private static void EnsureInputUsable(string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+            throw new InvalidOperationException("No input file selected.");
+        if (!FileSizeValidator.IsFileValidAndSafe(path, out var error))
+            throw new InvalidOperationException(error);
+    }
+
     private async void ConvertWord_Click(object sender, RoutedEventArgs e)
     {
         if (string.IsNullOrEmpty(_wordInputFile) || string.IsNullOrEmpty(_wordOutputFile))
@@ -274,7 +287,8 @@ public sealed partial class ToolsPage : Page
 
         try
         {
-            var doc = await DocxDocument.OpenAsync(_wordInputFile);
+            EnsureInputUsable(_wordInputFile);
+            using var doc = await DocxDocument.OpenAsync(_wordInputFile);
             if (doc == null)
             {
                 WordStatus.Text = "❌ Failed to open Word document";
@@ -362,6 +376,7 @@ public sealed partial class ToolsPage : Page
 
         try
         {
+            EnsureInputUsable(_pptInputFile);
             using var pres = await PptxDocument.OpenAsync(_pptInputFile);
             if (pres == null)
             {
@@ -446,6 +461,7 @@ public sealed partial class ToolsPage : Page
 
         try
         {
+            EnsureInputUsable(_excelInputFile);
             using var workbook = await SpreadsheetDocument.OpenAsync(_excelInputFile);
             if (workbook == null) { ExcelStatus.Text = "Failed to open spreadsheet"; return; }
             if (_selectedTool == "ExcelToPdf")
@@ -627,7 +643,44 @@ public sealed partial class ToolsPage : Page
 
     private async Task MergePdfsAsync()
     {
-        string paths = string.Join(";", _pdfMergeFiles.Select(f => f.FilePath));
+        foreach (var item in _pdfMergeFiles)
+            EnsureInputUsable(item.FilePath);
+
+        // The native merge takes a ';'-separated list, but ';' is a legal character in Windows
+        // file names. Such files are merged from a temporary copy with a safe name.
+        string? tempDir = null;
+        var mergePaths = new List<string>();
+        try
+        {
+            foreach (var item in _pdfMergeFiles)
+            {
+                if (!item.FilePath.Contains(';'))
+                {
+                    mergePaths.Add(item.FilePath);
+                    continue;
+                }
+
+                tempDir ??= Path.Combine(Path.GetTempPath(), "QuickView", "pdf-merge-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(tempDir);
+                var copy = Path.Combine(tempDir, $"{mergePaths.Count:000}.pdf");
+                File.Copy(item.FilePath, copy);
+                mergePaths.Add(copy);
+            }
+
+            await MergePdfPathsAsync(mergePaths);
+        }
+        finally
+        {
+            if (tempDir != null)
+            {
+                try { Directory.Delete(tempDir, recursive: true); } catch { }
+            }
+        }
+    }
+
+    private async Task MergePdfPathsAsync(IReadOnlyList<string> mergePaths)
+    {
+        string paths = string.Join(";", mergePaths);
         IntPtr pathBuffer = Marshal.StringToCoTaskMemUTF8(paths);
         try
         {
@@ -682,8 +735,8 @@ public sealed partial class ToolsPage : Page
                 throw new InvalidOperationException("Select at least one page to split.");
         }
 
-        byte[] bytes = await File.ReadAllBytesAsync(_pdfInputFile!);
-        var opened = await PdfRenderer.OpenDocumentFromBytesAsync(bytes);
+        // Opens by path: validates the file and avoids a second managed copy of it.
+        var opened = await PdfRenderer.OpenDocumentAsync(_pdfInputFile!);
         if (!opened.Ok)
             throw new InvalidOperationException(opened.Error ?? "PdfCraft could not open the PDF.");
         using var document = opened.Document!;
@@ -699,9 +752,18 @@ public sealed partial class ToolsPage : Page
         IntPtr pageIndices = Marshal.StringToCoTaskMemUTF8(indices);
         try
         {
-            uint count = await Task.Run(() => PdfCraftNative.pc_split_pdf_selected(
-                document.Handle, pageIndices, (nuint)Encoding.UTF8.GetByteCount(indices),
-                outputDir, (nuint)Encoding.UTF8.GetByteCount(outputDirectory)));
+            uint count = await Task.Run(() =>
+            {
+                var (handle, lease) = document.BeginNativeCall();
+                if (lease == null) return 0u;
+                try
+                {
+                    return PdfCraftNative.pc_split_pdf_selected(
+                        handle, pageIndices, (nuint)Encoding.UTF8.GetByteCount(indices),
+                        outputDir, (nuint)Encoding.UTF8.GetByteCount(outputDirectory));
+                }
+                finally { lease.Dispose(); }
+            });
             if (count == 0)
                 throw new InvalidOperationException("PdfCraft could not split the PDF.");
             await using (var output = File.Create(_pdfOutputFile!))
@@ -728,8 +790,7 @@ public sealed partial class ToolsPage : Page
 
     private async Task ExportPdfPngZipAsync()
     {
-        byte[] bytes = await File.ReadAllBytesAsync(_pdfInputFile!);
-        var opened = await PdfRenderer.OpenDocumentFromBytesAsync(bytes);
+        var opened = await PdfRenderer.OpenDocumentAsync(_pdfInputFile!);
         if (!opened.Ok)
             throw new InvalidOperationException(opened.Error ?? "PdfCraft could not open the PDF.");
         using var document = opened.Document!;
@@ -738,7 +799,13 @@ public sealed partial class ToolsPage : Page
 
         for (uint page = 0; page < document.PageCount; page++)
         {
-            var png = await Task.Run(() => PdfCraftNative.pc_export_to_png(document.Handle, page, 144));
+            var png = await Task.Run(() =>
+            {
+                var (handle, lease) = document.BeginNativeCall();
+                if (lease == null) return default(PdfCraftNative.PcPngBuffer);
+                try { return PdfCraftNative.pc_export_to_png(handle, page, 144); }
+                finally { lease.Dispose(); }
+            });
             try
             {
                 if (png.Data == IntPtr.Zero || png.Len == 0)
