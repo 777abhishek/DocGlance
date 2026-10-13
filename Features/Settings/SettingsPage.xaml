@@ -296,7 +296,7 @@
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                             <TextBlock Text="Thumbnail cache size" />
                             <TextBlock Style="{StaticResource SettingDescriptionStyle}"
-                                       Text="Maximum memory for cached PDF thumbnails" />
+                                       Text="Maximum disk space for Home-page file thumbnails" />
                         </StackPanel>
                         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                             <Slider x:Name="CacheSizeSlider" Width="140"

@@ -19,9 +19,8 @@
 
 use std::panic;
 use std::slice;
-use std::sync::OnceLock;
+use std::sync::Mutex;
 
-use deckcraft_fonts::FontDb;
 use deckcraft_render::RenderOpts;
 
 // ── Public types ──────────────────────────────────────────────────────────────
@@ -29,9 +28,7 @@ use deckcraft_render::RenderOpts;
 /// Opaque handle returned by dc_open_pptx.
 pub struct DcDocument {
     presentation: deckcraft_model::Presentation,
-    #[allow(dead_code)]
-    fonts: FontDb,
-    slide_text_cache: OnceLock<Vec<SlideText>>,
+    slide_text_cache: Mutex<Vec<Option<SlideText>>>,
 }
 
 /// Pixel buffer returned by dc_render_slide.
@@ -108,12 +105,37 @@ fn extract_slide_search_data(presentation: &deckcraft_model::Presentation, index
     SlideText { text, char_rects }
 }
 
-fn cached_slide_text(doc: &DcDocument) -> &Vec<SlideText> {
-    doc.slide_text_cache.get_or_init(|| {
-        (0..doc.presentation.slides.len())
-            .map(|index| extract_slide_search_data(&doc.presentation, index))
-            .collect()
-    })
+fn slide_text<'a>(doc: &'a DcDocument, index: usize) -> Option<std::sync::MutexGuard<'a, Vec<Option<SlideText>>>> {
+    let mut cache = doc.slide_text_cache.lock().unwrap_or_else(|e| e.into_inner());
+    if index >= cache.len() {
+        return None;
+    }
+    if cache[index].is_none() {
+        cache[index] = Some(extract_slide_search_data(&doc.presentation, index));
+    }
+    Some(cache)
+}
+
+fn rgba_to_premul_bgra_inplace(buf: &mut [u8]) {
+    for px in buf.chunks_exact_mut(4) {
+        let r = px[0];
+        let g = px[1];
+        let b = px[2];
+        let a = px[3];
+        if a == 255 {
+            px[0] = b;
+            px[1] = g;
+            px[2] = r;
+        } else if a == 0 {
+            px[0] = 0;
+            px[1] = 0;
+            px[2] = 0;
+        } else {
+            px[0] = ((b as u16 * a as u16 + 127) / 255) as u8;
+            px[1] = ((g as u16 * a as u16 + 127) / 255) as u8;
+            px[2] = ((r as u16 * a as u16 + 127) / 255) as u8;
+        }
+    }
 }
 
 fn find_matches(text: &str, query: &str, case_sensitive: bool) -> Vec<(usize, usize)> {
@@ -184,13 +206,10 @@ pub extern "C" fn dc_open_pptx(data: *const u8, len: usize) -> *mut DcDocument {
             Err(_) => return std::ptr::null_mut(),
         };
 
-        // Initialize font database with system fonts
-        let fonts = FontDb::with_font_dirs(vec![]);
-
+        let slide_count = presentation.slides.len();
         let doc = Box::new(DcDocument {
             presentation,
-            fonts,
-            slide_text_cache: OnceLock::new(),
+            slide_text_cache: Mutex::new((0..slide_count).map(|_| None).collect()),
         });
 
         Box::into_raw(doc)
@@ -258,22 +277,21 @@ pub extern "C" fn dc_render_slide(
 
         let opts = RenderOpts {
             scale,
-            threads: 4,   // use 4 worker threads — fast but not greedy
+            // Two threads keep peak tile buffers down vs 4 workers; visual output is identical.
+            threads: 2,
             ..Default::default()
         };
 
-        // Use the public render_slide function (takes pres, index, opts)
         let img = deckcraft_render::render_slide(pres, index as usize, &opts);
+        let w = img.width;
+        let h = img.height;
+        let mut pixels = img.to_straight();
+        drop(img);
+        rgba_to_premul_bgra_inplace(&mut pixels);
 
-        // Convert premultiplied RGBA → straight RGBA
-        let mut straight = img.to_straight();
-        straight.shrink_to_fit();
-
-        let w   = img.width;
-        let h   = img.height;
-        let len = straight.len();
-        let ptr = straight.as_mut_ptr();
-        std::mem::forget(straight);   // C# now owns the buffer
+        let len = pixels.len();
+        let ptr = pixels.as_mut_ptr();
+        std::mem::forget(pixels);
 
         DcImage { pixels: ptr, width: w, height: h, len }
     })
@@ -331,7 +349,8 @@ pub extern "C" fn dc_extract_slide_text(
         
         if index as usize >= doc.presentation.slides.len() { return 0; }
 
-        let Some(slide_text) = cached_slide_text(doc).get(index as usize) else { return 0; };
+        let Some(cache) = slide_text(doc, index as usize) else { return 0; };
+        let Some(slide_text) = cache.get(index as usize).and_then(|s| s.as_ref()) else { return 0; };
 
         let bytes = slide_text.text.as_bytes();
         let copy = bytes.len().min(buf_len);
@@ -368,8 +387,11 @@ pub extern "C" fn dc_search_text(
         };
         
         let mut results = Vec::new();
-        
-        for (slide_idx, slide_text) in cached_slide_text(doc).iter().enumerate() {
+        let slide_count = doc.presentation.slides.len();
+
+        for slide_idx in 0..slide_count {
+            let Some(cache) = slide_text(doc, slide_idx) else { continue; };
+            let Some(slide_text) = cache.get(slide_idx).and_then(|s| s.as_ref()) else { continue; };
             for (char_index, length) in find_matches(&slide_text.text, query_str, case_sensitive) {
                 let match_end = char_index.saturating_add(length).min(slide_text.char_rects.len());
                 let mut rects: Vec<SearchRect> = Vec::new();

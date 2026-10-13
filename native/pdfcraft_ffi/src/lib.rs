@@ -162,12 +162,14 @@ pub extern "C" fn pc_render_page(doc: *const PcDocument, index: u32, dpi: f64) -
         if rendered.error.is_some() || rendered.rgba.is_empty() {
             return Some(PcImage::null());
         }
+        let width = rendered.width;
+        let height = rendered.height;
         let mut pixels = rendered.rgba.into_words();
         let len = pixels.len().checked_mul(4)?;
         let result = PcImage {
             pixels: pixels.as_mut_ptr().cast(),
-            width: rendered.width,
-            height: rendered.height,
+            width,
+            height,
             len,
         };
         std::mem::forget(pixels);

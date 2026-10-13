@@ -1,4 +1,5 @@
 using Microsoft.UI.Xaml.Media.Imaging;
+using QuickView.Rendering;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -116,7 +117,7 @@ public sealed class DocxDocument : IDisposable
 
             try
             {
-                return CreateBitmapFromRgba(img);
+                return NativeBitmap.FromBgra(img.Pixels, img.Width, img.Height, img.Len);
             }
             finally
             {
@@ -245,45 +246,6 @@ public sealed class DocxDocument : IDisposable
                 _handle = default;
             }
         }
-    }
-
-    /// <summary>
-    /// Convert WcImage (straight RGBA8) → WriteableBitmap (premul BGRA8).
-    /// </summary>
-    private static unsafe WriteableBitmap CreateBitmapFromRgba(WordCraftNative.WcImage img)
-    {
-        var w = (int)img.Width;
-        var h = (int)img.Height;
-        var bmp = new WriteableBitmap(w, h);
-
-        using var stream = bmp.PixelBuffer.AsStream();
-        var bgra = new byte[img.Len];
-
-        var rgba = new Span<byte>((void*)img.Pixels, (int)img.Len);
-        for (int i = 0; i < rgba.Length; i += 4)
-        {
-            byte r = rgba[i];
-            byte g = rgba[i + 1];
-            byte b = rgba[i + 2];
-            byte a = rgba[i + 3];
-
-            // Premultiply: C' = C * A / 255
-            if (a != 0 && a != 255)
-            {
-                r = (byte)((r * a + 127) / 255);
-                g = (byte)((g * a + 127) / 255);
-                b = (byte)((b * a + 127) / 255);
-            }
-
-            bgra[i]     = b;
-            bgra[i + 1] = g;
-            bgra[i + 2] = r;
-            bgra[i + 3] = a;
-        }
-
-        stream.Write(bgra, 0, bgra.Length);
-        bmp.Invalidate();
-        return bmp;
     }
 
     /// <summary>

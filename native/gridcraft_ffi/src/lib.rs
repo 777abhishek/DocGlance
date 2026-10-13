@@ -447,9 +447,9 @@ pub extern "C" fn gc_get_sheet_data_json(
             Some(r) => (r.end.row as usize + 1, r.end.col as usize + 1),
             None => (0, 0),
         };
-        // Cap at 2000 rows × 500 cols to keep JSON reasonably sized
-        let row_count = row_count.min(2000);
-        let col_count = col_count.min(500);
+        // Cap used range so the JSON + parsed grid stay within a few tens of MB.
+        let row_count = row_count.min(1500);
+        let col_count = col_count.min(256);
 
         // ── helpers ──────────────────────────────────────────────────────────
         let color_hex = |c: gridcraft_model::style::Color| -> Option<String> {
@@ -491,7 +491,7 @@ pub extern "C" fn gc_get_sheet_data_json(
         };
 
         // ── build JSON manually ───────────────────────────────────────────────
-        let mut json = String::with_capacity(256 * 1024);
+        let mut json = String::with_capacity(64 * 1024);
         json.push('{');
 
         // sheet metadata

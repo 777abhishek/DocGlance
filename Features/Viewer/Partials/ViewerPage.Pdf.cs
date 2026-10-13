@@ -7,6 +7,7 @@ using QuickView.Services.Documents;
 using QuickView.UI.Controls;
 using QuickView.Infrastructure.Logging;
 using QuickView.Core.Models;
+using QuickView.Rendering;
 using QuickView.Rendering.Pdf;
 using System;
 using System.Collections.Generic;
@@ -224,8 +225,7 @@ public sealed partial class ViewerPage
 
             Infrastructure.Logging.Logger.Log("[PDF] Starting thumbnail prefetch");
             
-            // BUGFIX: Render all thumbnails, not just first 5 pages
-            _ = PrefetchAllThumbnailsAsync(_pdfState, ct);
+            _ = PrefetchThumbnailsAroundAsync(0, _pdfState, ct);
             
             Infrastructure.Logging.Logger.Log("[PDF] LoadPdfAsync completed successfully");
         }
@@ -280,28 +280,16 @@ public sealed partial class ViewerPage
 
     // ── Thumbnail Rendering ───────────────────────────────────────────────────
 
-    private async Task PrefetchAllThumbnailsAsync(PdfDocumentState pdfState, CancellationToken ct)
-    {
-        if (SidebarCard.Visibility != Visibility.Visible) return;
-        
-        // Render all thumbnails in order
-        for (int pageIndex = 0; pageIndex < pdfState.PageCount; pageIndex++)
-        {
-            if (ct.IsCancellationRequested) return;
-            await RenderThumbnailAsync(pdfState, pageIndex, ct);
-        }
-    }
-
     private async Task PrefetchThumbnailsAroundAsync(
         int centerPage, PdfDocumentState pdfState, CancellationToken ct)
     {
         if (SidebarCard.Visibility != Visibility.Visible) return;
 
-        int first = Math.Max(0, centerPage - 4);
-        int last  = Math.Min(pdfState.PageCount - 1, centerPage + 4);
+        int first = Math.Max(0, centerPage - 8);
+        int last  = Math.Min(pdfState.PageCount - 1, centerPage + 8);
 
         var queue = new List<int> { centerPage };
-        for (int offset = 1; offset <= 4; offset++)
+        for (int offset = 1; offset <= 8; offset++)
         {
             if (centerPage + offset <= last) queue.Add(centerPage + offset);
             if (centerPage - offset >= first) queue.Add(centerPage - offset);
@@ -623,9 +611,10 @@ public sealed partial class ViewerPage
                 return;
             }
             
-            // Calculate which slides are visible in viewport
-            double scrollY = DocumentScrollViewer.VerticalOffset;
-            double viewportHeight = DocumentScrollViewer.ViewportHeight;
+            // Canvas is in un-zoomed layout pixels; ScrollViewer offsets are zoomed.
+            double zoom = Math.Max(0.01, DocumentScrollViewer.ZoomFactor);
+            double scrollY = DocumentScrollViewer.VerticalOffset / zoom;
+            double viewportHeight = DocumentScrollViewer.ViewportHeight / zoom;
             
             Logger.Log($"Viewport: width={DocumentScrollViewer.ViewportWidth}, height={viewportHeight}, scrollY={scrollY}");
             
@@ -643,10 +632,7 @@ public sealed partial class ViewerPage
             
             // Render at the zoomed display's pixel density, with a small
             // oversample for text and a cap to limit per-slide memory.
-            double renderScale = Math.Clamp(
-                _zoom * DisplayScale * PtToLp * 1.15,
-                1.8,
-                6.0);
+            double renderScale = RenderBudget.OfficeScale(_zoom, DisplayScale, widthPt, heightPt);
             
             Logger.Log($"Render scale: {renderScale:F2} (zoom={_zoom:F2}, display={DisplayScale:F2})");
             
@@ -695,8 +681,8 @@ public sealed partial class ViewerPage
             
             // Remove slides that are too far from viewport (free memory)
             // Aggressive cleanup: only keep visible slides + 3 buffer
-            var toRemove = _pptxSlideCache.Keys.Where(idx => 
-                idx < firstSlide - 3 || idx > lastSlide + 3).ToList();
+            var toRemove = _pptxSlideCache.Keys.Where(idx =>
+                idx < firstSlide || idx > lastSlide).ToList();
             
             foreach (int idx in toRemove)
             {
@@ -748,7 +734,7 @@ public sealed partial class ViewerPage
         // Re-render when zoom or display density has changed enough to affect
         // the source bitmap's pixel density.
         bool needsRerender =
-            Math.Abs(_zoom - _lastPptxRenderZoom) > (_lastPptxRenderZoom * 0.08) ||
+            Math.Abs(_zoom - _lastPptxRenderZoom) > (_lastPptxRenderZoom * 0.10) ||
             Math.Abs(DisplayScale - _lastPptxRenderDisplayScale) > 0.05;
         
         // Render visible slides when scroll/zoom settles
@@ -882,7 +868,7 @@ public sealed partial class ViewerPage
             try
             {
                 // Render thumbnail at low resolution (0.3x for better quality than 0.2x)
-                var thumb = await _pptxDocument.RenderSlideAsync(i, scale: 0.3, default);
+                var thumb = await _pptxDocument.RenderSlideAsync(i, scale: RenderBudget.ThumbnailOfficeScale, default);
                 if (thumb != null && i < Thumbnails.Count)
                 {
                     Thumbnails[i].Thumbnail = thumb;
@@ -1088,7 +1074,7 @@ public sealed partial class ViewerPage
         }
 
         bool needsRerender =
-            Math.Abs(_zoom - _lastDocxRenderZoom) > (_lastDocxRenderZoom * 0.08) ||
+            Math.Abs(_zoom - _lastDocxRenderZoom) > (_lastDocxRenderZoom * 0.10) ||
             Math.Abs(DisplayScale - _lastDocxRenderDisplayScale) > 0.05;
         if (!e.IsIntermediate)
         {
@@ -1225,10 +1211,8 @@ public sealed partial class ViewerPage
                 {
                     // Render above the display's pixel density for crisp text,
                     // while capping resolution to keep page memory bounded.
-                    double renderScale = Math.Clamp(
-                        Math.Max(1.5, _zoom * DisplayScale * PtToLp * 1.25),
-                        1.5,
-                        6.0);
+                    double renderScale = RenderBudget.OfficeScale(
+                        _zoom, DisplayScale, w * 72.0 / PtToLp, h * 72.0 / PtToLp);
                     var bmp = await _docxDocument.RenderPageAsync(i, renderScale);
                     if (bmp == null) continue;
 
@@ -1251,7 +1235,7 @@ public sealed partial class ViewerPage
 
             // Remove pages far from viewport
             var toRemove = _docxPageCache.Keys.Where(idx =>
-                idx < renderStart - 2 || idx > renderEnd + 2).ToList();
+                idx < renderStart || idx > renderEnd).ToList();
 
             foreach (int idx in toRemove)
             {
@@ -1289,7 +1273,7 @@ public sealed partial class ViewerPage
         {
             try
             {
-                var thumb = await _docxDocument.RenderPageAsync(i, scale: 0.3, default);
+                var thumb = await _docxDocument.RenderPageAsync(i, scale: RenderBudget.ThumbnailOfficeScale, default);
                 if (thumb != null && i < Thumbnails.Count)
                 {
                     Thumbnails[i].Thumbnail = thumb;

@@ -62,6 +62,28 @@ macro_rules! catch {
     };
 }
 
+fn rgba_to_premul_bgra_inplace(buf: &mut [u8]) {
+    for px in buf.chunks_exact_mut(4) {
+        let r = px[0];
+        let g = px[1];
+        let b = px[2];
+        let a = px[3];
+        if a == 255 {
+            px[0] = b;
+            px[1] = g;
+            px[2] = r;
+        } else if a == 0 {
+            px[0] = 0;
+            px[1] = 0;
+            px[2] = 0;
+        } else {
+            px[0] = ((b as u16 * a as u16 + 127) / 255) as u8;
+            px[1] = ((g as u16 * a as u16 + 127) / 255) as u8;
+            px[2] = ((r as u16 * a as u16 + 127) / 255) as u8;
+        }
+    }
+}
+
 // ── Exported functions ────────────────────────────────────────────────────────
 
 /// Parse a DOCX file from a byte slice and compute layout.
@@ -181,16 +203,15 @@ pub extern "C" fn wc_render_page(doc: *const WcDocument, index: u32, scale: f64)
         };
 
         let rendered = render_page(&doc.doc, page, scale as f32, &opts);
-
-        // Convert premultiplied RGBA → straight RGBA
-        let mut straight = rendered.to_straight();
-        straight.shrink_to_fit();
-
         let w = rendered.width;
         let h = rendered.height;
-        let len = straight.len();
-        let ptr = straight.as_mut_ptr();
-        std::mem::forget(straight); // C# now owns the buffer
+        let mut pixels = rendered.to_straight();
+        drop(rendered);
+        rgba_to_premul_bgra_inplace(&mut pixels);
+
+        let len = pixels.len();
+        let ptr = pixels.as_mut_ptr();
+        std::mem::forget(pixels);
 
         WcImage {
             pixels: ptr,

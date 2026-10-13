@@ -134,6 +134,6 @@ public static class AppSettings
         public bool RestoreWindowSize { get; set; } = true;
 
         // Performance
-        public int ThumbnailCacheSizeMB { get; set; } = 500;
+        public int ThumbnailCacheSizeMB { get; set; } = 200;
     }
 }

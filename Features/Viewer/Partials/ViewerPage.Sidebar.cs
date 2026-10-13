@@ -6,6 +6,7 @@ using QuickView.Rendering.Pdf;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 
 namespace QuickView.Features.Viewer;
 
@@ -101,6 +102,9 @@ public sealed partial class ViewerPage
             Thumbnails[previousIndex].IsSelected = false;
         if (index >= 0 && index < Thumbnails.Count)
             Thumbnails[index].IsSelected = true;
+
+        if (_pdfState != null)
+            _ = PrefetchThumbnailsAroundAsync(index, _pdfState, CancellationToken.None);
 
         SyncThumbnailSelection(index);
     }

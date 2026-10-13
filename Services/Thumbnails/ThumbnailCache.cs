@@ -1,4 +1,5 @@
 using Microsoft.UI.Xaml.Media.Imaging;
+using QuickView.Infrastructure.Configuration;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -13,7 +14,7 @@ namespace QuickView.Services.Thumbnails;
 /// <summary>
 /// Disk-based PNG cache for thumbnails.
 /// Cache key = MD5(filePath|lastWriteUtcTicks|fileSize).
-/// H5: Automatic eviction when cache exceeds 500 MB, keeping most recently accessed files.
+/// Disk eviction uses <see cref="AppSettings.ThumbnailCacheSize"/>.
 /// </summary>
 public static class ThumbnailCache
 {
@@ -21,9 +22,8 @@ public static class ThumbnailCache
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "QuickView", "thumbcache");
 
-    // H5: Cache size thresholds
-    private const long MaxCacheSizeBytes = 500 * 1024 * 1024; // 500 MB
-    private const long TargetCacheSizeBytes = (long)(MaxCacheSizeBytes * 0.8); // 400 MB (80%)
+    private static long MaxCacheSizeBytes => Math.Max(50L * 1024 * 1024, AppSettings.ThumbnailCacheSize);
+    private static long TargetCacheSizeBytes => (long)(MaxCacheSizeBytes * 0.8);
     
     private static bool _evictionScheduled = false;
     private static readonly object _evictionLock = new();

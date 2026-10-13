@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
 using QuickView.Core.Models;
+using QuickView.Rendering;
 using QuickView.Rendering.Pdf;
 using System;
 using System.Buffers;
@@ -30,23 +31,22 @@ public sealed partial class ViewerPage
     private const double PtToLp   = 96.0 / 72.0;
     private const double LpToPt   = 72.0 / 96.0;
     private const double PageGapLp = 12.0;           // gap between pages in layout pixels
-    private const double PdfRenderQualityMultiplier = 1.25;
 
     private PdfViewportState? _viewportState;
 
     // Per-page Image controls on the canvas
     private readonly Dictionary<int, Image> _pdfPageCache = new();
+    private readonly Dictionary<int, float> _pdfPageDpi = new();
     // FEAT-004: Memory budget tracking
     private long _cachedBitmapBytes = 0L;
     private readonly Dictionary<int, long> _pdfPageByteSize = new();
-    private const long MaxCacheBudgetBytes = 200_000_000L; // 200 MB budget
+    private const long MaxCacheBudgetBytes = RenderBudget.MaxViewerCacheBytes;
     
     private CancellationTokenSource? _renderCts;
     private float _lastRenderZoom = -1f;
 
-    // Allow up to (CPU count) concurrent PdfCraft renders.
-    private static readonly SemaphoreSlim _renderSemaphore =
-        new(Math.Max(1, Environment.ProcessorCount), Math.Max(1, Environment.ProcessorCount));
+    // PdfCraft serializes on a Mutex; extra in-flight pages only duplicate pixmaps in RAM.
+    private static readonly SemaphoreSlim _renderSemaphore = new(1, 1);
 
     // ── Improvement 2: Cached page Y-offsets ──────────────────────────────────
     // Pre-computed so GetPageTopLp is O(1) instead of O(n) on every call.
@@ -100,6 +100,7 @@ public sealed partial class ViewerPage
             img.Source = null;
         }
         _pdfPageCache.Clear();
+        _pdfPageDpi.Clear();
 
         // FEAT-004: Reset memory budget tracking
         _cachedBitmapBytes = 0L;
@@ -156,44 +157,19 @@ public sealed partial class ViewerPage
                 return;
             }
 
-            float zoom = DocumentScrollViewer.ZoomFactor;
+            float zoom = Math.Max(0.01f, DocumentScrollViewer.ZoomFactor);
             _viewportState.ZoomFactor       = zoom;
             _viewportState.ViewportWidthPx  = (int)DocumentScrollViewer.ViewportWidth;
             _viewportState.ViewportHeightPx = (int)DocumentScrollViewer.ViewportHeight;
-            _viewportState.ScrollXPt        = DocumentScrollViewer.HorizontalOffset * LpToPt;
-            _viewportState.ScrollYPt        = DocumentScrollViewer.VerticalOffset   * LpToPt;
+            // Canvas is zoom-independent layout pixels; ScrollViewer offsets are zoomed.
+            _viewportState.ScrollXPt        = (DocumentScrollViewer.HorizontalOffset / zoom) * LpToPt;
+            _viewportState.ScrollYPt        = (DocumentScrollViewer.VerticalOffset / zoom) * LpToPt;
 
             UpdateCurrentPageFromScroll();
 
-            // BUGFIX: On zoom change, invalidate cached pages so they re-render at new DPI
-            // But don't clear them immediately - let old ones show until new ones are ready
-            bool zoomChanged = Math.Abs(zoom - _lastRenderZoom) > _lastRenderZoom * 0.15f;
-
             if (!e.IsIntermediate)
             {
-                if (zoomChanged)
-                {
-                    _lastRenderZoom = zoom;
-                    
-                    // Mark all cached pages as needing re-render by clearing cache tracking
-                    // but leave the images visible on canvas until new renders replace them
-                    var cachedPages = _pdfPageCache.Keys.ToList();
-                    foreach (var pageIndex in cachedPages)
-                    {
-                        // Remove from cache tracking so RenderPagesAsync will re-render
-                        _pdfPageCache.Remove(pageIndex);
-                        if (_pdfPageByteSize.TryGetValue(pageIndex, out long byteSize))
-                        {
-                            _cachedBitmapBytes -= byteSize;
-                            _pdfPageByteSize.Remove(pageIndex);
-                        }
-                        // Note: Images stay on canvas and visible until replaced
-                    }
-                    
-                    Infrastructure.Logging.Logger.Log($"[Viewport] Zoom changed to {zoom:F2}, invalidated {cachedPages.Count} cached pages for re-render");
-                }
-                
-                // Render visible pages at current zoom
+                _lastRenderZoom = zoom;
                 DrawAllHighlights();
                 _ = RenderPagesAsync();
             }
@@ -210,8 +186,9 @@ public sealed partial class ViewerPage
     {
         if (_pdfState == null || _viewportState == null) return;
 
-        double scrollYLp = _viewportState.ScrollYPt / LpToPt;
-        double readingY  = scrollYLp + (_viewportState.ViewportHeightPx * 0.1);
+        double zoom = Math.Max(0.01, DocumentScrollViewer.ZoomFactor);
+        double scrollYLp = DocumentScrollViewer.VerticalOffset / zoom;
+        double readingY  = scrollYLp + (DocumentScrollViewer.ViewportHeight / zoom) * 0.1;
 
         double topLp = 0;
         for (int i = 0; i < _pdfState.PageCount; i++)
@@ -266,23 +243,22 @@ public sealed partial class ViewerPage
 
             Infrastructure.Logging.Logger.Log("[Render] Calculating render parameters");
             
-            float  zoom    = DocumentScrollViewer.ZoomFactor;
-            double scrollY = DocumentScrollViewer.VerticalOffset;
-            double vpH     = DocumentScrollViewer.ViewportHeight;
+            float  zoom    = Math.Max(0.01f, DocumentScrollViewer.ZoomFactor);
+            double scrollY = DocumentScrollViewer.VerticalOffset / zoom;
+            double vpH     = DocumentScrollViewer.ViewportHeight / zoom;
             double display = Math.Max(1.0, XamlRoot?.RasterizationScale ?? 1.0);
 
-            Infrastructure.Logging.Logger.Log($"[Render] zoom={zoom:F2}, scrollY={scrollY:F0}, vpH={vpH:F0}, display={display:F2}");
+            Infrastructure.Logging.Logger.Log($"[Render] zoom={zoom:F2}, scrollYLp={scrollY:F0}, vpHLp={vpH:F0}, display={display:F2}");
 
-            // Calculate render DPI from zoom × display scale (no artificial cap)
-            // Byte-size guards in RenderSinglePageAsync prevent OOM
-            float dpi = (float)(96.0 * display * zoom * PdfRenderQualityMultiplier);
+            var sampleSize = GetRotatedPageSize(Math.Clamp(_viewportState.CurrentPageIndex, 0, _pdfState.PageCount - 1));
+            float dpi = RenderBudget.PdfPageDpi(zoom, display, sampleSize.W, sampleSize.H);
             
-            Infrastructure.Logging.Logger.Log($"[Render] Calculated DPI: {dpi:F1} (zoom={zoom:F2} × display={display:F2})");
+            Infrastructure.Logging.Logger.Log($"[Render] Calculated DPI: {dpi:F1} (zoom={zoom:F2} × display={display:F2} × {RenderBudget.TextOversample:F2})");
 
             // Strictly visible pages (no buffer) — highest priority
             var strictVisible = GetVisiblePageRange(scrollY, vpH, 0);
-            // Visible + lookahead buffer for eviction bounds
-            int bufferPages = 2;
+            // Visible + one lookahead page
+            int bufferPages = 1;
             var withBuffer  = GetVisiblePageRange(scrollY, vpH, bufferPages);
             int firstVisible = withBuffer.First;
             int lastVisible  = withBuffer.Last;
@@ -304,6 +280,7 @@ public sealed partial class ViewerPage
                     PdfViewportCanvas.Children.Remove(old);
                     old.Source = null;
                     _pdfPageCache.Remove(k);
+                    _pdfPageDpi.Remove(k);
                     
                     // FEAT-004: Decrement byte count
                     if (_pdfPageByteSize.TryGetValue(k, out long byteSize))
@@ -317,14 +294,25 @@ public sealed partial class ViewerPage
             }
 
             // FEAT-004: Check if we're over budget and need to evict more offscreen pages
+            float TargetDpi(int i)
+            {
+                var size = GetRotatedPageSize(i);
+                return RenderBudget.PdfPageDpi(zoom, display, size.W, size.H);
+            }
+
+            bool NeedsRender(int i) =>
+                !_pdfPageCache.ContainsKey(i) ||
+                !_pdfPageDpi.TryGetValue(i, out float cachedDpi) ||
+                RenderBudget.NeedsRerender(cachedDpi, TargetDpi(i));
+
             var visibleToRender = Enumerable
                 .Range(strictVisible.First, strictVisible.Last - strictVisible.First + 1)
-                .Where(i => !_pdfPageCache.ContainsKey(i))
+                .Where(NeedsRender)
                 .ToList();
 
             var bufferToRender = Enumerable
                 .Range(firstVisible, lastVisible - firstVisible + 1)
-                .Where(i => !_pdfPageCache.ContainsKey(i) && !visibleToRender.Contains(i))
+                .Where(i => NeedsRender(i) && !visibleToRender.Contains(i))
                 .ToList();
 
             // FEAT-004: Estimate bytes needed for new pages (conservative estimate)
@@ -350,6 +338,7 @@ public sealed partial class ViewerPage
                         PdfViewportCanvas.Children.Remove(old);
                         old.Source = null;
                         _pdfPageCache.Remove(k);
+                        _pdfPageDpi.Remove(k);
                         
                         if (_pdfPageByteSize.TryGetValue(k, out long byteSize))
                         {
@@ -425,6 +414,15 @@ public sealed partial class ViewerPage
             }
 
             var (ptW, ptH) = GetRotatedPageSize(pageIndex);
+            float zoom = _viewportState?.ZoomFactor ?? 1f;
+            dpi = RenderBudget.PdfPageDpi(zoom, display, ptW, ptH);
+            if (_pdfPageCache.ContainsKey(pageIndex) &&
+                _pdfPageDpi.TryGetValue(pageIndex, out float cachedDpi) &&
+                !RenderBudget.NeedsRerender(cachedDpi, dpi))
+            {
+                return;
+            }
+
             double pageW = ptW * PtToLp;
             double pageH = ptH * PtToLp;
             double pageY = GetPageTopLp(pageIndex);   // O(1) via cached array
@@ -436,18 +434,15 @@ public sealed partial class ViewerPage
 
             // Validate byte count to prevent integer overflow and OOM
             long byteCount = (long)renderW * renderH * 4;
-            const long MaxSafeBytesPerPage = 100_000_000L; // 100 MB safety limit per page
+            const long MaxSafeBytesPerPage = RenderBudget.MaxPageBitmapBytes;
             
             if (byteCount > MaxSafeBytesPerPage)
             {
-                // Scale down proportionally to fit within budget
                 double scaleFactor = Math.Sqrt((double)MaxSafeBytesPerPage / byteCount);
-                int origW = renderW;
-                int origH = renderH;
-                renderW = Math.Max(1, (int)(renderW * scaleFactor));
-                renderH = Math.Max(1, (int)(renderH * scaleFactor));
+                dpi *= (float)scaleFactor;
+                renderW = Math.Max(1, (int)Math.Round(ptW * dpi / 72.0));
+                renderH = Math.Max(1, (int)Math.Round(ptH * dpi / 72.0));
                 byteCount = (long)renderW * renderH * 4;
-                Infrastructure.Logging.Logger.Log($"[RenderSingle] Page {pageIndex}: Scaled down to {renderW}x{renderH} (from {origW}x{origH}, {byteCount / 1024 / 1024}MB) to fit budget");
             }
 
             Infrastructure.Logging.Logger.Log($"[RenderSingle] Page {pageIndex}: size={renderW}x{renderH} px at {dpi:F0} DPI, pageY={pageY:F0}");
@@ -541,9 +536,9 @@ public sealed partial class ViewerPage
                     Canvas.SetTop(img, pageY);
                 }
 
-                // Set new bitmap source (replaces old low-res with new high-res)
                 img.Source = bitmap;
                 img.Opacity = 1.0;
+                _pdfPageDpi[pageIndex] = dpi;
 
                 // FEAT-004: Track bitmap byte size
                 long byteSize = (long)renderW * renderH * 4;
@@ -567,7 +562,6 @@ public sealed partial class ViewerPage
         catch (Exception ex)
         {
             Infrastructure.Logging.Logger.Error($"[RenderSingle] Exception on page {pageIndex}", ex);
-            throw;
         }
     }
 
