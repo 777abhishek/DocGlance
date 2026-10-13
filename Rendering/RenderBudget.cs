@@ -17,10 +17,11 @@ internal static class RenderBudget
     /// <summary>Decoded pages kept in the viewer cache (visible + small lookahead).</summary>
     public const long MaxViewerCacheBytes = 160L * 1024 * 1024;
 
-    /// <summary>Sidebar thumbs target ~160 CSS px wide, not full 96-DPI pages.</summary>
-    public const float ThumbnailDpi = 48f;
+    /// <summary>Sidebar thumbs target ~160 CSS px wide - reduced DPI for memory efficiency.</summary>
+    public const float ThumbnailDpi = 72f;
 
-    public const double ThumbnailOfficeScale = 0.2;
+    /// <summary>Office thumbnails at 0.5x scale for better quality while staying memory efficient.</summary>
+    public const double ThumbnailOfficeScale = 0.5;
 
     public static float PdfPageDpi(float zoom, double rasterizationScale, double widthPt, double heightPt)
     {
@@ -42,6 +43,16 @@ internal static class RenderBudget
         return ratio < 0.92f || ratio > 1.25f;
     }
 
+    public static bool NeedsRerenderScale(double cachedScale, double targetScale)
+    {
+        if (cachedScale <= 0 || targetScale <= 0)
+            return true;
+
+        double ratio = cachedScale / targetScale;
+        // Reuse if within tolerance: too soft (<0.95) or wastefully large (>1.6) triggers re-render
+        return ratio < 0.95 || ratio > 1.6;
+    }
+
     public static float CapDpi(float dpi, double widthPt, double heightPt)
     {
         double bytes = PixelBytes(widthPt, heightPt, dpi / 72.0);
@@ -54,15 +65,21 @@ internal static class RenderBudget
 
     public static double OfficeScale(double zoom, double rasterizationScale, double widthPt, double heightPt)
     {
-        double scale = (96.0 / 72.0)
-            * Math.Max(1.0, rasterizationScale)
-            * Math.Clamp(zoom, 0.25, 8.0)
-            * TextOversample;
-        double bytes = PixelBytes(widthPt, heightPt, scale);
+        // Render at exactly the physical pixel scale needed for 1:1 display.
+        // WordCraft/DeckCraft use pixels-per-point scale, not DPI
+        // scale = 1.0 means 72 DPI (1 pixel = 1 point)
+        // For 96 DPI standard screen: 96/72 = 1.333
+        // For high-DPI (150% = 144 DPI): 144/72 = 2.0
+        
+        // Base calculation: convert display DPI to scale factor (1:1 with screen pixels)
+        double s = zoom * (96.0 / 72.0) * rasterizationScale;
+        
+        // Budget is the cap only - no quantization, no minimum floor
+        double bytes = PixelBytes(widthPt, heightPt, s);
         if (bytes > MaxPageBitmapBytes && bytes > 0)
-            scale *= Math.Sqrt(MaxPageBitmapBytes / bytes);
+            s *= Math.Sqrt(MaxPageBitmapBytes / bytes);
 
-        return Math.Clamp(scale, 1.0, 6.0);
+        return s;
     }
 
     public static double PixelBytes(double width, double height, double scale)

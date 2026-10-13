@@ -247,7 +247,10 @@ public sealed partial class SpreadsheetViewer : UserControl
             disableAnimation: true);
         _syncingZoom = false;
         SyncHeaderZoomAndOffsets();
-        Invalidate();
+        
+        // Re-invalidate after layout applies to fix blank cells on zoom
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, Invalidate);
+        
         ZoomChanged?.Invoke(this, _zoom);
     }
 
@@ -391,8 +394,9 @@ public sealed partial class SpreadsheetViewer : UserControl
         foreach (var m in _data.Merges)
         {
             _mergeMap[(m.Row, m.Col)] = m;
-            for (int r = m.Row; r <= m.Row + m.RowSpan; r++)
-                for (int c = m.Col; c <= m.Col + m.ColSpan; c++)
+            // If RowSpan/ColSpan are counts (2 = spans 2 cells), use < not <=
+            for (int r = m.Row; r < m.Row + m.RowSpan; r++)
+                for (int c = m.Col; c < m.Col + m.ColSpan; c++)
                     if (r != m.Row || c != m.Col)
                         _covered.Add((r, c));
         }
@@ -481,6 +485,9 @@ public sealed partial class SpreadsheetViewer : UserControl
 
     private void CellScroll_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
     {
+        // CRITICAL: Invalidate cell canvas on EVERY view change to prevent blank cells
+        _cellCanvas?.Invalidate();
+
         if (_syncingScroll || _syncingZoom) return;
 
         double nativeZoom = CellScroll.ZoomFactor;
@@ -589,10 +596,11 @@ public sealed partial class SpreadsheetViewer : UserControl
         double vpH     = CellScroll.ViewportHeight > 0 ? CellScroll.ViewportHeight : Math.Max(ActualHeight, 800);
 
         double zoom = Math.Max(0.01, _zoom);
-        int firstCol = ColAt(scrollX / zoom);
-        int lastCol  = ColAt((scrollX + vpW) / zoom) + 1;
-        int firstRow = RowAt(scrollY / zoom);
-        int lastRow  = RowAt((scrollY + vpH) / zoom) + 1;
+        // Add 0.5x viewport margin to prevent blanks during fast scrolling
+        int firstCol = ColAt((scrollX - vpW * 0.5) / zoom);
+        int lastCol  = ColAt((scrollX + vpW * 1.5) / zoom) + 1;
+        int firstRow = RowAt((scrollY - vpH * 0.5) / zoom);
+        int lastRow  = RowAt((scrollY + vpH * 1.5) / zoom) + 1;
 
         firstCol = Math.Clamp(firstCol, 0, _colX.Length - 2);
         lastCol  = Math.Clamp(lastCol,  0, _colX.Length - 2);
@@ -666,8 +674,9 @@ public sealed partial class SpreadsheetViewer : UserControl
                 // Expand for merges
                 if (_mergeMap.TryGetValue((row, col), out var merge))
                 {
-                    int endR = Math.Min(merge.Row + merge.RowSpan, _rowY.Length - 2);
-                    int endC = Math.Min(merge.Col + merge.ColSpan, _colX.Length - 2);
+                    // If RowSpan/ColSpan are counts, use -1 to get the last cell index
+                    int endR = Math.Min(merge.Row + merge.RowSpan - 1, _rowY.Length - 2);
+                    int endC = Math.Min(merge.Col + merge.ColSpan - 1, _colX.Length - 2);
                     cr = new Rect(_colX[col], _rowY[row],
                         _colX[endC + 1] - _colX[col],
                         _rowY[endR + 1] - _rowY[row]);

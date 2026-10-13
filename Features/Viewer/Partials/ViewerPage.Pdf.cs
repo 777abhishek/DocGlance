@@ -505,8 +505,6 @@ public sealed partial class ViewerPage
             
             // Apply 100% zoom initially
             _zoom = NaturalZoom;
-            _lastPptxRenderZoom = _zoom;
-            _lastPptxRenderDisplayScale = DisplayScale;
             ZoomLabel.Text = "100%";
             ViewModel.NaturalZoom = NaturalZoom;
             ViewModel.Zoom = _zoom;
@@ -532,7 +530,10 @@ public sealed partial class ViewerPage
             DocumentScrollViewer.UpdateLayout();
             
             // Trigger initial viewport render
-            await RenderPptxViewportAsync();
+            _pptxRenderCts?.Cancel();
+            _pptxRenderCts?.Dispose();
+            _pptxRenderCts = new CancellationTokenSource();
+            await RenderPptxViewportAsync(_pptxRenderCts.Token);
             
             Logger.Log("PPTX loaded, initial render complete");
             LoadSlideThumbnails();
@@ -581,9 +582,12 @@ public sealed partial class ViewerPage
     // ── PPTX Viewport Rendering (memory-efficient, only render visible slides) ────
     
     private Dictionary<int, Microsoft.UI.Xaml.Controls.Image> _pptxSlideCache = new();
+    private readonly Dictionary<int, double> _pptxSlideScale = new();
     private readonly List<Border> _pptxSearchHighlights = new();
+    private DispatcherTimer? _pptxRenderDebounceTimer;
+    private CancellationTokenSource? _pptxRenderCts;
     
-    private async Task RenderPptxViewportAsync()
+    private async Task RenderPptxViewportAsync(CancellationToken ct = default)
     {
         if (_pptxDocument == null)
         {
@@ -618,8 +622,7 @@ public sealed partial class ViewerPage
             
             Logger.Log($"Viewport: width={DocumentScrollViewer.ViewportWidth}, height={viewportHeight}, scrollY={scrollY}");
             
-            // Keep one nearby slide rendered ahead/behind without pre-rendering
-            // several large bitmaps on every viewport change.
+            // Keep one nearby slide rendered ahead/behind
             const double bufferSlides = 1;
             double visibleStart = scrollY - (bufferSlides * (slideHeightLp + PageGapLp));
             double visibleEnd = scrollY + viewportHeight + (bufferSlides * (slideHeightLp + PageGapLp));
@@ -630,59 +633,74 @@ public sealed partial class ViewerPage
             
             Logger.Log($"Rendering PPTX viewport: slides {firstSlide}-{lastSlide} (scroll={scrollY})");
             
-            // Render at the zoomed display's pixel density, with a small
-            // oversample for text and a cap to limit per-slide memory.
-            double renderScale = RenderBudget.OfficeScale(_zoom, DisplayScale, widthPt, heightPt);
+            // Calculate target scale for 1:1 physical pixel rendering
+            double targetScale = RenderBudget.OfficeScale(_zoom, DisplayScale, widthPt, heightPt);
             
-            Logger.Log($"Render scale: {renderScale:F2} (zoom={_zoom:F2}, display={DisplayScale:F2})");
+            Logger.Log($"Render scale: {targetScale:F2} (zoom={_zoom:F2}, display={DisplayScale:F2})");
             
             // Render visible slides
             for (int i = firstSlide; i <= lastSlide; i++)
             {
-                // Skip if already rendered
-                if (_pptxSlideCache.ContainsKey(i))
+                if (ct.IsCancellationRequested) return;
+
+                // Check if we need to render or re-render this slide
+                bool needsRender = !_pptxSlideCache.ContainsKey(i) ||
+                                  !_pptxSlideScale.TryGetValue(i, out double cachedScale) ||
+                                  RenderBudget.NeedsRerenderScale(cachedScale, targetScale);
+
+                if (needsRender)
                 {
-                    Logger.Log($"Slide {i} already in cache, skipping");
-                    continue;
+                    Logger.Log($"⏳ Rendering slide {i} at scale {targetScale:F2}...");
+                    
+                    WriteableBitmap? bitmap = await _pptxDocument.RenderSlideAsync(i, scale: targetScale, ct);
+                    if (bitmap == null || ct.IsCancellationRequested)
+                    {
+                        Logger.Log($"❌ Slide {i} render returned null bitmap or was cancelled");
+                        continue;
+                    }
+                    
+                    Logger.Log($"✅ Slide {i} bitmap: {bitmap.PixelWidth}×{bitmap.PixelHeight} pixels");
+                    
+                    // Calculate Y position for this slide (include top padding)
+                    double slideY = VerticalPadding + (i * (slideHeightLp + PageGapLp));
+                    
+                    // Image size must match bitmap pixels / rasterization scale for 1:1 rendering
+                    double imageWidth = bitmap.PixelWidth / DisplayScale;
+                    double imageHeight = bitmap.PixelHeight / DisplayScale;
+                    
+                    // Create image control
+                    var image = new Microsoft.UI.Xaml.Controls.Image
+                    {
+                        Source = bitmap,
+                        Width = imageWidth,
+                        Height = imageHeight,
+                        Stretch = Microsoft.UI.Xaml.Media.Stretch.None,  // No resampling!
+                        UseLayoutRounding = true,
+                    };
+                    
+                    // Center horizontally (Canvas.Left = 0, ScrollViewer centers via zoom)
+                    Microsoft.UI.Xaml.Controls.Canvas.SetLeft(image, 0);
+                    Microsoft.UI.Xaml.Controls.Canvas.SetTop(image, slideY);
+                    
+                    // Remove old version if exists
+                    if (_pptxSlideCache.TryGetValue(i, out var oldImage))
+                    {
+                        PdfViewportCanvas.Children.Remove(oldImage);
+                        if (oldImage.Source is WriteableBitmap oldBmp)
+                            oldImage.Source = null;
+                    }
+                    
+                    PdfViewportCanvas.Children.Add(image);
+                    _pptxSlideCache[i] = image;
+                    _pptxSlideScale[i] = targetScale;
+                    
+                    Logger.Log($"✅ Slide {i} added to canvas at Y={slideY:F0}, size={slideWidthLp:F0}×{slideHeightLp:F0} DIP");
                 }
-                
-                Logger.Log($"⏳ Rendering slide {i} at scale {renderScale:F2}...");
-                
-                WriteableBitmap? bitmap = await _pptxDocument.RenderSlideAsync(i, scale: renderScale, default);
-                if (bitmap == null)
-                {
-                    Logger.Log($"❌ Slide {i} render returned null bitmap");
-                    continue;
-                }
-                
-                Logger.Log($"✅ Slide {i} bitmap: {bitmap.PixelWidth}×{bitmap.PixelHeight} pixels");
-                
-                // Calculate Y position for this slide (include top padding)
-                double slideY = VerticalPadding + (i * (slideHeightLp + PageGapLp));
-                
-                // Create image control
-                var image = new Microsoft.UI.Xaml.Controls.Image
-                {
-                    Source = bitmap,
-                    Width = slideWidthLp,
-                    Height = slideHeightLp,
-                    Stretch = Microsoft.UI.Xaml.Media.Stretch.Fill
-                };
-                
-                // Center horizontally (Canvas.Left = 0, ScrollViewer centers via zoom)
-                Microsoft.UI.Xaml.Controls.Canvas.SetLeft(image, 0);
-                Microsoft.UI.Xaml.Controls.Canvas.SetTop(image, slideY);
-                
-                PdfViewportCanvas.Children.Add(image);
-                _pptxSlideCache[i] = image;
-                
-                Logger.Log($"✅ Slide {i} added to canvas at Y={slideY:F0}, size={slideWidthLp:F0}×{slideHeightLp:F0} lp");
             }
             
-            // Remove slides that are too far from viewport (free memory)
-            // Aggressive cleanup: only keep visible slides + 3 buffer
+            // Evict slides outside buffer zone
             var toRemove = _pptxSlideCache.Keys.Where(idx =>
-                idx < firstSlide || idx > lastSlide).ToList();
+                idx < firstSlide - 1 || idx > lastSlide + 1).ToList();
             
             foreach (int idx in toRemove)
             {
@@ -690,18 +708,20 @@ public sealed partial class ViewerPage
                 {
                     PdfViewportCanvas.Children.Remove(img);
                     
-                    // Force bitmap cleanup
                     if (img.Source is WriteableBitmap bmp)
-                    {
                         img.Source = null;
-                    }
                     
                     _pptxSlideCache.Remove(idx);
+                    _pptxSlideScale.Remove(idx);
                 }
             }
             
             Logger.Log($"PPTX cache size: {_pptxSlideCache.Count} slides");
             DrawPptxSearchHighlights();
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when zoom/scroll happens during render
         }
         catch (Exception ex)
         {
@@ -712,10 +732,8 @@ public sealed partial class ViewerPage
     private async Task RenderCurrentSlideAsync(CancellationToken ct)
     {
         // Legacy method - now using viewport rendering
-        await RenderPptxViewportAsync();
+        await RenderPptxViewportAsync(ct);
     }
-    
-    private double _lastPptxRenderZoom = 1.0;
     
     private void OnPptxViewportChanged(object? sender, ScrollViewerViewChangedEventArgs e)
     {
@@ -731,32 +749,35 @@ public sealed partial class ViewerPage
             SyncToViewModel();
         }
         
-        // Re-render when zoom or display density has changed enough to affect
-        // the source bitmap's pixel density.
-        bool needsRerender =
-            Math.Abs(_zoom - _lastPptxRenderZoom) > (_lastPptxRenderZoom * 0.10) ||
-            Math.Abs(DisplayScale - _lastPptxRenderDisplayScale) > 0.05;
+        // Cancel any pending render
+        _pptxRenderDebounceTimer?.Stop();
+        _pptxRenderCts?.Cancel();
         
         // Render visible slides when scroll/zoom settles
         if (!e.IsIntermediate)
         {
-            if (needsRerender)
-            {
-                // Clear cache to force re-render at new resolution
-                Logger.Log($"Zoom changed significantly ({_lastPptxRenderZoom:F2} -> {_zoom:F2}), clearing cache");
-                ClearPptxCache();
-                _lastPptxRenderZoom = _zoom;
-                _lastPptxRenderDisplayScale = DisplayScale;
-            }
-
             UpdateCurrentPptxPage();
             
-            _ = RenderPptxViewportAsync();
+            // Debounce: wait 200ms after view settles before re-rendering
+            _pptxRenderDebounceTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+            _pptxRenderDebounceTimer.Tick -= OnPptxRenderDebounceTimerTick;
+            _pptxRenderDebounceTimer.Tick += OnPptxRenderDebounceTimerTick;
+            _pptxRenderDebounceTimer.Start();
         }
     }
-    
-    private double _lastPptxRenderDisplayScale = 1.0;
 
+    private async void OnPptxRenderDebounceTimerTick(object? sender, object e)
+    {
+        _pptxRenderDebounceTimer?.Stop();
+        
+        // Cancel any in-flight render
+        _pptxRenderCts?.Cancel();
+        _pptxRenderCts?.Dispose();
+        _pptxRenderCts = new CancellationTokenSource();
+
+        await RenderPptxViewportAsync(_pptxRenderCts.Token);
+    }
+    
     private void UpdateCurrentPptxPage()
     {
         if (_pptxDocument == null || _pptxDocument.SlideCount == 0) return;
@@ -778,6 +799,11 @@ public sealed partial class ViewerPage
 
     private void ClearPptxCache()
     {
+        _pptxRenderDebounceTimer?.Stop();
+        _pptxRenderCts?.Cancel();
+        _pptxRenderCts?.Dispose();
+        _pptxRenderCts = null;
+
         ClearPptxSearchHighlights();
 
         if (_pptxSlideCache.Count == 0)
@@ -788,7 +814,7 @@ public sealed partial class ViewerPage
         
         Logger.Log($"Clearing {_pptxSlideCache.Count} PPTX slides from canvas (canvas has {PdfViewportCanvas.Children.Count} total children)");
         
-        // Remove only PPTX slide images (don't remove ViewportImage or SearchHighlightCanvas!)
+        // Remove only PPTX slide images
         foreach (var img in _pptxSlideCache.Values)
         {
             PdfViewportCanvas.Children.Remove(img);
@@ -798,6 +824,7 @@ public sealed partial class ViewerPage
             }
         }
         _pptxSlideCache.Clear();
+        _pptxSlideScale.Clear();
         
         Logger.Log($"After clear: canvas has {PdfViewportCanvas.Children.Count} children (should be 2: ViewportImage + SearchHighlightCanvas)");
     }
@@ -1017,7 +1044,6 @@ public sealed partial class ViewerPage
 
             // Apply 100% zoom initially
             _zoom = NaturalZoom;
-            _lastDocxRenderZoom = _zoom;
             ZoomLabel.Text = "100%";
             ViewModel.NaturalZoom = NaturalZoom;
             ViewModel.Zoom = _zoom;
@@ -1037,9 +1063,10 @@ public sealed partial class ViewerPage
             DocumentScrollViewer.UpdateLayout();
 
             // Render visible pages
-            _lastDocxRenderZoom = _zoom;
-            _lastDocxRenderDisplayScale = DisplayScale;
-            await RenderDocxViewportAsync();
+            _docxRenderCts?.Cancel();
+            _docxRenderCts?.Dispose();
+            _docxRenderCts = new CancellationTokenSource();
+            await RenderDocxViewportAsync(_docxRenderCts.Token);
             DocumentScrollViewer.ViewChanged += OnDocxViewportChanged;
 
             // Load thumbnails in background
@@ -1057,8 +1084,8 @@ public sealed partial class ViewerPage
         }
     }
 
-    private double _lastDocxRenderZoom = 1.0;
-    private double _lastDocxRenderDisplayScale = 1.0;
+    private DispatcherTimer? _docxRenderDebounceTimer;
+    private CancellationTokenSource? _docxRenderCts;
 
     private void OnDocxViewportChanged(object? sender, ScrollViewerViewChangedEventArgs e)
     {
@@ -1073,22 +1100,33 @@ public sealed partial class ViewerPage
             SyncToViewModel();
         }
 
-        bool needsRerender =
-            Math.Abs(_zoom - _lastDocxRenderZoom) > (_lastDocxRenderZoom * 0.10) ||
-            Math.Abs(DisplayScale - _lastDocxRenderDisplayScale) > 0.05;
+        // Cancel any pending render
+        _docxRenderDebounceTimer?.Stop();
+        _docxRenderCts?.Cancel();
+
         if (!e.IsIntermediate)
         {
-            if (needsRerender)
-            {
-                ClearDocxCache();
-                _lastDocxRenderZoom = _zoom;
-                _lastDocxRenderDisplayScale = DisplayScale;
-            }
-
             UpdateCurrentPageFromDocxScroll();
             DrawDocxSearchHighlights();
-            _ = RenderDocxViewportAsync();
+
+            // Debounce: wait 200ms after view settles before re-rendering
+            _docxRenderDebounceTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+            _docxRenderDebounceTimer.Tick -= OnDocxRenderDebounceTimerTick;
+            _docxRenderDebounceTimer.Tick += OnDocxRenderDebounceTimerTick;
+            _docxRenderDebounceTimer.Start();
         }
+    }
+
+    private async void OnDocxRenderDebounceTimerTick(object? sender, object e)
+    {
+        _docxRenderDebounceTimer?.Stop();
+        
+        // Cancel any in-flight render
+        _docxRenderCts?.Cancel();
+        _docxRenderCts?.Dispose();
+        _docxRenderCts = new CancellationTokenSource();
+
+        await RenderDocxViewportAsync(_docxRenderCts.Token);
     }
 
     private void UpdateDocxCanvasSize()
@@ -1187,7 +1225,7 @@ public sealed partial class ViewerPage
             UpdateCurrentPage(currentPage + 1);
     }
 
-    private async Task RenderDocxViewportAsync()
+    private async Task RenderDocxViewportAsync(CancellationToken ct = default)
     {
         if (_docxDocument == null) return;
 
@@ -1203,6 +1241,8 @@ public sealed partial class ViewerPage
 
             for (int i = 0; i < _docxDocument.PageCount; i++)
             {
+                if (ct.IsCancellationRequested) return;
+
                 double w = _docxPageWidthLp[i];
                 double h = _docxPageHeightLp[i];
                 double y = GetDocxPageTopLp(i);
@@ -1211,9 +1251,12 @@ public sealed partial class ViewerPage
                 {
                     // Render above the display's pixel density for crisp text,
                     // while capping resolution to keep page memory bounded.
-                    double renderScale = RenderBudget.OfficeScale(
-                        _zoom, DisplayScale, w * 72.0 / PtToLp, h * 72.0 / PtToLp);
-                    var bmp = await _docxDocument.RenderPageAsync(i, renderScale);
+                    double renderScale = Math.Clamp(
+                        Math.Max(1.5, _zoom * DisplayScale * PtToLp * 1.25),
+                        1.5,
+                        6.0);
+                    
+                    var bmp = await _docxDocument.RenderPageAsync(i, renderScale, ct);
                     if (bmp == null) continue;
 
                     var image = new Image
@@ -1235,7 +1278,7 @@ public sealed partial class ViewerPage
 
             // Remove pages far from viewport
             var toRemove = _docxPageCache.Keys.Where(idx =>
-                idx < renderStart || idx > renderEnd).ToList();
+                idx < renderStart - 2 || idx > renderEnd + 2).ToList();
 
             foreach (int idx in toRemove)
             {
@@ -1248,6 +1291,10 @@ public sealed partial class ViewerPage
                 }
             }
         }
+        catch (OperationCanceledException)
+        {
+            // Expected when zoom/scroll happens during render
+        }
         catch (Exception ex)
         {
             Logger.Error($"RenderDocxViewportAsync error", ex);
@@ -1256,6 +1303,11 @@ public sealed partial class ViewerPage
 
     private void ClearDocxCache()
     {
+        _docxRenderDebounceTimer?.Stop();
+        _docxRenderCts?.Cancel();
+        _docxRenderCts?.Dispose();
+        _docxRenderCts = null;
+
         foreach (var img in _docxPageCache.Values)
         {
             PdfViewportCanvas.Children.Remove(img);
