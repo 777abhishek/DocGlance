@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml.Media.Imaging;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO.Compression;
 using System.IO;
 using System.Linq;
@@ -26,11 +27,36 @@ using WinRT.Interop;
 
 namespace QuickView.Features.Tools;
 
-public sealed class PdfMergeFileItem
+public sealed class NullToVisibilityConverter : Microsoft.UI.Xaml.Data.IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, string language)
+        => value == null ? Visibility.Visible : Visibility.Collapsed;
+
+    public object ConvertBack(object value, Type targetType, object parameter, string language)
+        => throw new NotImplementedException();
+}
+
+public sealed class PdfMergeFileItem : System.ComponentModel.INotifyPropertyChanged
 {
     public required string FilePath { get; init; }
     public required string FileName { get; init; }
     public int OrderIndex { get; set; }
+    
+    private Microsoft.UI.Xaml.Media.Imaging.BitmapImage? _previewThumbnail;
+    public Microsoft.UI.Xaml.Media.Imaging.BitmapImage? PreviewThumbnail
+    {
+        get => _previewThumbnail;
+        set
+        {
+            if (_previewThumbnail != value)
+            {
+                _previewThumbnail = value;
+                PropertyChanged?.Invoke(this, new(nameof(PreviewThumbnail)));
+            }
+        }
+    }
+
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
 }
 
 public sealed partial class ToolsPage : Page
@@ -467,12 +493,16 @@ public sealed partial class ToolsPage : Page
             {
                 if (!_pdfMergeFiles.Any(f => f.FilePath.Equals(file.Path, StringComparison.OrdinalIgnoreCase)))
                 {
-                    _pdfMergeFiles.Add(new PdfMergeFileItem
+                    var item = new PdfMergeFileItem
                     {
                         FilePath = file.Path,
                         FileName = file.Name,
                         OrderIndex = _pdfMergeFiles.Count + 1
-                    });
+                    };
+                    _pdfMergeFiles.Add(item);
+                    
+                    // Generate thumbnail for the first page in background
+                    _ = LoadPdfMergeThumbnailAsync(item);
                 }
             }
             RefreshPdfMergeFiles();
@@ -765,6 +795,40 @@ public sealed partial class ToolsPage : Page
         UpdatePdfProcessButton();
     }
 
+    private async Task LoadPdfMergeThumbnailAsync(PdfMergeFileItem item)
+    {
+        try
+        {
+            var opened = await PdfRenderer.OpenDocumentAsync(item.FilePath);
+            if (!opened.Ok || opened.Document == null || opened.Document.PageCount == 0)
+                return;
+
+            using var document = opened.Document;
+            
+            // Render first page as thumbnail
+            var thumbnail = await PdfRenderer.RenderPageAsync(document, 0, PdfRenderer.ThumbnailDpi);
+            if (thumbnail != null)
+            {
+                // Convert WriteableBitmap to BitmapImage for binding
+                var bitmapImage = new BitmapImage();
+                using var stream = new InMemoryRandomAccessStream();
+                await thumbnail.ToStreamAsync(stream, BitmapEncoder.PngEncoderId);
+                stream.Seek(0);
+                await bitmapImage.SetSourceAsync(stream);
+                
+                // Update on UI thread
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    item.PreviewThumbnail = bitmapImage;
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Log($"[ToolsPage] Failed to load thumbnail for {item.FileName}: {ex.Message}");
+        }
+    }
+
     private void SelectAllPdfPages_Click(object sender, RoutedEventArgs e)
     {
         if (_pdfSplitPages.Count > 0)
@@ -914,7 +978,10 @@ public sealed partial class ToolsPage : Page
     }
 
     private void UpdatePdfProcessButton()
-        => ProcessPdfButton.IsEnabled = CanProcessPdf();
+    {
+        if (ProcessPdfButton != null)
+            ProcessPdfButton.IsEnabled = CanProcessPdf();
+    }
 
     private void RemovePdfMergeFile_Click(object sender, RoutedEventArgs e)
     {
