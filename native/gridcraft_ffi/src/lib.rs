@@ -19,6 +19,46 @@ use std::slice;
 use gridcraft_engine::cmd::print::{layout_sheet, render_pdf, PrintOptions, SheetLayout};
 use gridcraft_engine::DocState;
 
+fn leak_ffi_bytes(bytes: Vec<u8>) -> (*mut u8, usize) {
+    let boxed = bytes.into_boxed_slice();
+    let len = boxed.len();
+    (Box::into_raw(boxed) as *mut u8, len)
+}
+
+/// # Safety
+/// `data` must be a non-null pointer returned by `leak_ffi_bytes`, and `len`
+/// must be the unchanged length returned with it. The buffer may be freed once.
+unsafe fn free_ffi_bytes(data: *mut u8, len: usize) {
+    if !data.is_null() {
+        let slice = std::ptr::slice_from_raw_parts_mut(data, len);
+        unsafe { drop(Box::from_raw(slice)) };
+    }
+}
+
+fn push_json_string(output: &mut String, value: &str) {
+    output.push('"');
+    for ch in value.chars() {
+        match ch {
+            '"' => output.push_str("\\\""),
+            '\\' => output.push_str("\\\\"),
+            '\u{0008}' => output.push_str("\\b"),
+            '\u{000C}' => output.push_str("\\f"),
+            '\n' => output.push_str("\\n"),
+            '\r' => output.push_str("\\r"),
+            '\t' => output.push_str("\\t"),
+            '\u{0000}'..='\u{001F}' => {
+                const HEX: &[u8; 16] = b"0123456789ABCDEF";
+                let byte = ch as u8;
+                output.push_str("\\u00");
+                output.push(HEX[(byte >> 4) as usize] as char);
+                output.push(HEX[(byte & 0x0F) as usize] as char);
+            }
+            _ => output.push(ch),
+        }
+    }
+    output.push('"');
+}
+
 // ── Public types ──────────────────────────────────────────────────────────────
 
 pub struct GcDocument {
@@ -56,10 +96,13 @@ macro_rules! catch {
 // ── Exported functions ────────────────────────────────────────────────────────
 
 /// Parse an XLSX file from a byte slice.
+///
+/// # Safety
+/// `data` must point to `len` readable bytes for the duration of this call.
 #[no_mangle]
 pub extern "C" fn gc_open_xlsx(data: *const u8, len: usize) -> *mut GcDocument {
     catch!(std::ptr::null_mut(), {
-        if data.is_null() || len == 0 {
+        if data.is_null() || len == 0 || len > isize::MAX as usize {
             return std::ptr::null_mut();
         }
 
@@ -127,7 +170,14 @@ pub extern "C" fn gc_get_sheet_size(
     height_pt: *mut f64,
 ) {
     catch!((), {
-        if doc.is_null() || width_pt.is_null() || height_pt.is_null() {
+        if width_pt.is_null() || height_pt.is_null() {
+            return;
+        }
+        unsafe {
+            *width_pt = 612.0;
+            *height_pt = 792.0;
+        }
+        if doc.is_null() {
             return;
         }
         let doc = unsafe { &*doc };
@@ -149,10 +199,7 @@ pub extern "C" fn gc_get_sheet_size(
 /// Exports a sheet (or entire workbook if index == u32::MAX) to PDF bytes.
 /// Returns GcPdfBuffer. C# caller MUST free with gc_free_pdf_buffer.
 #[no_mangle]
-pub extern "C" fn gc_export_sheet_pdf(
-    doc: *const GcDocument,
-    sheet_index: u32,
-) -> GcPdfBuffer {
+pub extern "C" fn gc_export_sheet_pdf(doc: *const GcDocument, sheet_index: u32) -> GcPdfBuffer {
     catch!(GcPdfBuffer::null(), {
         if doc.is_null() {
             return GcPdfBuffer::null();
@@ -179,15 +226,12 @@ pub extern "C" fn gc_export_sheet_pdf(
             return GcPdfBuffer::null();
         }
 
-        let (mut pdf_bytes, page_count) = render_pdf(&doc.doc.wb, &lays, &doc.doc.display_title(), "");
+        let (pdf_bytes, page_count) = render_pdf(&doc.doc.wb, &lays, &doc.doc.display_title(), "");
         if pdf_bytes.is_empty() {
             return GcPdfBuffer::null();
         }
 
-        pdf_bytes.shrink_to_fit();
-        let len = pdf_bytes.len();
-        let ptr = pdf_bytes.as_mut_ptr();
-        std::mem::forget(pdf_bytes);
+        let (ptr, len) = leak_ffi_bytes(pdf_bytes);
 
         GcPdfBuffer {
             data: ptr,
@@ -198,13 +242,14 @@ pub extern "C" fn gc_export_sheet_pdf(
 }
 
 /// Free a PDF buffer returned by gc_export_sheet_pdf.
+///
+/// # Safety
+/// `buf` must be an unmodified buffer returned by `gc_export_sheet_pdf` and
+/// must not have been freed before.
 #[no_mangle]
 pub extern "C" fn gc_free_pdf_buffer(buf: GcPdfBuffer) {
-    if buf.data.is_null() || buf.len == 0 {
-        return;
-    }
-    unsafe {
-        drop(Vec::from_raw_parts(buf.data, buf.len, buf.len));
+    if !buf.data.is_null() {
+        unsafe { free_ffi_bytes(buf.data, buf.len) };
     }
 }
 
@@ -227,9 +272,8 @@ pub extern "C" fn gc_extract_sheet_text(
 
         let mut text = String::new();
         if let Some(r) = sh.used_range() {
-            let limit_row = r.end.row.min(r.start.row + 1000);
             let limit_col = r.end.col.min(r.start.col + 100);
-            for row in r.start.row..=limit_row {
+            for row in r.start.row..=r.end.row {
                 let mut row_has_text = false;
                 for col in r.start.col..=limit_col {
                     let cell_ref = gridcraft_core::CellRef::new(row, col);
@@ -273,7 +317,13 @@ pub extern "C" fn gc_search_text(
     buf_len: usize,
 ) -> usize {
     catch!(0, {
-        if doc.is_null() || query.is_null() || query_len == 0 || buf.is_null() || buf_len == 0 {
+        if doc.is_null()
+            || query.is_null()
+            || query_len == 0
+            || query_len > isize::MAX as usize
+            || buf.is_null()
+            || buf_len == 0
+        {
             return 0;
         }
         let doc = unsafe { &*doc };
@@ -283,16 +333,20 @@ pub extern "C" fn gc_search_text(
         };
 
         let mut matches = Vec::new();
-        let q_lower = if case_sensitive { String::new() } else { q_str.to_lowercase() };
+        let q_lower = if case_sensitive {
+            String::new()
+        } else {
+            q_str.to_lowercase()
+        };
 
         for (si, sh) in doc.doc.wb.sheets.iter().enumerate() {
             if let Some(r) = sh.used_range() {
-                let limit_row = r.end.row.min(r.start.row + 2000);
                 let limit_col = r.end.col.min(r.start.col + 200);
-                for row in r.start.row..=limit_row {
+                for row in r.start.row..=r.end.row {
                     for col in r.start.col..=limit_col {
                         let cell_ref = gridcraft_core::CellRef::new(row, col);
-                        let val_str = gridcraft_engine::display::cell_text(&doc.doc.wb, sh, cell_ref);
+                        let val_str =
+                            gridcraft_engine::display::cell_text(&doc.doc.wb, sh, cell_ref);
                         if val_str.is_empty() {
                             continue;
                         }
@@ -341,7 +395,30 @@ fn copy_search_results(bytes: &[u8], buf: *mut u8, buf_len: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::copy_search_results;
+    use super::{copy_search_results, free_ffi_bytes, leak_ffi_bytes, push_json_string};
+    use std::slice;
+
+    #[test]
+    fn ffi_byte_buffers_round_trip_and_free() {
+        let expected = vec![1, 2, 3, 4, 5];
+        let (data, len) = leak_ffi_bytes(expected.clone());
+
+        let returned = unsafe { slice::from_raw_parts(data, len) };
+        assert_eq!(returned, expected);
+        unsafe { free_ffi_bytes(data, len) };
+    }
+
+    #[test]
+    fn json_string_writer_escapes_quotes_backslashes_and_controls() {
+        let mut output = String::new();
+
+        push_json_string(&mut output, "quote: \" slash: \\\\ control: \u{0001}\n");
+
+        assert_eq!(
+            output,
+            "\"quote: \\\" slash: \\\\\\\\ control: \\u0001\\n\""
+        );
+    }
 
     #[test]
     fn reports_required_search_buffer_capacity() {
@@ -366,8 +443,11 @@ mod tests {
     }
 }
 
-
-
+/// Release a document returned by gc_open_xlsx.
+///
+/// # Safety
+/// `doc` must be a live handle returned by `gc_open_xlsx` and must be freed
+/// exactly once, after all operations using it have completed.
 #[no_mangle]
 pub extern "C" fn gc_free_document(doc: *mut GcDocument) {
     if !doc.is_null() {
@@ -379,7 +459,7 @@ pub extern "C" fn gc_free_document(doc: *mut GcDocument) {
 
 // ── JSON sheet-data export ────────────────────────────────────────────────────
 
-/// Returned by gc_get_sheet_data_json. Free with gc_free_json_buffer.
+/// Returned by gc_get_sheet_data_json. Free exactly once with gc_free_json_buffer.
 #[repr(C)]
 pub struct GcJsonBuffer {
     pub data: *mut u8,
@@ -388,18 +468,22 @@ pub struct GcJsonBuffer {
 
 impl GcJsonBuffer {
     fn null() -> Self {
-        GcJsonBuffer { data: std::ptr::null_mut(), len: 0 }
+        GcJsonBuffer {
+            data: std::ptr::null_mut(),
+            len: 0,
+        }
     }
 }
 
 /// Free a JSON buffer returned by gc_get_sheet_data_json.
+///
+/// # Safety
+/// `buf` must be an unmodified buffer returned by `gc_get_sheet_data_json` and
+/// must not have been freed before.
 #[no_mangle]
 pub extern "C" fn gc_free_json_buffer(buf: GcJsonBuffer) {
-    if buf.data.is_null() || buf.len == 0 {
-        return;
-    }
-    unsafe {
-        drop(Vec::from_raw_parts(buf.data, buf.len, buf.len));
+    if !buf.data.is_null() {
+        unsafe { free_ffi_bytes(buf.data, buf.len) };
     }
 }
 
@@ -427,10 +511,7 @@ pub extern "C" fn gc_free_json_buffer(buf: GcJsonBuffer) {
 /// ```
 /// Returns null buffer on error.
 #[no_mangle]
-pub extern "C" fn gc_get_sheet_data_json(
-    doc: *const GcDocument,
-    index: u32,
-) -> GcJsonBuffer {
+pub extern "C" fn gc_get_sheet_data_json(doc: *const GcDocument, index: u32) -> GcJsonBuffer {
     catch!(GcJsonBuffer::null(), {
         if doc.is_null() {
             return GcJsonBuffer::null();
@@ -447,17 +528,13 @@ pub extern "C" fn gc_get_sheet_data_json(
             Some(r) => (r.end.row as usize + 1, r.end.col as usize + 1),
             None => (0, 0),
         };
-        // Cap used range so the JSON + parsed grid stay within a few tens of MB.
-        let row_count = row_count.min(1500);
         let col_count = col_count.min(256);
 
         // ── helpers ──────────────────────────────────────────────────────────
         let color_hex = |c: gridcraft_model::style::Color| -> Option<String> {
             match c {
                 gridcraft_model::style::Color::Auto => None,
-                gridcraft_model::style::Color::Rgb(v) => {
-                    Some(format!("#{:06X}", v))
-                }
+                gridcraft_model::style::Color::Rgb(v) => Some(format!("#{:06X}", v)),
                 gridcraft_model::style::Color::Theme(i, tint) => {
                     let base = wb.theme.colors.get(i as usize).copied().unwrap_or(0);
                     let rgb = [
@@ -495,12 +572,16 @@ pub extern "C" fn gc_get_sheet_data_json(
         json.push('{');
 
         // sheet metadata
-        let name_esc = sh.name.replace('\\', "\\\\").replace('"', "\\\"");
-        json.push_str(&format!("\"name\":\"{}\",", name_esc));
+        json.push_str("\"name\":");
+        push_json_string(&mut json, &sh.name);
+        json.push(',');
         json.push_str(&format!("\"rowCount\":{},", row_count));
         json.push_str(&format!("\"colCount\":{},", col_count));
         json.push_str(&format!("\"defaultColWidth\":{:.2},", sh.default_col_width));
-        json.push_str(&format!("\"defaultRowHeight\":{:.2},", sh.default_row_height));
+        json.push_str(&format!(
+            "\"defaultRowHeight\":{:.2},",
+            sh.default_row_height
+        ));
 
         // freeze
         let (fr, fc) = sh.freeze.unwrap_or((0, 0));
@@ -513,9 +594,15 @@ pub extern "C" fn gc_get_sheet_data_json(
         let mut first = true;
         for (col, info) in &sh.cols {
             if let Some(w) = info.size {
-                if !first { json.push(','); }
+                if !first {
+                    json.push(',');
+                }
                 first = false;
-                json.push_str(&format!("\"{}\":{:.2}", col, if info.hidden { 0.0 } else { w }));
+                json.push_str(&format!(
+                    "\"{}\":{:.2}",
+                    col,
+                    if info.hidden { 0.0 } else { w }
+                ));
             }
         }
         json.push_str("},");
@@ -525,9 +612,15 @@ pub extern "C" fn gc_get_sheet_data_json(
         first = true;
         for (row, info) in &sh.rows {
             if let Some(h) = info.size {
-                if !first { json.push(','); }
+                if !first {
+                    json.push(',');
+                }
                 first = false;
-                json.push_str(&format!("\"{}\":{:.2}", row, if info.hidden { 0.0 } else { h }));
+                json.push_str(&format!(
+                    "\"{}\":{:.2}",
+                    row,
+                    if info.hidden { 0.0 } else { h }
+                ));
             }
         }
         json.push_str("},");
@@ -536,7 +629,9 @@ pub extern "C" fn gc_get_sheet_data_json(
         json.push_str("\"merges\":[");
         first = true;
         for m in &sh.merges {
-            if !first { json.push(','); }
+            if !first {
+                json.push(',');
+            }
             first = false;
             json.push_str(&format!(
                 "{{\"r\":{},\"c\":{},\"rs\":{},\"cs\":{}}}",
@@ -576,21 +671,16 @@ pub extern "C" fn gc_get_sheet_data_json(
                     };
                     let fg = color_hex(style.font.color);
 
-                    if !first { json.push(','); }
+                    if !first {
+                        json.push(',');
+                    }
                     first = false;
-
-                    // escape text value
-                    let text_esc = text
-                        .replace('\\', "\\\\")
-                        .replace('"', "\\\"")
-                        .replace('\n', "\\n")
-                        .replace('\r', "\\r")
-                        .replace('\t', "\\t");
 
                     json.push('{');
                     json.push_str(&format!("\"r\":{},\"c\":{}", row, col));
-                    if !text_esc.is_empty() {
-                        json.push_str(&format!(",\"v\":\"{}\"", text_esc));
+                    if !text.is_empty() {
+                        json.push_str(",\"v\":");
+                        push_json_string(&mut json, &text);
                     }
                     if let Some(ref b) = bg {
                         json.push_str(&format!(",\"bg\":\"{}\"", b));
@@ -616,16 +706,31 @@ pub extern "C" fn gc_get_sheet_data_json(
                         json.push_str(",\"wrap\":true");
                     }
                     // border summary: presence of any border side (for rendering grid lines)
-                    let has_border =
-                        !style.borders.left.is_none()
+                    let has_border = !style.borders.left.is_none()
                         || !style.borders.right.is_none()
                         || !style.borders.top.is_none()
                         || !style.borders.bottom.is_none();
                     if has_border {
-                        let bl = if !style.borders.left.is_none() { "1" } else { "0" };
-                        let br = if !style.borders.right.is_none() { "1" } else { "0" };
-                        let bt = if !style.borders.top.is_none() { "1" } else { "0" };
-                        let bb = if !style.borders.bottom.is_none() { "1" } else { "0" };
+                        let bl = if !style.borders.left.is_none() {
+                            "1"
+                        } else {
+                            "0"
+                        };
+                        let br = if !style.borders.right.is_none() {
+                            "1"
+                        } else {
+                            "0"
+                        };
+                        let bt = if !style.borders.top.is_none() {
+                            "1"
+                        } else {
+                            "0"
+                        };
+                        let bb = if !style.borders.bottom.is_none() {
+                            "1"
+                        } else {
+                            "0"
+                        };
                         json.push_str(&format!(",\"brd\":\"{}{}{}{}\"", bl, br, bt, bb));
                     }
                     json.push('}');
@@ -634,11 +739,7 @@ pub extern "C" fn gc_get_sheet_data_json(
         }
         json.push_str("]}");
 
-        let mut bytes = json.into_bytes();
-        bytes.shrink_to_fit();
-        let len = bytes.len();
-        let ptr = bytes.as_mut_ptr();
-        std::mem::forget(bytes);
+        let (ptr, len) = leak_ffi_bytes(json.into_bytes());
 
         GcJsonBuffer { data: ptr, len }
     })
