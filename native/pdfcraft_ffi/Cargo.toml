@@ -1,0 +1,26 @@
+[package]
+name = "pdfcraft_ffi"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "pdfcraft_ffi"
+crate-type = ["cdylib"]
+
+[dependencies]
+pdfcraft-cos = { git = "https://github.com/storytold/pdfcraft", tag = "v0.7.1" }
+pdfcraft-render = { git = "https://github.com/storytold/pdfcraft", tag = "v0.7.1" }
+pdfcraft-organize = { git = "https://github.com/storytold/pdfcraft", tag = "v0.7.1" }
+png = "0.18"
+
+[patch.crates-io]
+hayro = { path = "vendor/hayro" }
+hayro-interpret = { path = "vendor/hayro-interpret" }
+hayro-syntax = { path = "vendor/hayro-syntax" }
+hayro-jbig2 = { path = "vendor/hayro-jbig2" }
+lopdf = { path = "vendor/lopdf" }
+
+[profile.release]
+opt-level     = 3
+lto           = "thin"
+codegen-units = 1

@@ -46,6 +46,38 @@ finally {
     Pop-Location
 }
 
+# ── 4. Build pdfcraft_ffi.dll (PdfCraft PDF renderer) ────────────────────────
+Write-Host ""
+Write-Host "  Building pdfcraft_ffi.dll (PdfCraft PDF renderer)..." -ForegroundColor Cyan
+Write-Host ""
+
+Push-Location "$PSScriptRoot\pdfcraft_ffi"
+try {
+    Write-Host "  Running cargo build --release..." -ForegroundColor Gray
+    cargo build --release 2>&1 | ForEach-Object { Write-Host "     $_" -ForegroundColor Gray }
+    if ($LASTEXITCODE -ne 0) {
+        throw "cargo build failed for pdfcraft_ffi with exit code $LASTEXITCODE"
+    }
+
+    $dll = "target\release\pdfcraft_ffi.dll"
+    if (-not (Test-Path $dll)) { throw "DLL not found after build: $dll" }
+
+    foreach ($dir in $targets) {
+        if (Test-Path $dir) {
+            Copy-Item $dll -Destination $dir -Force
+            Write-Host "  Copied pdfcraft_ffi.dll -> $dir" -ForegroundColor Green
+        }
+    }
+
+    $size = [math]::Round((Get-Item $dll).Length / 1MB, 1)
+    Write-Host ""
+    Write-Host "  ✓ pdfcraft_ffi.dll  ($size MB)" -ForegroundColor Green
+    Write-Host ""
+}
+finally {
+    Pop-Location
+}
+
 # ── 2. Build wordcraft_ffi.dll (WordCraft DOCX renderer) ──────────────────────
 Write-Host ""
 Write-Host "  Building wordcraft_ffi.dll (WordCraft DOCX renderer)..." -ForegroundColor Cyan

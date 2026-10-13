@@ -34,9 +34,6 @@ desktop.ini
 appsettings.Development.json
 *.pfx
 *.p12
-native/deckcraft_ffi/target
-native/wordcraft_ffi/target
-native/gridcraft_ffi/target
-native/pdfcraft_ffi/target
+native/*_ffi/target/
 .agents
 docs

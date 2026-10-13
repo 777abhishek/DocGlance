@@ -55,6 +55,18 @@ if ($MsixOnly) {
     Write-Info "Mode: Both MSIX + EXE installer"
 }
 
+# ── 0. Build native libraries ────────────────────────────────────────────────
+Write-Step "Building native Rust libraries…"
+$nativeBuildScript = "$Root\native\build-native.ps1"
+if (-not (Test-Path $nativeBuildScript)) {
+    Write-Fail "Native build script not found: $nativeBuildScript"
+}
+& $nativeBuildScript
+if ($LASTEXITCODE -ne 0) {
+    Write-Fail "Native library build failed (exit $LASTEXITCODE)"
+}
+Write-OK "Native libraries built and copied to the .NET output locations"
+
 # ── 1. Publish (for unpackaged EXE installer) ─────────────────────────────────
 if ($InstallerOnly -or (-not $MsixOnly)) {
     if (-not $SkipPublish) {
