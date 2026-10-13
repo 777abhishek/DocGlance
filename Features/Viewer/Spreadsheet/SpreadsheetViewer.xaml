@@ -23,7 +23,7 @@
 
             <!-- Corner (top-left) -->
             <Border Grid.Row="0" Grid.Column="0" x:Name="CornerCell"
-                    Background="{ThemeResource SystemFillColorSolidNeutralBackgroundBrush}"
+                    Background="{ThemeResource QuickViewElevatedSurfaceBrush}"
                     BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                     BorderThickness="0,0,1,1"/>
 
@@ -82,7 +82,7 @@
 
         <!-- Sheet tab bar -->
         <Border Grid.Row="1"
-            Background="{ThemeResource SystemFillColorSolidNeutralBackgroundBrush}"
+            Background="{ThemeResource QuickViewSurfaceBrush}"
             BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
             BorderThickness="0,1,0,0"
             Height="34">

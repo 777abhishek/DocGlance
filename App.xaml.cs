@@ -101,6 +101,10 @@ public partial class App : Application
             // Verbose diagnostic logging opt-in (Settings → written to app settings file).
             Logger.VerboseEnabled = Infrastructure.Configuration.AppSettings.VerboseLogging;
 
+            // WriteableBitmaps must be created on the UI thread; renderers use this dispatcher.
+            QuickView.Rendering.NativeBitmap.Initialize(
+                Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread());
+
             // Register file renderers FIRST (needed for file opening)
             RegisterRenderers();
             
@@ -109,7 +113,7 @@ public partial class App : Application
             App.AllWindows.Add((TitleBarWindow)m_window);
             m_window.Closed += (_, _) => App.AllWindows.Remove((TitleBarWindow)m_window);
             
-            // Backdrop is already applied in TitleBarWindow constructor based on user setting
+            // TitleBarWindow applies its dark-theme Acrylic surface during construction.
             
             m_window.Activate();
             Logger.Log("Window activated");

@@ -270,12 +270,12 @@ public sealed partial class ViewerPage
 
     // ── F5: Password dialog ───────────────────────────────────────────────────
 
-    private async Task<string?> ShowPasswordDialogAsync()
+    private async Task<string?> ShowPasswordDialogAsync(string? errorMessage)
     {
         var dialog = new ContentDialog
         {
             Title = "Password Required",
-            Content = CreatePasswordDialogContent(out var passwordBox),
+            Content = CreatePasswordDialogContent(errorMessage, out var passwordBox),
             PrimaryButtonText = "Open",
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Primary,
@@ -286,10 +286,20 @@ public sealed partial class ViewerPage
         return result == ContentDialogResult.Primary ? passwordBox.Password : null;
     }
 
-    private StackPanel CreatePasswordDialogContent(out PasswordBox passwordBox)
+    private StackPanel CreatePasswordDialogContent(string? errorMessage, out PasswordBox passwordBox)
     {
         var stack = new StackPanel { Spacing = 12 };
-        
+
+        if (!string.IsNullOrWhiteSpace(errorMessage) && !errorMessage.Contains("password-protected", StringComparison.OrdinalIgnoreCase))
+        {
+            stack.Children.Add(new TextBlock
+            {
+                Text = errorMessage,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = new SolidColorBrush(Colors.IndianRed)
+            });
+        }
+
         stack.Children.Add(new TextBlock
         {
             Text = "This PDF is password protected. Enter the password to open it:",
@@ -693,9 +703,11 @@ public sealed partial class ViewerPage
                     // Calculate Y position for this slide (include top padding)
                     double slideY = VerticalPadding + (i * (slideHeightLp + PageGapLp));
                     
-                    // Image size must match bitmap pixels / rasterization scale for 1:1 rendering
-                    double imageWidth = bitmap.PixelWidth / DisplayScale;
-                    double imageHeight = bitmap.PixelHeight / DisplayScale;
+                    // The bitmap was rendered at zoom-aware pixel density, but the ScrollViewer
+                    // applies zoom to layout size. Keep the Image at the unzoomed slide size to
+                    // avoid applying the zoom factor twice (the old code shrank slides by zoom²).
+                    double imageWidth = slideWidthLp;
+                    double imageHeight = slideHeightLp;
                     
                     // Create image control
                     var image = new Microsoft.UI.Xaml.Controls.Image
@@ -703,7 +715,7 @@ public sealed partial class ViewerPage
                         Source = bitmap,
                         Width = imageWidth,
                         Height = imageHeight,
-                        Stretch = Microsoft.UI.Xaml.Media.Stretch.None,  // No resampling!
+                        Stretch = Microsoft.UI.Xaml.Media.Stretch.Uniform,
                         UseLayoutRounding = true,
                     };
                     

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Windows.Data.Pdf;
 using QuickView.Infrastructure.Concurrency;
 using QuickView.Infrastructure.Logging;
 
@@ -20,6 +21,7 @@ public sealed class PdfDocumentState : IDisposable
     private static readonly TimeSpan DrainTimeout = TimeSpan.FromSeconds(30);
 
     private IntPtr _document;
+    private PdfDocument? _managedPdfDocument;
     private readonly NativeCallGate _gate = new();
     private int _generation;
     private bool _disposed;
@@ -36,6 +38,19 @@ public sealed class PdfDocumentState : IDisposable
 
     /// <summary>True once <see cref="Dispose"/> has started.</summary>
     public bool IsDisposed => _gate.IsDisposed;
+
+    internal PdfDocumentState(
+        PdfDocument document,
+        int pageCount,
+        IReadOnlyList<(double Width, double Height)> pageSizes)
+    {
+        _managedPdfDocument = document;
+        PageCount = pageCount;
+        PageSizes = pageSizes;
+        _generation = (int)(Environment.TickCount64 & 0x7FFFFFFF);
+    }
+
+    internal PdfDocument? ManagedPdfDocument => _disposed ? null : _managedPdfDocument;
 
     internal PdfDocumentState(
         IntPtr document,
@@ -62,6 +77,9 @@ public sealed class PdfDocumentState : IDisposable
     /// </summary>
     internal (IntPtr Handle, NativeCallGate.Lease? Lease) BeginNativeCall()
     {
+        if (_managedPdfDocument != null)
+            return (IntPtr.Zero, null);
+
         var lease = _gate.TryEnter();
         if (lease == null)
             return (IntPtr.Zero, null);
@@ -104,6 +122,7 @@ public sealed class PdfDocumentState : IDisposable
 
     private void FreeNativeDocument()
     {
+        _managedPdfDocument = null;
         IntPtr document = System.Threading.Interlocked.Exchange(ref _document, IntPtr.Zero);
         if (document != IntPtr.Zero)
             PdfCraftNative.pc_free_document(document);

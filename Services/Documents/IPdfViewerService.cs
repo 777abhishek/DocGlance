@@ -21,7 +21,7 @@ public interface IPdfViewerService
     /// </summary>
     Task<PdfLoadResult> LoadDocumentAsync(
         string filePath,
-        Func<Task<string?>>? passwordPrompt = null,
+        Func<string?, Task<string?>>? passwordPrompt = null,
         CancellationToken ct = default);
 
     /// <summary>

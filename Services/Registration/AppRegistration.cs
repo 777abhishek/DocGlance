@@ -17,6 +17,7 @@ using System.Collections.Generic;
 #if !PACKAGED
 using Microsoft.Win32;
 using System;
+using System.Linq;
 using System.Runtime.InteropServices;
 #endif
 
@@ -56,11 +57,48 @@ public static class AppRegistration
 
     // ── Unpackaged build: write HKCU registry keys (original implementation) ─
 
-    private const string ProgId   = "QuickView.AssocFile.1";
+    private const string LegacyProgId = "QuickView.AssocFile.1";
     private const string AppExeKey = "QuickView.exe";
     private const string AppName  = "QuickView";
     private const string AppDesc  = "Fast universal file viewer for Windows";
     private const string CapabKey = @"Software\Clients\QuickView\Capabilities";
+
+    private static string GetIconName(string extension) => extension.ToLowerInvariant() switch
+    {
+        ".pdf" => "PDF",
+        ".pptx" or ".ppt" or ".pptm" or ".ppsx" => "PowerPoint",
+        ".docx" or ".doc" => "Word",
+        ".xlsx" or ".xls" => "Excel",
+        ".csv" or ".tsv" => "CSV",
+        ".log" => "LOG",
+        ".md" or ".markdown" => "Markdown",
+        ".rtf" => "RichText",
+        ".json" => "JSON",
+        ".xml" or ".xaml" => "XML",
+        ".cs" or ".vb" or ".fs" or ".js" or ".mjs" or ".ts" or ".tsx" or ".jsx" or
+        ".py" or ".java" or ".kt" or ".cpp" or ".c" or ".h" or ".go" or ".rs" or
+        ".swift" or ".rb" or ".php" or ".sh" or ".ps1" or ".bat" or ".html" or
+        ".htm" or ".css" or ".scss" or ".sql" => "Code",
+        _ => "Text",
+    };
+
+    private static string GetTypeDescription(string iconName) => iconName switch
+    {
+        "PDF" => "PDF Document",
+        "PowerPoint" => "PowerPoint Presentation",
+        "Word" => "Word Document",
+        "Excel" => "Excel Spreadsheet",
+        "CSV" => "CSV File",
+        "LOG" => "Log File",
+        "Markdown" => "Markdown Document",
+        "RichText" => "Rich Text Document",
+        "JSON" => "JSON File",
+        "XML" => "XML File",
+        "Code" => "Code File",
+        _ => "Text Document",
+    };
+
+    private static string ProgIdFor(string extension) => $"QuickView.{GetIconName(extension)}";
 
     /// <summary>
     /// Writes all HKCU registry keys needed to appear in "Open With" and be
@@ -72,21 +110,41 @@ public static class AppRegistration
             System.IO.Path.GetDirectoryName(exePath)!, "Assets", "AppIcon.ico");
         string openCmd  = $"\"{exePath}\" \"%1\"";
 
-        // 1 ── ProgID
-        using (var progId = EnsureKey($@"Software\Classes\{ProgId}"))
+        // 1 ── Per-icon ProgIDs: Windows gets a distinct DefaultIcon for each file type.
+        foreach (var iconName in SupportedExtensions.Select(GetIconName).Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            progId.SetValue("", "QuickView Document");
-            progId.SetValue("FriendlyTypeName", "QuickView Document");
-            progId.SetValue("EditFlags", 0x00010000, RegistryValueKind.DWord);
-        }
-        using (var cmd = EnsureKey($@"Software\Classes\{ProgId}\shell\open\command"))
-            cmd.SetValue("", openCmd);
+            string progId = $"QuickView.{iconName}";
+            string description = GetTypeDescription(iconName);
+            string typeIconPath = System.IO.Path.Combine(
+                System.IO.Path.GetDirectoryName(exePath)!, "Assets", "FileTypeIcons", $"{iconName}.ico");
 
-        // 2 ── OpenWithProgids per extension (preserves native file icons)
+            using (var type = EnsureKey($@"Software\Classes\{progId}"))
+            {
+                type.SetValue("", description);
+                type.SetValue("FriendlyTypeName", description);
+                type.SetValue("EditFlags", 0x00010000, RegistryValueKind.DWord);
+            }
+            using (var icon = EnsureKey($@"Software\Classes\{progId}\DefaultIcon"))
+                icon.SetValue("", $"\"{typeIconPath}\",0", RegistryValueKind.ExpandString);
+            using (var cmd = EnsureKey($@"Software\Classes\{progId}\shell\open\command"))
+                cmd.SetValue("", openCmd);
+        }
+
+        // 2 ── Map every supported extension to its own icon-bearing ProgID.
+        var currentProgIds = SupportedExtensions
+            .Select(ProgIdFor)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         foreach (var ext in SupportedExtensions)
         {
             using var openWith = EnsureKey($@"Software\Classes\{ext}\OpenWithProgids");
-            openWith.SetValue(ProgId, new byte[0], RegistryValueKind.None);
+            string intendedProgId = ProgIdFor(ext);
+            foreach (var obsoleteProgId in currentProgIds.Append(LegacyProgId))
+            {
+                if (!string.Equals(obsoleteProgId, intendedProgId, StringComparison.OrdinalIgnoreCase))
+                    openWith.DeleteValue(obsoleteProgId, throwOnMissingValue: false);
+            }
+            openWith.SetValue(intendedProgId, new byte[0], RegistryValueKind.None);
         }
 
         // 3 ── Applications\QuickView.exe entry
@@ -117,7 +175,7 @@ public static class AppRegistration
         }
         using (var fa = EnsureKey($@"{CapabKey}\FileAssociations"))
             foreach (var ext in SupportedExtensions)
-                fa.SetValue(ext, ProgId);
+                fa.SetValue(ext, ProgIdFor(ext));
 
         // 6 ── RegisteredApplications
         using (var regApps = Registry.CurrentUser.OpenSubKey(
@@ -130,7 +188,21 @@ public static class AppRegistration
 
     public static void Unregister()
     {
-        DeleteKeyTree($@"Software\Classes\{ProgId}");
+        foreach (var ext in SupportedExtensions)
+        {
+            try
+            {
+                using var openWith = Registry.CurrentUser.OpenSubKey(
+                    $@"Software\Classes\{ext}\OpenWithProgids", writable: true);
+                openWith?.DeleteValue(ProgIdFor(ext), throwOnMissingValue: false);
+                openWith?.DeleteValue(LegacyProgId, throwOnMissingValue: false);
+            }
+            catch { }
+        }
+
+        foreach (var iconName in SupportedExtensions.Select(GetIconName).Distinct(StringComparer.OrdinalIgnoreCase))
+            DeleteKeyTree($@"Software\Classes\QuickView.{iconName}");
+        DeleteKeyTree($@"Software\Classes\{LegacyProgId}");
         DeleteKeyTree($@"Software\Classes\Applications\{AppExeKey}");
         DeleteKeyTree($@"Software\Microsoft\Windows\CurrentVersion\App Paths\{AppExeKey}");
         DeleteKeyTree(@"Software\Clients\QuickView");
@@ -144,11 +216,31 @@ public static class AppRegistration
     {
         try
         {
-            using var cmd = Registry.CurrentUser.OpenSubKey(
-                $@"Software\Classes\{ProgId}\shell\open\command");
-            if (cmd == null) return false;
-            var val = cmd.GetValue("")?.ToString() ?? "";
-            return val.Contains(exePath, StringComparison.OrdinalIgnoreCase);
+            foreach (var ext in SupportedExtensions)
+            {
+                string progId = ProgIdFor(ext);
+                string iconName = GetIconName(ext);
+                string expectedIcon = System.IO.Path.Combine(
+                    System.IO.Path.GetDirectoryName(exePath)!, "Assets", "FileTypeIcons", $"{iconName}.ico");
+
+                using var command = Registry.CurrentUser.OpenSubKey(
+                    $@"Software\Classes\{progId}\shell\open\command");
+                using var icon = Registry.CurrentUser.OpenSubKey(
+                    $@"Software\Classes\{progId}\DefaultIcon");
+                using var openWith = Registry.CurrentUser.OpenSubKey(
+                    $@"Software\Classes\{ext}\OpenWithProgids");
+
+                string commandValue = command?.GetValue("")?.ToString() ?? "";
+                string iconValue = icon?.GetValue("")?.ToString() ?? "";
+                bool mapped = openWith?.GetValueNames().Any(name =>
+                    string.Equals(name, progId, StringComparison.OrdinalIgnoreCase)) == true;
+                if (!commandValue.Contains(exePath, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(iconValue, $"\"{expectedIcon}\",0", StringComparison.OrdinalIgnoreCase) ||
+                    !mapped)
+                    return false;
+            }
+
+            return true;
         }
         catch { return false; }
     }

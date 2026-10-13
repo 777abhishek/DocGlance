@@ -79,10 +79,11 @@ public static class RegistrationHelper
             bool    wasReg   = LoadBool(SubKeyRegistered);
             bool    pathChanged = !string.Equals(lastExe, exePath,
                                       StringComparison.OrdinalIgnoreCase);
+            bool    registrationOutOfDate = !AppRegistration.IsRegistered(exePath);
 
-            if (!wasReg || pathChanged)
+            if (!wasReg || pathChanged || registrationOutOfDate)
             {
-                Logger.Log($"[Registration] Registering (firstRun={!wasReg}, pathChanged={pathChanged})");
+                Logger.Log($"[Registration] Registering (firstRun={!wasReg}, pathChanged={pathChanged}, outOfDate={registrationOutOfDate})");
                 AppRegistration.Register(exePath);
                 SaveBool(SubKeyRegistered, true);
                 SaveString(SubKeyExePath, exePath);

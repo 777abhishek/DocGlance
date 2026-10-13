@@ -26,7 +26,7 @@ public sealed class PdfViewerService : IPdfViewerService, IDisposable
 
     public async Task<PdfLoadResult> LoadDocumentAsync(
         string filePath,
-        Func<Task<string?>>? passwordPrompt = null,
+        Func<string?, Task<string?>>? passwordPrompt = null,
         CancellationToken ct = default)
     {
         using var op = Logger.BeginOperation("PdfOpen", ("FilePath", filePath));
@@ -43,15 +43,14 @@ public sealed class PdfViewerService : IPdfViewerService, IDisposable
                 return PdfLoadResult.Error("Operation cancelled");
             }
 
-            // Handle password-protected PDFs
-            if (!openResult.Ok && openResult.NeedsPassword && passwordPrompt != null)
+            // Retry until the password is accepted or the user cancels.
+            while (!openResult.Ok && openResult.NeedsPassword && passwordPrompt != null)
             {
-                string? password = await passwordPrompt();
-                if (password != null)
-                {
-                    // Retry with password (one attempt only)
-                    openResult = await PdfRenderer.OpenDocumentAsync(filePath, ct, password);
-                }
+                string? password = await passwordPrompt(openResult.Error);
+                if (password == null)
+                    return PdfLoadResult.Error("Opening the PDF was canceled.");
+
+                openResult = await PdfRenderer.OpenDocumentAsync(filePath, ct, password);
             }
 
             if (ct.IsCancellationRequested)

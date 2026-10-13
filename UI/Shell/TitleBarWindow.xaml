@@ -11,18 +11,14 @@
     xmlns:update="using:QuickView.Services.Updates"
     Title="QuickView">
 
-    <Window.SystemBackdrop>
-        <!-- Use DesktopAcrylic for gray appearance matching Windows 11 File Explorer -->
-        <DesktopAcrylicBackdrop/>
-    </Window.SystemBackdrop>
 
     <Grid x:Name="RootGrid" AllowDrop="True"
-          Background="Transparent"
+          Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
           DragOver="RootGrid_DragOver"
           Drop="RootGrid_Drop">
 
         <Grid.Resources>
-            <!-- Override TabView internal brushes so the strip is fully transparent → Mica shows through -->
+            <!-- Transparent tab-strip layers reveal the dark-theme Acrylic window backdrop -->
             <SolidColorBrush x:Key="TabViewBackground" Color="Transparent"/>
             <SolidColorBrush x:Key="TabViewTopBorderBrush" Color="Transparent"/>
             <SolidColorBrush x:Key="TabViewShadowBrush" Color="Transparent"/>

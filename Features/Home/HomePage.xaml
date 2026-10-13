@@ -112,7 +112,7 @@
         </Grid.ColumnDefinitions>
 
         <!-- ════════════════════════════════════════════════════════════════
-             LEFT — document area  (transparent, pure Mica)
+             LEFT — document area layers over the root Acrylic surface
              ════════════════════════════════════════════════════════════════ -->
         <Grid Grid.Column="0">
             <Grid.RowDefinitions>
@@ -375,7 +375,7 @@
 
         <!-- ════════════════════════════════════════════════════════════════
              RIGHT — floating filter panel
-             No border, transparent background — blends with the Mica/Acrylic window backdrop.
+             No border or opaque fill — layers over the root Acrylic surface.
              ════════════════════════════════════════════════════════════════ -->
         <Grid Grid.Column="1">
             <Grid.RowDefinitions>

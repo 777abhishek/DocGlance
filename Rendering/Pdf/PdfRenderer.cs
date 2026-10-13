@@ -6,6 +6,9 @@ using System.IO;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Windows.Data.Pdf;
+using Windows.Storage;
+using Windows.Storage.Streams;
 
 namespace QuickView.Rendering.Pdf;
 
@@ -14,7 +17,7 @@ public readonly record struct PdfOpenResult(PdfDocumentState? Document, string? 
     public bool Ok => Document != null;
 }
 
-/// <summary>PDF rendering backed exclusively by the PdfCraft Rust FFI.</summary>
+/// <summary>PDF rendering via PdfCraft, with Windows.Data.Pdf for encrypted documents.</summary>
 public static class PdfRenderer
 {
     public const float ScreenDpi = 96f;
@@ -35,10 +38,11 @@ public static class PdfRenderer
     public static async Task<PdfOpenResult> OpenDocumentAsync(
         string filePath, CancellationToken ct = default, string? password = null)
     {
-        if (!string.IsNullOrWhiteSpace(password))
-            return new PdfOpenResult(null, "Password-protected PDFs are not supported by PdfCraft yet.", true);
         if (!FileSizeValidator.IsFileValidAndSafe(filePath, out var validationError))
             return new PdfOpenResult(null, $"Validation failed: {validationError}");
+
+        if (password != null)
+            return await OpenPasswordProtectedDocumentAsync(filePath, password, ct);
 
         // Open by path so the managed heap does not hold a second copy of the file.
         return await Task.Run(() =>
@@ -68,8 +72,8 @@ public static class PdfRenderer
     {
         if (bytes == null || bytes.Length == 0)
             return Task.FromResult(new PdfOpenResult(null, "PDF bytes are empty"));
-        if (!string.IsNullOrEmpty(password))
-            return Task.FromResult(new PdfOpenResult(null, "Password-protected PDFs are not supported by PdfCraft yet.", true));
+        if (password != null)
+            return Task.FromResult(new PdfOpenResult(null, "Password-protected PDFs cannot be opened from memory."));
 
         return Task.Run(() => OpenDocumentFromBytesCore(bytes, ct), ct);
     }
@@ -90,7 +94,7 @@ public static class PdfRenderer
             // PdfCraft does not support encryption; give the user a precise reason instead of
             // a generic parse failure.
             return LooksEncrypted(bytes)
-                ? new PdfOpenResult(null, EncryptedMessage)
+                ? new PdfOpenResult(null, EncryptedMessage, true)
                 : new PdfOpenResult(null, "PdfCraft could not parse the PDF.");
         }
 
@@ -98,7 +102,43 @@ public static class PdfRenderer
     }
 
     private const string EncryptedMessage =
-        "This PDF is password-protected (encrypted). QuickView can't open encrypted PDFs yet.";
+        "This PDF is password-protected. Enter its password to open it.";
+
+    private static async Task<PdfOpenResult> OpenPasswordProtectedDocumentAsync(
+        string filePath, string password, CancellationToken ct)
+    {
+        try
+        {
+            ct.ThrowIfCancellationRequested();
+            var file = await StorageFile.GetFileFromPathAsync(filePath);
+            var document = await PdfDocument.LoadFromFileAsync(file, password);
+            ct.ThrowIfCancellationRequested();
+
+            if (document.PageCount == 0)
+                return new PdfOpenResult(null, "PDF contains no readable pages.");
+            if (document.PageCount > int.MaxValue)
+                return new PdfOpenResult(null, "PDF has too many pages to display.");
+
+            var pageSizes = new List<(double Width, double Height)>((int)document.PageCount);
+            for (uint i = 0; i < document.PageCount; i++)
+            {
+                using var page = document.GetPage(i);
+                // WinRT page dimensions are in 1/96-inch units; viewer layout uses PDF points.
+                pageSizes.Add((page.Size.Width * 0.75, page.Size.Height * 0.75));
+            }
+
+            return new PdfOpenResult(new PdfDocumentState(document, (int)document.PageCount, pageSizes), null);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            // Windows.Data.Pdf reports an invalid/missing password as a load failure.
+            return new PdfOpenResult(null, "That password did not open the PDF. Please check it and try again.", true);
+        }
+    }
 
     /// <summary>
     /// Cheap heuristic: an encrypted PDF carries an <c>/Encrypt</c> entry in a trailer or
@@ -143,6 +183,9 @@ public static class PdfRenderer
             pageIndex < 0 || pageIndex >= state.PageCount)
             return null;
 
+        if (state.ManagedPdfDocument != null)
+            return await RenderManagedPdfPageAsync(state, pageIndex, dpi, ct);
+
         var image = await Task.Run(() =>
         {
             ct.ThrowIfCancellationRequested();
@@ -179,5 +222,33 @@ public static class PdfRenderer
         {
             PdfCraftNative.pc_free_image(image);
         }
+    }
+
+    private static async Task<WriteableBitmap?> RenderManagedPdfPageAsync(
+        PdfDocumentState state, int pageIndex, float dpi, CancellationToken ct)
+    {
+        var document = state.ManagedPdfDocument;
+        if (document == null || ct.IsCancellationRequested)
+            return null;
+
+        using var page = document.GetPage((uint)pageIndex);
+        double pageWidthPt = state.GetPageSize(pageIndex).Width;
+        double pageHeightPt = state.GetPageSize(pageIndex).Height;
+        float renderDpi = RenderBudget.CapDpi(dpi, pageWidthPt, pageHeightPt);
+        double scale = renderDpi / 72.0;
+        const uint maxDimension = 16384;
+        uint width = (uint)Math.Clamp(Math.Round(pageWidthPt * scale), 1, maxDimension);
+        uint height = (uint)Math.Clamp(Math.Round(pageHeightPt * scale), 1, maxDimension);
+        var options = new PdfPageRenderOptions
+        {
+            DestinationWidth = width,
+            DestinationHeight = height
+        };
+
+        using var stream = new InMemoryRandomAccessStream();
+        await page.RenderToStreamAsync(stream, options);
+        ct.ThrowIfCancellationRequested();
+        stream.Seek(0);
+        return await NativeBitmap.FromPdfStreamAsync(stream, (int)width, (int)height);
     }
 }

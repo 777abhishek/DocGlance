@@ -4,6 +4,16 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Application.Resources>
         <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="QuickViewSurfaceBrush" Color="#FFFFFFFF" />
+                    <SolidColorBrush x:Key="QuickViewElevatedSurfaceBrush" Color="#FFF3F3F3" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="QuickViewSurfaceBrush" Color="#FF1E1E1E" />
+                    <SolidColorBrush x:Key="QuickViewElevatedSurfaceBrush" Color="#FF2C2C2C" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>

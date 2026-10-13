@@ -4,6 +4,7 @@ using System;
 using System.IO;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading.Tasks;
+using Windows.Storage.Streams;
 
 namespace QuickView.Rendering;
 
@@ -23,6 +24,33 @@ internal static class NativeBitmap
 
     /// <summary>Call once from the UI thread at startup.</summary>
     public static void Initialize(DispatcherQueue uiDispatcher) => _ui = uiDispatcher;
+
+    public static Task<WriteableBitmap> FromPdfStreamAsync(IRandomAccessStream stream, int width, int height)
+    {
+        var ui = _ui;
+        if (ui == null || ui.HasThreadAccess)
+            return CreateBitmapFromStreamAsync(stream, width, height);
+
+        var tcs = new TaskCompletionSource<WriteableBitmap>(TaskCreationOptions.RunContinuationsAsynchronously);
+        bool queued = ui.TryEnqueue(async () =>
+        {
+            try { tcs.SetResult(await CreateBitmapFromStreamAsync(stream, width, height)); }
+            catch (Exception ex) { tcs.SetException(ex); }
+        });
+
+        if (!queued)
+            tcs.SetException(new InvalidOperationException("The UI dispatcher is shut down."));
+
+        return tcs.Task;
+    }
+
+    private static async Task<WriteableBitmap> CreateBitmapFromStreamAsync(
+        IRandomAccessStream stream, int width, int height)
+    {
+        var bitmap = new WriteableBitmap(width, height);
+        await bitmap.SetSourceAsync(stream);
+        return bitmap;
+    }
 
     public static Task<WriteableBitmap> FromRgbaAsync(IntPtr pixels, uint width, uint height, nuint len)
     {
