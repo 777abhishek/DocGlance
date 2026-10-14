@@ -2,8 +2,8 @@
 <!--
   Package.appxmanifest  —  QuickView MSIX package identity for Microsoft Store submission.
 
-  The current identity is for local GitHub sideload builds. Before Store
-  submission, replace it with the identity and publisher from Partner Center.
+  Store identity reserved in Partner Center. The signing certificate must
+  match the Store publisher before building the Store package.
 -->
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
@@ -15,11 +15,11 @@
   IgnorableNamespaces="mp uap3 uap10 rescap">
 
   <!-- ═══════════════════════════════════════════════════════════════
-       IDENTITY  —  local sideload identity; replace for Store submission
+       IDENTITY  —  Store product identity
        ═══════════════════════════════════════════════════════════════ -->
   <Identity
-    Name="QuickView"
-    Publisher="CN=777abhishek"
+    Name="777abhishek.DocGlance"
+    Publisher="CN=BBE5B101-6F9F-4DD1-B36A-16425B608E84"
     Version="14.10.26.0"
     ProcessorArchitecture="x64" />
 

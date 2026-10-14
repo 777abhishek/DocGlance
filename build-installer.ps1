@@ -1,26 +1,29 @@
 ﻿# ─────────────────────────────────────────────────────────────────────────────
 #  QuickView — Package build script
 #
-#  Produces BOTH distribution formats:
-#    1. MSIX package:   installer\output\QuickView_14.10.26.0_x64.msix (for Store)
-#    2. EXE installer:  installer\output\QuickView-Setup-x64.exe (for GitHub)
+#  Creates a Store upload package, a signed sideload package, and/or the
+#  unpackaged EXE installer. Store packages use Microsoft's re-signing flow;
+#  sideload packages are signed with a local cert matching manifest Publisher.
 #
 #  Usage:
-#    .\build-installer.ps1                     (build both MSIX + EXE installer)
-#    .\build-installer.ps1 -MsixOnly           (build only MSIX package)
-#    .\build-installer.ps1 -InstallerOnly      (build only EXE installer)
+#    .\build-installer.ps1                     (sideload MSIX + EXE installer)
+#    .\build-installer.ps1 -StoreUpload        (Store-ready .msixupload only)
+#    .\build-installer.ps1 -MsixOnly           (signed sideload MSIX only)
+#    .\build-installer.ps1 -InstallMsix        (build, trust, and install sideload MSIX)
+#    .\build-installer.ps1 -InstallerOnly      (EXE installer only)
 #    .\build-installer.ps1 -SkipPublish        (reuse existing publish folder)
-#    .\build-installer.ps1 -Version 1.2.0      (override version string)
 #
 #  Requirements:
-#    - For MSIX: Windows SDK with makeappx.exe (usually installed with Visual Studio)
-#    - For EXE:  Inno Setup 6 (auto-installs if missing)
+#    - Windows SDK and .NET 8 SDK
+#    - Sideload install trusts its self-signed root and signer on this PC (UAC prompt)
+#    - Inno Setup 6 for the EXE installer (auto-installs if missing)
 # ─────────────────────────────────────────────────────────────────────────────
 param(
     [switch]$SkipPublish,
     [switch]$MsixOnly,
-    [switch]$InstallerOnly,
-    [string]$Version = "14.10.26.0"
+    [switch]$StoreUpload,
+    [switch]$InstallMsix,
+    [switch]$InstallerOnly
 )
 
 Set-StrictMode -Version Latest
@@ -48,10 +51,24 @@ function Get-QuickViewSigningCertificate {
             $_.Subject -eq "CN=777abhishek" -and
             $_.HasPrivateKey -and
             $_.NotAfter -gt (Get-Date) -and
-            $_.EnhancedKeyUsageList.ObjectId.Value -contains "1.3.6.1.5.5.7.3.3"
+            $_.EnhancedKeyUsageList.ObjectId -contains "1.3.6.1.5.5.7.3.3"
         } |
         Sort-Object NotAfter -Descending |
         Select-Object -First 1
+}
+
+function Get-OrCreateQuickViewSigningCertificate {
+    $certificate = Get-QuickViewSigningCertificate
+    if ($certificate) { return $certificate }
+
+    Write-Step "Creating local EXE signing certificate for CN=777abhishek…"
+    New-SelfSignedCertificate -Type Custom `
+        -Subject "CN=777abhishek" `
+        -KeyUsage DigitalSignature `
+        -FriendlyName "QuickView EXE Development Signing" `
+        -CertStoreLocation "Cert:\CurrentUser\My" `
+        -NotAfter (Get-Date).AddYears(3) `
+        -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
 }
 
 function Get-WindowsSdkSignTool {
@@ -61,18 +78,105 @@ function Get-WindowsSdkSignTool {
         Select-Object -First 1 -ExpandProperty FullName
 }
 
+function Get-PackageSigningCertificate([string]$publisher) {
+    Get-ChildItem "Cert:\CurrentUser\My" |
+        Where-Object {
+            $_.Subject -eq $publisher -and
+            $_.HasPrivateKey -and
+            $_.NotAfter -gt (Get-Date) -and
+            $_.EnhancedKeyUsageList.ObjectId -contains "1.3.6.1.5.5.7.3.3"
+        } |
+        Sort-Object NotAfter -Descending |
+        Select-Object -First 1
+}
+
+function Get-OrCreatePackageSigningCertificate([string]$publisher) {
+    $certificate = Get-PackageSigningCertificate $publisher
+    if ($certificate) { return $certificate }
+
+    Write-Step "Creating local MSIX signing certificate for $publisher…"
+    New-SelfSignedCertificate -Type Custom `
+        -Subject $publisher `
+        -KeyUsage DigitalSignature `
+        -FriendlyName "DocGlance MSIX Development Signing" `
+        -CertStoreLocation "Cert:\CurrentUser\My" `
+        -NotAfter (Get-Date).AddYears(3) `
+        -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
+}
+
+function Trust-PackageCertificateForInstall([string]$certificatePath, [string]$thumbprint) {
+    $trustedRoot = Get-ChildItem "Cert:\LocalMachine\Root" -ErrorAction SilentlyContinue |
+        Where-Object Thumbprint -eq $thumbprint
+    $trustedPeople = Get-ChildItem "Cert:\LocalMachine\TrustedPeople" -ErrorAction SilentlyContinue |
+        Where-Object Thumbprint -eq $thumbprint
+    if ($trustedRoot -and $trustedPeople) { return }
+
+    Write-Info "Windows requires the self-signed package root to be trusted on this PC."
+    Write-Info "Approve the UAC prompt to add the signer to Local Machine Root and Trusted People."
+    $escapedPath = $certificatePath.Replace("'", "''")
+    $storeCommands = @()
+    if (-not $trustedRoot) {
+        $storeCommands += "Import-Certificate -FilePath '$escapedPath' -CertStoreLocation 'Cert:\LocalMachine\Root' -ErrorAction Stop | Out-Null"
+    }
+    if (-not $trustedPeople) {
+        $storeCommands += "Import-Certificate -FilePath '$escapedPath' -CertStoreLocation 'Cert:\LocalMachine\TrustedPeople' -ErrorAction Stop | Out-Null"
+    }
+    $trustCommand = "try { $($storeCommands -join '; '); exit 0 } catch { Write-Error 'Certificate import failed'; exit 1 }"
+    $encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($trustCommand))
+    try {
+        $trustProcess = Start-Process -FilePath "powershell.exe" -Verb RunAs `
+            -ArgumentList @("-NoProfile", "-EncodedCommand", $encodedCommand) -Wait -PassThru
+    } catch {
+        Write-Fail "Could not elevate to trust the sideload certificate: $($_.Exception.Message)"
+    }
+    if ($trustProcess.ExitCode -ne 0) {
+        Write-Fail "Could not trust the sideload root. Rerun as Administrator or import $certificatePath into Local Computer > Root and Trusted People."
+    }
+}
+
 Write-Host ""
 Write-Host "  ╔═══════════════════════════════════════════════════════════╗" -ForegroundColor Magenta
 Write-Host "  ║  QuickView Package Builder                                 ║" -ForegroundColor Magenta
 Write-Host "  ╚═══════════════════════════════════════════════════════════╝" -ForegroundColor Magenta
 
-if ($MsixOnly) {
-    Write-Info "Mode: MSIX only (for Microsoft Store)"
-} elseif ($InstallerOnly) {
-    Write-Info "Mode: EXE installer only (for GitHub releases)"
-} else {
-    Write-Info "Mode: Both MSIX + EXE installer"
+if (($StoreUpload -and ($InstallMsix -or $MsixOnly -or $InstallerOnly)) -or
+    ($InstallMsix -and $InstallerOnly) -or
+    ($MsixOnly -and $InstallerOnly)) {
+    Write-Fail "Choose one packaging mode: -StoreUpload, -InstallMsix, -MsixOnly, -InstallerOnly, or the default combined build."
 }
+
+$BuildMsix = $StoreUpload -or $InstallMsix -or $MsixOnly -or (-not $InstallerOnly)
+$BuildInstaller = -not ($StoreUpload -or $InstallMsix -or $MsixOnly)
+
+[xml]$manifestXml = Get-Content -Path $Manifest -Raw
+$manifestIdentity = $manifestXml.SelectSingleNode("/*[local-name()='Package']/*[local-name()='Identity']")
+if (-not $manifestIdentity) { Write-Fail "Package Identity was not found in $Manifest" }
+$PackageName = $manifestIdentity.GetAttribute("Name")
+$PackagePublisher = $manifestIdentity.GetAttribute("Publisher")
+$PackageVersion = $manifestIdentity.GetAttribute("Version")
+$publisherDisplayNode = $manifestXml.SelectSingleNode("/*[local-name()='Package']/*[local-name()='Properties']/*[local-name()='PublisherDisplayName']")
+$PackagePublisherDisplayName = if ($publisherDisplayNode) { $publisherDisplayNode.InnerText } else { "" }
+if (-not $PackageName -or -not $PackagePublisher -or $PackageVersion -notmatch '^\d+\.\d+\.\d+\.\d+$') {
+    Write-Fail "Manifest identity must define Name, Publisher, and a four-part numeric Version."
+}
+
+if ($StoreUpload) {
+    if ($PackageName -ne "777abhishek.DocGlance" -or
+        $PackagePublisher -ne "CN=BBE5B101-6F9F-4DD1-B36A-16425B608E84" -or
+        $PackagePublisherDisplayName -ne "777abhishek") {
+        Write-Fail "Manifest identity or PublisherDisplayName does not match this Store product (777abhishek.DocGlance / CN=BBE5B101-6F9F-4DD1-B36A-16425B608E84 / 777abhishek)."
+    }
+    Write-Info "Mode: Microsoft Store upload (.msixupload)"
+} elseif ($InstallMsix) {
+    Write-Info "Mode: Build and install signed sideload MSIX"
+} elseif ($MsixOnly) {
+    Write-Info "Mode: Signed sideload MSIX only"
+} elseif ($InstallerOnly) {
+    Write-Info "Mode: EXE installer only"
+} else {
+    Write-Info "Mode: Signed sideload MSIX + EXE installer"
+}
+Write-Info "Package identity: $PackageName | $PackagePublisher | $PackageVersion"
 
 # ── 0. Build native libraries ────────────────────────────────────────────────
 Write-Step "Building native Rust libraries…"
@@ -87,10 +191,10 @@ if ($LASTEXITCODE -ne 0) {
 Write-OK "Native libraries built and copied to the .NET output locations"
 
 # ── 1. Publish (for unpackaged EXE installer) ─────────────────────────────────
-if ($InstallerOnly -or (-not $MsixOnly)) {
-    $signingCertificate = Get-QuickViewSigningCertificate
-    if (-not $signingCertificate) {
-        Write-Fail "No valid CN=777abhishek code-signing certificate with a private key found in CurrentUser\My. Run tools\sign-package.ps1 -CertificateOnly first."
+if ($BuildInstaller) {
+    $signingCertificate = Get-OrCreateQuickViewSigningCertificate
+    if (-not $signingCertificate -or -not $signingCertificate.HasPrivateKey) {
+        Write-Fail "Could not create or find the CN=777abhishek EXE signing certificate."
     }
 
     $signtool = Get-WindowsSdkSignTool
@@ -159,43 +263,52 @@ if ($InstallerOnly -or (-not $MsixOnly)) {
     Write-Info "This is a self-signed test certificate; other PCs must explicitly trust it."
 }
 
-# ── 3. Build MSIX package ─────────────────────────────────────────────────────
-if ($MsixOnly -or (-not $InstallerOnly)) {
-    Write-Step "Building MSIX package…"
+# ── 3. Build the requested MSIX package ────────────────────────────────────────
+if ($BuildMsix) {
+    $msixOutputDir = if ($StoreUpload) {
+        Join-Path $OutputDir "store-upload"
+    } else {
+        Join-Path $OutputDir "sideload"
+    }
 
-    # Ensure Windows SDK tools are available
-    $makeappx = $null
-    $sdkPaths = @(
-        "C:\NuGet\microsoft.windows.sdk.buildtools\*\bin\*\x64\makeappx.exe",
-        "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\makeappx.exe",
-        "${env:ProgramFiles}\Windows Kits\10\bin\*\x64\makeappx.exe",
-        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Shared\NuGetPackages\microsoft.windows.sdk.buildtools\*\bin\*\x64\makeappx.exe"
-    )
-    foreach ($pattern in $sdkPaths) {
-        $found = Get-ChildItem -Path $pattern -ErrorAction SilentlyContinue | Select-Object -Last 1
-        if ($found) {
-            $makeappx = $found.FullName
-            break
+    # Avoid accidentally returning artifacts from an older build.
+    if (Test-Path $msixOutputDir) {
+        Remove-Item $msixOutputDir -Recurse -Force
+    }
+    New-Item -ItemType Directory -Force -Path $msixOutputDir | Out-Null
+
+    $packageBuildMode = if ($StoreUpload) { "StoreUpload" } else { "SideloadOnly" }
+    $packageSigningEnabled = if ($StoreUpload) { "false" } else { "true" }
+    $packageDebugType = if ($StoreUpload) { "portable" } else { "embedded" }
+    $packageCertificateThumbprint = ""
+    $packageCertificate = $null
+
+    if (-not $StoreUpload) {
+        $packageCertificate = Get-OrCreatePackageSigningCertificate $PackagePublisher
+        if (-not $packageCertificate -or -not $packageCertificate.HasPrivateKey) {
+            Write-Fail "Could not create or find a signing certificate matching $PackagePublisher."
         }
+        $packageCertificateThumbprint = $packageCertificate.Thumbprint
+        $certificatePath = Join-Path $OutputDir "$PackageName-sideload.cer"
+        if (Test-Path $certificatePath) { Remove-Item $certificatePath -Force }
+        Export-Certificate -Cert $packageCertificate -FilePath $certificatePath | Out-Null
+        Write-Info "Sideload signer: $($packageCertificate.Subject) ($($packageCertificate.Thumbprint))"
+    } else {
+        Write-Info "Store uploads are built unsigned; Partner Center signs accepted packages."
     }
 
-    if (-not $makeappx) {
-        Write-Fail "makeappx.exe not found. Install Windows SDK via Visual Studio Installer."
-    }
-    Write-Info "Found makeappx: $makeappx"
-
-    # Use dotnet build to produce the MSIX package
-    Write-Info "Building MSIX via dotnet build…"
-
-    New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
-
+    Write-Step "Building $packageBuildMode MSIX via dotnet…"
     $dotnetArgs = @(
         "build", $Project,
         "-c", "Release",
         "-p:Platform=x64",
-        "-p:AppxPackageDir=$OutputDir\",
-        "-p:UapAppxPackageBuildMode=SideloadOnly",
+        "-p:AppxPackageDir=$msixOutputDir\",
+        "-p:UapAppxPackageBuildMode=$packageBuildMode",
         "-p:AppxBundle=Never",
+        "-p:AppxPackageSigningEnabled=$packageSigningEnabled",
+        "-p:PackageCertificateThumbprint=$packageCertificateThumbprint",
+        "-p:DebugSymbols=true",
+        "-p:DebugType=$packageDebugType",
         "-p:GenerateAppxPackageOnBuild=true",
         "--nologo",
         "-v", "minimal"
@@ -203,27 +316,59 @@ if ($MsixOnly -or (-not $InstallerOnly)) {
 
     & dotnet @dotnetArgs
     if ($LASTEXITCODE -ne 0) {
-        Write-Fail "dotnet build MSIX packaging failed (exit $LASTEXITCODE)"
+        Write-Fail "dotnet build $packageBuildMode packaging failed (exit $LASTEXITCODE)"
     }
 
-    # Find the generated MSIX
-    $msixFiles = Get-ChildItem -Path $OutputDir -Filter "*.msix" -Recurse -ErrorAction SilentlyContinue
-    if ($msixFiles) {
-        $msix = $msixFiles | Select-Object -First 1
-        # Copy to output root for easy access (skip if already there)
-        $msixDest = "$OutputDir\QuickView_$Version`_x64.msix"
-        if ($msix.FullName -ne $msixDest) {
-            Copy-Item $msix.FullName $msixDest -Force
+    if ($StoreUpload) {
+        $uploadArtifact = Get-ChildItem -Path $msixOutputDir -Recurse -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Extension -in ".msixupload", ".appxupload" } |
+            Select-Object -First 1
+        if (-not $uploadArtifact) {
+            Write-Fail "StoreUpload build completed without an .msixupload/.appxupload artifact."
         }
-        $sizeMb = [math]::Round((Get-Item $msixDest).Length / 1MB, 1)
-        Write-OK "MSIX package: $msixDest  ($sizeMb MB)"
+
+        $uploadPath = Join-Path $OutputDir "${PackageName}_${PackageVersion}_x64$($uploadArtifact.Extension)"
+        Copy-Item -Path $uploadArtifact.FullName -Destination $uploadPath -Force
+        $sizeMb = [math]::Round((Get-Item $uploadPath).Length / 1MB, 1)
+        Write-OK "Store upload artifact: $uploadPath ($sizeMb MB)"
     } else {
-        Write-Info "Note: MSIX not found in expected location. Check build output."
+        $msixArtifact = Get-ChildItem -Path $msixOutputDir -Recurse -File -Filter "*.msix" -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -notmatch '[\\/]Dependencies[\\/]' } |
+            Select-Object -First 1
+        if (-not $msixArtifact) {
+            Write-Fail "Sideload build completed without an installable .msix artifact."
+        }
+
+        $msixPath = Join-Path $OutputDir "${PackageName}_${PackageVersion}_x64.msix"
+        Copy-Item -Path $msixArtifact.FullName -Destination $msixPath -Force
+        $sizeMb = [math]::Round((Get-Item $msixPath).Length / 1MB, 1)
+        Write-OK "Signed sideload package: $msixPath ($sizeMb MB)"
+        Write-Info "For another PC, install $PackageName-sideload.cer into Trusted People before installing this MSIX."
+
+        if ($InstallMsix) {
+            Trust-PackageCertificateForInstall $certificatePath $packageCertificate.Thumbprint
+
+            $dependencyPackages = Get-ChildItem -Path $msixOutputDir -Recurse -File -ErrorAction SilentlyContinue |
+                Where-Object {
+                    $_.DirectoryName -match '[\\/]Dependencies[\\/]' -and
+                    $_.Extension -in ".appx", ".msix"
+                }
+            try {
+                if ($dependencyPackages) {
+                    Add-AppxPackage -Path $msixPath -DependencyPath @($dependencyPackages.FullName)
+                } else {
+                    Add-AppxPackage -Path $msixPath
+                }
+                Write-OK "Installed $PackageName for the current user."
+            } catch {
+                Write-Fail "MSIX install failed: $($_.Exception.Message). If Windows reports an untrusted package, import $certificatePath into Local Computer > Trusted People as Administrator, then rerun -InstallMsix."
+            }
+        }
     }
 }
 
 # ── 4. Build EXE installer (Inno Setup) ───────────────────────────────────────
-if ($InstallerOnly -or (-not $MsixOnly)) {
+if ($BuildInstaller) {
     Write-Step "Checking for Inno Setup 6…"
 
     $iscc = $null
@@ -297,7 +442,7 @@ if ($InstallerOnly -or (-not $MsixOnly)) {
 
     # Inject version and the SDK signing command at compile time.
     & $iscc `
-        "/DAppVersion=$Version" `
+        "/DAppVersion=$PackageVersion" `
         "/SQuickViewSign=$signToolCommand" `
         $IssFile
 
@@ -319,12 +464,13 @@ Write-Host "  ║  Build Complete!                                           ║
 Write-Host "  ╚═══════════════════════════════════════════════════════════╝" -ForegroundColor Green
 Write-Host ""
 
-if ($MsixOnly -or (-not $InstallerOnly)) {
-    Write-Info "MSIX package → $OutputDir"
-    Write-Info "  Use for: Microsoft Store submission"
+if ($StoreUpload) {
+    Write-Info "Upload this file in Partner Center: $uploadPath"
+} elseif ($BuildMsix) {
+    Write-Info "Sideload package: $OutputDir\${PackageName}_${PackageVersion}_x64.msix"
 }
 
-if ($InstallerOnly -or (-not $MsixOnly)) {
+if ($BuildInstaller) {
     Write-Info "EXE installer → $OutputDir\QuickView-Setup-x64.exe"
     Write-Info "  Use for: GitHub releases, direct distribution"
 }
