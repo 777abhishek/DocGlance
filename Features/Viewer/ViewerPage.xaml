@@ -75,7 +75,7 @@
 
     </Page.Resources>
 
-    <Grid>
+    <Grid x:Name="ViewerRoot">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -92,6 +92,7 @@
             ShowInExplorerRequested="ShowInExplorerButton_Click"
             DocInfoRequested="DocInfoButton_Click"
             PresentationModeRequested="PresentationModeMenuItem_Click"
+            KeyboardShortcutsRequested="ShowKeyboardShortcuts"
             PrintRequested="PrintMenuItem_Click"
             CopyPageTextRequested="CopyPageTextMenuItem_Click"
             CopyPathRequested="CopyPathMenuItem_Click"
@@ -558,7 +559,7 @@
                         </Button>
                         <Button Style="{StaticResource PillButtonStyle}"
                             Click="ZoomInButton_Click"
-                            ToolTipService.ToolTip="Zoom in (Ctrl++)">
+                            ToolTipService.ToolTip="Zoom in (Ctrl+Shift+=)">
                             <FontIcon Glyph="&#xE710;" FontSize="13"/>
                         </Button>
                     </StackPanel>

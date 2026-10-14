@@ -18,6 +18,7 @@ public sealed partial class ViewerToolbar : UserControl
     public event EventHandler? ShowInExplorerRequested;
     public event EventHandler? DocInfoRequested;
     public event EventHandler? PresentationModeRequested;
+    public event EventHandler? KeyboardShortcutsRequested;
     public event EventHandler? PrintRequested;
     public event EventHandler? CopyPageTextRequested;
     public event EventHandler? CopyPathRequested;
@@ -95,6 +96,7 @@ public sealed partial class ViewerToolbar : UserControl
     private void ShowInExplorerButton_Click(object sender, RoutedEventArgs e) => ShowInExplorerRequested?.Invoke(this, EventArgs.Empty);
     private void DocInfoButton_Click(object sender, RoutedEventArgs e) => DocInfoRequested?.Invoke(this, EventArgs.Empty);
     private void PresentationModeMenuItem_Click(object sender, RoutedEventArgs e) => PresentationModeRequested?.Invoke(this, EventArgs.Empty);
+    private void KeyboardShortcutsMenuItem_Click(object sender, RoutedEventArgs e) => KeyboardShortcutsRequested?.Invoke(this, EventArgs.Empty);
     private void PrintMenuItem_Click(object sender, RoutedEventArgs e) => PrintRequested?.Invoke(this, EventArgs.Empty);
     private void CopyPageTextMenuItem_Click(object sender, RoutedEventArgs e) => CopyPageTextRequested?.Invoke(this, EventArgs.Empty);
     private void CopyPathMenuItem_Click(object sender, RoutedEventArgs e) => CopyPathRequested?.Invoke(this, EventArgs.Empty);

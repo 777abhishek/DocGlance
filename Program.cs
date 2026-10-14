@@ -69,6 +69,10 @@ public static class Program
     [DllImport("user32.dll", ExactSpelling = true)]
     private static extern bool SetProcessDPIAware();
 
+    [DllImport("user32.dll", SetLastError = true, ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool AllowSetForegroundWindow(uint dwProcessId);
+
     // ── Entry point ───────────────────────────────────────────────────────────
 
     [STAThread]
@@ -124,6 +128,16 @@ public static class Program
                 Logger.Log($"[SingleInstance] Redirect args: Kind={activatedArgs?.Kind}, " +
                            $"DataType={activatedArgs?.Data?.GetType().Name ?? "null"}, " +
                            $"CmdLine={string.Join(' ', Environment.GetCommandLineArgs().Skip(1))}");
+
+                // The new process was launched by the user's file-open action. Transfer
+                // its foreground permission to the existing instance before handing over
+                // activation; otherwise Windows may accept the file but leave its window
+                // behind the app that was previously in front.
+                uint primaryProcessId = unchecked((uint)mainInstance.ProcessId);
+                if (AllowSetForegroundWindow(primaryProcessId))
+                    Logger.Log($"[SingleInstance] Foreground permission granted to PID {primaryProcessId}");
+                else
+                    Logger.Warn($"[SingleInstance] Could not grant foreground permission to PID {primaryProcessId}: Win32Error={Marshal.GetLastWin32Error()}");
 
                 // Collect the file path(s) this second process was launched with.
                 var paths = ActivationPaths.FromCurrentLaunch();

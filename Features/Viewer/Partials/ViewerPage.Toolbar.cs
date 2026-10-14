@@ -144,18 +144,7 @@ public sealed partial class ViewerPage
 
     private void PresentationModeMenuItem_Click(object? sender, EventArgs e)
     {
-        var app = Microsoft.UI.Xaml.Application.Current as DocGlance.App;
-        var window = app?.MainWindow;
-        if (window == null) return;
-
-        var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(
-            Microsoft.UI.Win32Interop.GetWindowIdFromWindow(
-                WinRT.Interop.WindowNative.GetWindowHandle(window)));
-
-        if (appWindow.Presenter.Kind == Microsoft.UI.Windowing.AppWindowPresenterKind.FullScreen)
-            appWindow.SetPresenter(Microsoft.UI.Windowing.AppWindowPresenterKind.Default);
-        else
-            appWindow.SetPresenter(Microsoft.UI.Windowing.AppWindowPresenterKind.FullScreen);
+        TogglePresentationMode();
     }
 
     private async void PrintMenuItem_Click(object? sender, EventArgs e)

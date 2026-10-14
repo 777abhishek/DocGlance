@@ -89,6 +89,13 @@ public sealed partial class SpreadsheetViewer : UserControl
     public double Zoom => _zoom;
     public int ActiveSheetIndex => _activeSheet;
     public double SheetWidth => _totalWidth;
+
+    public void ResetScrollPosition()
+    {
+        CellScroll.ChangeView(0, 0, null, disableAnimation: true);
+        ColHeaderScroll.ChangeView(0, 0, null, disableAnimation: true);
+        RowHeaderScroll.ChangeView(0, 0, null, disableAnimation: true);
+    }
     public double SheetHeight => _totalHeight;
     public double ViewportWidth => CellScroll.ViewportWidth;
     public double ViewportHeight => CellScroll.ViewportHeight;

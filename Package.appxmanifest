@@ -92,7 +92,7 @@
 
         <!-- PDF files (PDFCraft) -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="DocGlance-pdf">
+          <uap:FileTypeAssociation Name="docglance-pdf">
             <uap:SupportedFileTypes>
               <uap:FileType>.pdf</uap:FileType>
             </uap:SupportedFileTypes>
@@ -104,7 +104,7 @@
 
         <!-- PowerPoint files (DeckCraft) -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="DocGlance-pptx">
+          <uap:FileTypeAssociation Name="docglance-pptx">
             <uap:SupportedFileTypes>
               <uap:FileType>.pptx</uap:FileType>
               <uap:FileType>.ppt</uap:FileType>
@@ -119,7 +119,7 @@
 
         <!-- Word files (WordCraft - coming soon) -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="DocGlance-word">
+          <uap:FileTypeAssociation Name="docglance-word">
             <uap:SupportedFileTypes>
               <uap:FileType>.docx</uap:FileType>
               <uap:FileType>.doc</uap:FileType>
@@ -132,7 +132,7 @@
 
         <!-- Excel files (GridCraft - coming soon) -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="DocGlance-excel">
+          <uap:FileTypeAssociation Name="docglance-excel">
             <uap:SupportedFileTypes>
               <uap:FileType>.xlsx</uap:FileType>
               <uap:FileType>.xls</uap:FileType>
@@ -145,7 +145,7 @@
 
         <!-- Text files -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="DocGlance-text">
+          <uap:FileTypeAssociation Name="docglance-text">
             <uap:SupportedFileTypes>
               <uap:FileType>.txt</uap:FileType>
               <uap:FileType>.log</uap:FileType>
@@ -165,7 +165,7 @@
 
         <!-- CSV/TSV files -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="DocGlance-csv">
+          <uap:FileTypeAssociation Name="docglance-csv">
             <uap:SupportedFileTypes>
               <uap:FileType>.csv</uap:FileType>
               <uap:FileType>.tsv</uap:FileType>
@@ -178,7 +178,7 @@
 
         <!-- Markdown files -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="DocGlance-markdown">
+          <uap:FileTypeAssociation Name="docglance-markdown">
             <uap:SupportedFileTypes>
               <uap:FileType>.md</uap:FileType>
               <uap:FileType>.markdown</uap:FileType>
@@ -191,7 +191,7 @@
 
         <!-- Rich Text files -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="DocGlance-rtf">
+          <uap:FileTypeAssociation Name="docglance-rtf">
             <uap:SupportedFileTypes>
               <uap:FileType>.rtf</uap:FileType>
             </uap:SupportedFileTypes>
@@ -203,7 +203,7 @@
 
         <!-- Code files - C# and .NET -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="DocGlance-code-csharp">
+          <uap:FileTypeAssociation Name="docglance-code-csharp">
             <uap:SupportedFileTypes>
               <uap:FileType>.cs</uap:FileType>
               <uap:FileType>.vb</uap:FileType>
@@ -217,7 +217,7 @@
 
         <!-- Code files - JavaScript/TypeScript -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="DocGlance-code-js">
+          <uap:FileTypeAssociation Name="docglance-code-js">
             <uap:SupportedFileTypes>
               <uap:FileType>.js</uap:FileType>
               <uap:FileType>.mjs</uap:FileType>
@@ -233,7 +233,7 @@
 
         <!-- Code files - Python -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="DocGlance-code-python">
+          <uap:FileTypeAssociation Name="docglance-code-python">
             <uap:SupportedFileTypes>
               <uap:FileType>.py</uap:FileType>
             </uap:SupportedFileTypes>
@@ -245,7 +245,7 @@
 
         <!-- Code files - Other languages -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="DocGlance-code-other">
+          <uap:FileTypeAssociation Name="docglance-code-other">
             <uap:SupportedFileTypes>
               <uap:FileType>.java</uap:FileType>
               <uap:FileType>.kt</uap:FileType>
@@ -266,7 +266,7 @@
 
         <!-- Script files -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="DocGlance-scripts">
+          <uap:FileTypeAssociation Name="docglance-scripts">
             <uap:SupportedFileTypes>
               <uap:FileType>.sh</uap:FileType>
               <uap:FileType>.ps1</uap:FileType>
@@ -279,7 +279,7 @@
 
         <!-- Web files - HTML/CSS -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="DocGlance-web">
+          <uap:FileTypeAssociation Name="docglance-web">
             <uap:SupportedFileTypes>
               <uap:FileType>.html</uap:FileType>
               <uap:FileType>.htm</uap:FileType>
@@ -294,7 +294,7 @@
 
         <!-- JSON files -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="DocGlance-json">
+          <uap:FileTypeAssociation Name="docglance-json">
             <uap:SupportedFileTypes>
               <uap:FileType>.json</uap:FileType>
             </uap:SupportedFileTypes>
@@ -306,7 +306,7 @@
 
         <!-- XML files -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="DocGlance-xml">
+          <uap:FileTypeAssociation Name="docglance-xml">
             <uap:SupportedFileTypes>
               <uap:FileType>.xml</uap:FileType>
               <uap:FileType>.xaml</uap:FileType>
@@ -319,7 +319,7 @@
 
         <!-- YAML/TOML files -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="DocGlance-config">
+          <uap:FileTypeAssociation Name="docglance-config">
             <uap:SupportedFileTypes>
               <uap:FileType>.yaml</uap:FileType>
               <uap:FileType>.yml</uap:FileType>
@@ -333,7 +333,7 @@
 
         <!-- SQL files -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="DocGlance-sql">
+          <uap:FileTypeAssociation Name="docglance-sql">
             <uap:SupportedFileTypes>
               <uap:FileType>.sql</uap:FileType>
             </uap:SupportedFileTypes>

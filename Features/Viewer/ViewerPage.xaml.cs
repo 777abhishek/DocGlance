@@ -51,6 +51,7 @@ public sealed partial class ViewerPage : Page
     public ViewerPage()
     {
         InitializeComponent();
+        InitializeViewerShortcuts();
 
         // Initialize Office text selection (drag-to-select and copy)
         InitializeOfficeTextSelection();

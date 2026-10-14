@@ -19,9 +19,12 @@ using Windows.Storage;
 using WinRT;
 using WinRT.Interop;
 using DocGlance.Core.Models;
+using DocGlance.Core.Constants;
 using DocGlance.Features.Home;
 using DocGlance.Features.Viewer;
+using DocGlance.Infrastructure.Configuration;
 using DocGlance.Infrastructure.Logging;
+using DocGlance.Services.Input;
 
 namespace DocGlance.UI.Shell;
 
@@ -44,6 +47,12 @@ public sealed partial class TitleBarWindow : Window
     private ICompositionSupportsSystemBackdrop? _acrylicTarget;
     private bool _homePageInitialized;
     private bool _homePageInitializationQueued;
+    private bool _isPresentationMode;
+    private Visibility _tabsVisibilityBeforePresentation;
+    private Visibility _updateBannerVisibilityBeforePresentation;
+
+    private static TitleBarWindow? _quickLookHotkeyOwner;
+    private static GlobalHotkeyRegistration? _quickLookHotkeyRegistration;
 
     // ── HWND (for pickers in unpackaged apps) ─────────────────────────────────
     public IntPtr Hwnd => WindowNative.GetWindowHandle(this);
@@ -53,12 +62,261 @@ public sealed partial class TitleBarWindow : Window
         // Window.Activate() alone does not reliably restore a minimized WinUI window.
         ShowWindow(Hwnd, SW_RESTORE);
         Activate();
+
+        // The launching process grants this instance foreground permission during
+        // single-instance handover. Make the foreground request explicitly rather
+        // than relying only on WinUI's Activate() request.
+        bool foregrounded = SetForegroundWindow(Hwnd);
+        Logger.Log($"[WindowActivation] SetForegroundWindow={foregrounded}");
     }
+
+    public bool SetPresentationMode(bool enabled)
+    {
+        if (_isPresentationMode == enabled)
+            return true;
+
+        try
+        {
+            var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(
+                Microsoft.UI.Win32Interop.GetWindowIdFromWindow(Hwnd));
+            appWindow.SetPresenter(enabled
+                ? Microsoft.UI.Windowing.AppWindowPresenterKind.FullScreen
+                : Microsoft.UI.Windowing.AppWindowPresenterKind.Default);
+
+            if (enabled)
+            {
+                _tabsVisibilityBeforePresentation = Tabs.Visibility;
+                _updateBannerVisibilityBeforePresentation = UpdateBannerControl.Visibility;
+                Tabs.Visibility = Visibility.Collapsed;
+                UpdateBannerControl.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                Tabs.Visibility = _tabsVisibilityBeforePresentation;
+                UpdateBannerControl.Visibility = _updateBannerVisibilityBeforePresentation;
+            }
+
+            _isPresentationMode = enabled;
+            Logger.Log($"[Presentation] Window mode changed: enabled={enabled}");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"[Presentation] Failed to change window mode: enabled={enabled}", ex);
+            return false;
+        }
+    }
+
+
+    public bool IsQuickLookHotkeyRegistered => _quickLookHotkeyRegistration?.IsRegistered == true;
+
+    public bool TrySetQuickLookShortcutEnabled(bool enabled, out string error)
+    {
+        error = string.Empty;
+        if (_quickLookHotkeyRegistration == null)
+        {
+            error = "The global shortcut service is unavailable.";
+            return false;
+        }
+
+        if (enabled)
+        {
+            if (!_quickLookHotkeyRegistration.TryRegister(
+                    AppSettings.QuickLookHotkeyKey,
+                    AppSettings.QuickLookHotkeyModifiers,
+                    out error))
+                return false;
+        }
+        else
+        {
+            _quickLookHotkeyRegistration.Unregister();
+        }
+
+        AppSettings.QuickLookSpaceShortcutEnabled = enabled;
+        return true;
+    }
+
+    public bool TrySetQuickLookHotkey(int virtualKey, uint modifiers, out string error)
+    {
+        error = string.Empty;
+        if (_quickLookHotkeyRegistration == null)
+        {
+            error = "The global shortcut service is unavailable.";
+            return false;
+        }
+
+        bool enabled = AppSettings.QuickLookSpaceShortcutEnabled;
+        if (!_quickLookHotkeyRegistration.TryRegister(virtualKey, modifiers, out error))
+            return false;
+
+        if (!enabled)
+            _quickLookHotkeyRegistration.Unregister();
+
+        AppSettings.QuickLookHotkeyKey = virtualKey;
+        AppSettings.QuickLookHotkeyModifiers = modifiers;
+        return true;
+    }
+
+    public void SuspendQuickLookHotkey() => _quickLookHotkeyRegistration?.Unregister();
+
+    public bool ResumeQuickLookHotkey(out string error)
+    {
+        error = string.Empty;
+        if (!AppSettings.QuickLookSpaceShortcutEnabled)
+            return true;
+
+        return _quickLookHotkeyRegistration?.TryRegister(
+            AppSettings.QuickLookHotkeyKey,
+            AppSettings.QuickLookHotkeyModifiers,
+            out error) == true;
+    }
+
+    private void BecomeQuickLookHotkeyOwner()
+    {
+        _quickLookHotkeyOwner = this;
+        try
+        {
+            _quickLookHotkeyRegistration = new GlobalHotkeyRegistration(
+                Hwnd,
+                DispatcherQueue,
+                () => (Current ?? this).HandleGlobalFileOpenHotkey());
+
+            if (AppSettings.QuickLookSpaceShortcutEnabled &&
+                !_quickLookHotkeyRegistration.TryRegister(
+                    AppSettings.QuickLookHotkeyKey,
+                    AppSettings.QuickLookHotkeyModifiers,
+                    out string error))
+            {
+                Logger.Log($"[QuickLook] Could not register global shortcut: {error}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _quickLookHotkeyRegistration?.Dispose();
+            _quickLookHotkeyRegistration = null;
+            _quickLookHotkeyOwner = null;
+            Logger.Error("[QuickLook] Could not initialize global shortcut registration", ex);
+        }
+    }
+
+    private void ReleaseQuickLookHotkeyOwner()
+    {
+        if (!ReferenceEquals(_quickLookHotkeyOwner, this))
+            return;
+
+        _quickLookHotkeyRegistration?.Dispose();
+        _quickLookHotkeyRegistration = null;
+        _quickLookHotkeyOwner = null;
+
+        var replacement = App.AllWindows.FirstOrDefault(window => !ReferenceEquals(window, this));
+        replacement?.BecomeQuickLookHotkeyOwner();
+    }
+
+    private void HandleGlobalFileOpenHotkey()
+    {
+        try
+        {
+            var window = Current ?? this;
+            IntPtr foregroundWindow = GetForegroundWindow();
+            bool appIsForeground = foregroundWindow == window.Hwnd ||
+                App.AllWindows.Any(appWindow => appWindow.Hwnd == foregroundWindow);
+
+            if (appIsForeground || TryGetSelectedExplorerFile(foregroundWindow) is not { } filePath)
+                return;
+
+            var document = DocumentItem.FromFileInfo(new FileInfo(filePath));
+            window.RestoreAndActivate();
+            window.OpenDocument(document);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("[QuickLook] Global file-open shortcut failed", ex);
+        }
+    }
+
+    private static string? TryGetSelectedExplorerFile(IntPtr foregroundWindow)
+    {
+        object? shell = null;
+        object? windows = null;
+
+        try
+        {
+            Type? shellType = Type.GetTypeFromProgID("Shell.Application");
+            if (shellType == null || Activator.CreateInstance(shellType) is not { } shellObject)
+                return null;
+
+            shell = shellObject;
+            dynamic shellAutomation = shellObject;
+            windows = shellAutomation.Windows();
+            dynamic shellWindows = windows;
+            int windowCount = Convert.ToInt32(shellWindows.Count);
+
+            for (int i = 0; i < windowCount; i++)
+            {
+                object? browser = null;
+                object? document = null;
+                object? selectedItems = null;
+                object? selectedItem = null;
+                try
+                {
+                    browser = shellWindows.Item(i);
+                    dynamic browserAutomation = browser;
+                    if (new IntPtr(Convert.ToInt64(browserAutomation.HWND)) != foregroundWindow)
+                        continue;
+
+                    document = browserAutomation.Document;
+                    dynamic documentAutomation = document;
+                    selectedItems = documentAutomation.SelectedItems();
+                    dynamic selection = selectedItems;
+                    if (Convert.ToInt32(selection.Count) == 0)
+                        return null;
+
+                    selectedItem = selection.Item(0);
+                    dynamic file = selectedItem;
+                    string? path = Convert.ToString(file.Path);
+                    if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+                        return null;
+
+                    string extension = Path.GetExtension(path);
+                    return SupportedExtensions.All.Contains(extension, StringComparer.OrdinalIgnoreCase)
+                        ? path
+                        : null;
+                }
+                finally
+                {
+                    ReleaseComObject(selectedItem);
+                    ReleaseComObject(selectedItems);
+                    ReleaseComObject(document);
+                    ReleaseComObject(browser);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("[QuickLook] Could not read the selected Explorer file", ex);
+        }
+        finally
+        {
+            ReleaseComObject(windows);
+            ReleaseComObject(shell);
+        }
+
+        return null;
+    }
+
+    private static void ReleaseComObject(object? value)
+    {
+        if (value != null && Marshal.IsComObject(value))
+            Marshal.ReleaseComObject(value);
+    }
+
 
     public TitleBarWindow()
     {
         Current = this;
         InitializeComponent();
+        if (_quickLookHotkeyOwner == null)
+            BecomeQuickLookHotkeyOwner();
 
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBarDragArea);
@@ -77,6 +335,7 @@ public sealed partial class TitleBarWindow : Window
         // Save session and release the custom backdrop controller when the window closes.
         Closed += (s, e) =>
         {
+            ReleaseQuickLookHotkeyOwner();
             SaveSession();
             RemoveAcrylicBackdrop();
         };
@@ -688,6 +947,13 @@ public sealed partial class TitleBarWindow : Window
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
 
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern IntPtr LoadImage(IntPtr hInst, string lpszName,

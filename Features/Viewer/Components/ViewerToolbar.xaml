@@ -239,9 +239,18 @@
 
                         <MenuFlyoutItem
                             Text="Presentation mode"
+                            ToolTipService.ToolTip="F5: start from beginning · Shift+F5: start here · F11: toggle · Esc: exit"
                             Click="PresentationModeMenuItem_Click">
                             <MenuFlyoutItem.Icon>
                                 <FontIcon Glyph="&#xE740;" FontSize="20"/>
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+
+                        <MenuFlyoutItem
+                            Text="Keyboard shortcuts"
+                            Click="KeyboardShortcutsMenuItem_Click">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE765;" FontSize="20"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 

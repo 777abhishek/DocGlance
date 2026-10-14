@@ -1,5 +1,6 @@
 ﻿using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Composition.SystemBackdrops;
 using DocGlance.Services.Registration;
@@ -8,9 +9,10 @@ using DocGlance.Services.Storage;
 using DocGlance.Infrastructure.Configuration;
 using DocGlance.Infrastructure.Logging;
 using DocGlance.Core.Enums;
+using DocGlance.UI.Shell;
 using System;
 using System.Linq;
-
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
 namespace DocGlance.Features.Settings;
@@ -19,10 +21,12 @@ public sealed partial class SettingsPage : Page
 {
     private const string GitHubOwner = "777abhishek"; // TODO: Update with your GitHub username
     private const string GitHubRepo = "DocGlance";
+    private bool _isLoadingSettings;
 
     public SettingsPage()
     {
         InitializeComponent();
+        QuickLookSpaceToggle.Toggled += QuickLookSpaceToggle_Toggled;
         Loaded += SettingsPage_Loaded;
     }
 
@@ -56,6 +60,8 @@ public sealed partial class SettingsPage : Page
     
     private void LoadSettings()
     {
+        _isLoadingSettings = true;
+
         // Appearance
         ThemeComboBox.SelectedIndex = AppSettings.Theme switch
         {
@@ -77,6 +83,7 @@ public sealed partial class SettingsPage : Page
         ThumbnailsToggle.IsOn = AppSettings.ShowThumbnails;
         SidebarToggle.IsOn = AppSettings.ShowSidebar;
         RememberViewToggle.IsOn = AppSettings.RememberViewState;
+        QuickLookSpaceToggle.IsOn = AppSettings.QuickLookSpaceShortcutEnabled;
 
         // Home & Browser
         DefaultHomeViewComboBox.SelectedIndex = AppSettings.DefaultHomeView == "Recent" ? 0 : 1;
@@ -87,9 +94,15 @@ public sealed partial class SettingsPage : Page
         RestoreSessionToggle.IsOn = AppSettings.RestoreLastSession;
         RestoreWindowToggle.IsOn = AppSettings.RestoreWindowSize;
 
+        QuickLookHotkeyText.Text = FormatQuickLookHotkey(
+            AppSettings.QuickLookHotkeyModifiers,
+            AppSettings.QuickLookHotkeyKey);
+        UpdateQuickLookHotkeyStatus();
+
         // Performance
         CacheSizeSlider.Value = AppSettings.ThumbnailCacheSizeMB;
         CacheSizeValueText.Text = $"{AppSettings.ThumbnailCacheSizeMB} MB";
+        _isLoadingSettings = false;
     }
 
     // ── Theme ─────────────────────────────────────────────────────────────────
@@ -156,6 +169,123 @@ public sealed partial class SettingsPage : Page
         AppSettings.RememberViewState = RememberViewToggle.IsOn;
     }
 
+    private void QuickLookSpaceToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_isLoadingSettings)
+            return;
+
+        bool enabled = QuickLookSpaceToggle.IsOn;
+        var window = TitleBarWindow.Current;
+        string error = window == null ? "The DocGlance window is unavailable." : string.Empty;
+        if (window == null || !window.TrySetQuickLookShortcutEnabled(enabled, out error))
+        {
+            _isLoadingSettings = true;
+            QuickLookSpaceToggle.IsOn = !enabled;
+            _isLoadingSettings = false;
+            QuickLookHotkeyStatusText.Text = string.IsNullOrWhiteSpace(error)
+                ? "Could not change the global shortcut setting."
+                : error;
+            return;
+        }
+
+        UpdateQuickLookHotkeyStatus();
+    }
+
+    private void ChangeQuickLookHotkeyButton_Click(object sender, RoutedEventArgs e)
+    {
+        TitleBarWindow.Current?.SuspendQuickLookHotkey();
+        ChangeQuickLookHotkeyButton.Visibility = Visibility.Collapsed;
+        QuickLookHotkeyCaptureBox.Text = "Press Ctrl, Alt, or Shift with another key…";
+        QuickLookHotkeyCaptureBox.Visibility = Visibility.Visible;
+        QuickLookHotkeyCaptureBox.Focus(FocusState.Programmatic);
+    }
+
+    private void QuickLookHotkeyCaptureBox_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        e.Handled = true;
+        int virtualKey = (int)e.Key;
+
+        if (e.Key == Windows.System.VirtualKey.Escape)
+        {
+            FinishQuickLookHotkeyCapture(resumePrevious: true);
+            return;
+        }
+
+        if (virtualKey is 0x10 or 0x11 or 0x12 or 0xA0 or 0xA1 or 0xA2 or 0xA3 or 0xA4 or 0xA5)
+            return;
+
+        uint modifiers = 0;
+        if (IsKeyDown(0x11)) modifiers |= 0x0002; // Ctrl
+        if (IsKeyDown(0x12)) modifiers |= 0x0001; // Alt
+        if (IsKeyDown(0x10)) modifiers |= 0x0004; // Shift
+
+        if (modifiers == 0)
+        {
+            QuickLookHotkeyCaptureBox.Text = "Hold Ctrl, Alt, or Shift, then press another key…";
+            return;
+        }
+
+        var window = TitleBarWindow.Current;
+        string error = window == null ? "The DocGlance window is unavailable." : string.Empty;
+        if (window == null || !window.TrySetQuickLookHotkey(virtualKey, modifiers, out error))
+        {
+            QuickLookHotkeyCaptureBox.Text = string.IsNullOrWhiteSpace(error)
+                ? "Could not register that shortcut. Try another combination…"
+                : error + " Try another combination…";
+            return;
+        }
+
+        QuickLookHotkeyText.Text = FormatQuickLookHotkey(modifiers, virtualKey);
+        FinishQuickLookHotkeyCapture(resumePrevious: false);
+        UpdateQuickLookHotkeyStatus();
+    }
+
+    private void FinishQuickLookHotkeyCapture(bool resumePrevious)
+    {
+        QuickLookHotkeyCaptureBox.Visibility = Visibility.Collapsed;
+        ChangeQuickLookHotkeyButton.Visibility = Visibility.Visible;
+
+        var window = TitleBarWindow.Current;
+        if (resumePrevious && window != null && !window.ResumeQuickLookHotkey(out string error))
+            QuickLookHotkeyStatusText.Text = error;
+        else
+            UpdateQuickLookHotkeyStatus();
+
+        ChangeQuickLookHotkeyButton.Focus(FocusState.Programmatic);
+    }
+
+    private void UpdateQuickLookHotkeyStatus()
+    {
+        if (!AppSettings.QuickLookSpaceShortcutEnabled)
+        {
+            QuickLookHotkeyStatusText.Text = "Global shortcut is disabled.";
+            return;
+        }
+
+        QuickLookHotkeyStatusText.Text = TitleBarWindow.Current?.IsQuickLookHotkeyRegistered == true
+            ? "Registered with Windows. Works while DocGlance is running; select a file in Explorer first."
+            : "Could not register with Windows. The shortcut may already be in use.";
+    }
+
+    private static string FormatQuickLookHotkey(uint modifiers, int virtualKey)
+    {
+        var parts = new System.Collections.Generic.List<string>();
+        if ((modifiers & 0x0002) != 0) parts.Add("Ctrl");
+        if ((modifiers & 0x0001) != 0) parts.Add("Alt");
+        if ((modifiers & 0x0004) != 0) parts.Add("Shift");
+
+        string keyName = ((Windows.System.VirtualKey)virtualKey).ToString();
+        if (keyName.StartsWith("Number", StringComparison.Ordinal))
+            keyName = keyName.Substring("Number".Length);
+        parts.Add(keyName);
+        return string.Join(" + ", parts);
+    }
+
+    private static bool IsKeyDown(int virtualKey) => GetKeyState(virtualKey) < 0;
+
+    [DllImport("user32.dll")]
+    private static extern short GetKeyState(int virtualKey);
+
     // ── Home & Browser ────────────────────────────────────────────────────────
 
     private void DefaultHomeViewComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -213,7 +343,7 @@ public sealed partial class SettingsPage : Page
         // Show that associations are managed by the package/Store
         AssocStatusIcon.Glyph      = "\uE73E"; // checkmark
         AssocStatusIcon.Foreground = ResourceBrush("SystemFillColorSuccessBrush", Microsoft.UI.Colors.Green);
-        AssocStatusText.Text       = "DocGlance is a packaged app — file associations are managed automatically.";
+        AssocStatusText.Text       = "DocGlance is registered for its supported file types. Choose DocGlance as the default per type in Windows Settings.";
         
         // Disable manual registration buttons (they're no-ops in packaged builds)
         RegisterButton.IsEnabled   = false;
@@ -256,7 +386,7 @@ public sealed partial class SettingsPage : Page
         catch (Exception ex) { Logger.Error("RegisterButton_Click", ex); ok = false; }
 
         ShowInfoBar(
-            ok ? "DocGlance is now registered with Windows." : "Registration failed — check the log.",
+            ok ? "DocGlance is now registered for all supported file types in 'Open with'." : "Registration failed — check the log.",
             ok ? InfoBarSeverity.Success : InfoBarSeverity.Error);
 
 #if PACKAGED

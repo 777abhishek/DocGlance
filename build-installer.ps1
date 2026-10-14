@@ -9,7 +9,7 @@
 #    .\build-installer.ps1                     (sideload MSIX + EXE installer)
 #    .\build-installer.ps1 -StoreUpload        (Store-ready .msixupload only)
 #    .\build-installer.ps1 -MsixOnly           (signed sideload MSIX only)
-#    .\build-installer.ps1 -InstallMsix        (build, trust, and install sideload MSIX)
+#    .\build-installer.ps1 -InstallMsix        (build, trust, replace, and install sideload MSIX)
 #    .\build-installer.ps1 -InstallerOnly      (EXE installer only)
 #    .\build-installer.ps1 -SkipPublish        (reuse existing publish folder)
 #
@@ -354,6 +354,22 @@ if ($BuildMsix) {
                     $_.Extension -in ".appx", ".msix"
                 }
             try {
+                $installedPackages = @(Get-AppxPackage -Name $PackageName -ErrorAction SilentlyContinue)
+                if ($installedPackages.Count -gt 0) {
+                    $runningProcesses = @(Get-Process -Name "DocGlance" -ErrorAction SilentlyContinue)
+                    if ($runningProcesses.Count -gt 0) {
+                        Write-Info "Stopping the running DocGlance process before replacing the package…"
+                        $runningProcesses | Stop-Process -Force -ErrorAction Stop
+                        $runningProcesses | Wait-Process -Timeout 10 -ErrorAction SilentlyContinue
+                    }
+
+                    foreach ($installedPackage in $installedPackages) {
+                        Write-Info "Removing existing package $($installedPackage.PackageFullName)…"
+                        Remove-AppxPackage -Package $installedPackage.PackageFullName -ErrorAction Stop
+                    }
+                    Write-OK "Removed the existing DocGlance package for the current user."
+                }
+
                 if ($dependencyPackages) {
                     Add-AppxPackage -Path $msixPath -DependencyPath @($dependencyPackages.FullName)
                 } else {
@@ -361,7 +377,7 @@ if ($BuildMsix) {
                 }
                 Write-OK "Installed $PackageName for the current user."
             } catch {
-                Write-Fail "MSIX install failed: $($_.Exception.Message). If Windows reports an untrusted package, import $certificatePath into Local Computer > Trusted People as Administrator, then rerun -InstallMsix."
+                Write-Fail "MSIX install failed: $($_.Exception.Message). If the same-identity/different-content error remains, remove $PackageName from every Windows user account (Remove-AppxPackage -AllUsers requires an elevated PowerShell) or increment the package version. If Windows reports an untrusted package, import $certificatePath into Local Computer > Trusted People as Administrator, then rerun -InstallMsix."
             }
         }
     }

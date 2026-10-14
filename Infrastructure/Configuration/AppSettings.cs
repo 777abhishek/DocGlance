@@ -56,6 +56,25 @@ public static class AppSettings
         set { _data.RememberViewState = value; Save(); }
     }
 
+    public static bool QuickLookSpaceShortcutEnabled
+    {
+        get => _data.QuickLookSpaceShortcutEnabled;
+        set { _data.QuickLookSpaceShortcutEnabled = value; Save(); }
+    }
+
+    public static int QuickLookHotkeyKey
+    {
+        get => _data.QuickLookHotkeyKey;
+        set { _data.QuickLookHotkeyKey = value; Save(); }
+    }
+
+    // RegisterHotKey modifier flags: Alt=1, Ctrl=2, Shift=4. Windows-key shortcuts are reserved.
+    public static uint QuickLookHotkeyModifiers
+    {
+        get => _data.QuickLookHotkeyModifiers;
+        set { _data.QuickLookHotkeyModifiers = value; Save(); }
+    }
+
     // ── Home & Browser ────────────────────────────────────────────────────────
 
     public static int RecentFilesLimit
@@ -136,6 +155,9 @@ public static class AppSettings
         public bool ShowThumbnails { get; set; } = true;
         public bool ShowSidebar { get; set; } = true;
         public bool RememberViewState { get; set; } = true;
+        public bool QuickLookSpaceShortcutEnabled { get; set; } = true;
+        public int QuickLookHotkeyKey { get; set; } = 0x20; // Space
+        public uint QuickLookHotkeyModifiers { get; set; } = 0x0006; // Ctrl+Shift
 
         // Home & Browser
         public int RecentFilesLimit { get; set; } = 50;

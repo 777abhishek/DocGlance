@@ -504,9 +504,7 @@ public sealed partial class ViewerPage
             void CreateImageOnUI()
             {
                 // Check if image already exists
-                bool imageExists = _pdfPageCache.TryGetValue(pageIndex, out var img);
-                
-                if (!imageExists)
+                if (!_pdfPageCache.TryGetValue(pageIndex, out var img))
                 {
                     // Create new image
                     img = new Image

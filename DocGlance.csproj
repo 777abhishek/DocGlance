@@ -81,7 +81,8 @@
        only our manual file emits attributes, no CS0579 duplicates. -->
 
   <ItemGroup>
-    <Content Include="Assets\**\*" Exclude="Assets\SampleMedia\**">
+    <Content Include="Assets\**\*"
+             Exclude="Assets\SampleMedia\**;Assets\HOME_DARK.png;Assets\HOME_LIGHT.png;Assets\SETTINGDARK.png;Assets\TEXT_viewer.png;Assets\Viewer.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <!-- Exclude tools/ subfolder so EmbedIcon.cs is never compiled into the app -->

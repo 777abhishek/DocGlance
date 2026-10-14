@@ -109,16 +109,12 @@ public partial class App : Application
             // Register file renderers FIRST (needed for file opening)
             RegisterRenderers();
             
-            // Create and show window with full initialization
+            // Construct the window but defer showing it until startup activation is
+            // processed. File launches can select their document tab before the first
+            // frame, avoiding a visible Home-tab flash.
             m_window = new TitleBarWindow();
             App.AllWindows.Add((TitleBarWindow)m_window);
             m_window.Closed += (_, _) => App.AllWindows.Remove((TitleBarWindow)m_window);
-            
-            // TitleBarWindow applies its dark-theme Acrylic surface during construction.
-            
-            m_window.Activate();
-            Logger.Log("Window activated");
-            Infrastructure.Diagnostics.DiagnosticsService.Milestone("WindowActivated");
 
             // Listen for file handovers from second processes (Explorer double-click
             // while running). The Windows App SDK redirect is unreliable for unpackaged
@@ -135,6 +131,13 @@ public partial class App : Application
             var activatedArgs = AppInstance.GetCurrent().GetActivatedEventArgs();
             bool openedFromActivation = TryOpenFromActivationArgs(activatedArgs);
             bool openedFromCommandLine = !openedFromActivation && TryOpenFromCommandLine();
+
+            // Select and attach the initial document while the window is still hidden.
+            // This lets the first presented frame be the viewer (with its loading state)
+            // instead of Home followed by an animated tab switch.
+            m_window.Activate();
+            Logger.Log("Window activated");
+            Infrastructure.Diagnostics.DiagnosticsService.Milestone("WindowActivated");
 
             // File activation takes precedence. Defer session work until the window has
             // had a chance to present its first frame; RestoreSession does its I/O off-thread.

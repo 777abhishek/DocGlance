@@ -49,6 +49,7 @@ public sealed partial class DocumentCard : UserControl
 
     // ── Card button click — the ONLY reliable way to catch clicks on a WinUI card ──
 
+
     private void CardButton_Click(object sender, RoutedEventArgs e)
     {
         Infrastructure.Logging.Logger.Log($"[DocumentCard] CardButton_Click: Document={Document?.Title}, FilePath={Document?.FilePath}");

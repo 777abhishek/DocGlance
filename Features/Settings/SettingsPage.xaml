@@ -131,6 +131,42 @@
                 </Border>
 
                 <Border Style="{StaticResource SettingCardStyle}">
+                    <StackPanel Spacing="10">
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Grid.Column="0" Glyph="&#xE721;" Style="{StaticResource SettingIconStyle}" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Text="Global file-open shortcut" />
+                                <TextBlock Style="{StaticResource SettingDescriptionStyle}"
+                                           Text="Select a supported file in File Explorer and press the shortcut to open it in a DocGlance tab. Registration is system-wide while DocGlance is running." />
+                            </StackPanel>
+                            <ToggleSwitch x:Name="QuickLookSpaceToggle" Grid.Column="2" IsOn="True"
+                                          OnContent="On" OffContent="Off"
+                                          VerticalAlignment="Center" MinWidth="0" />
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <TextBlock Text="Shortcut:" VerticalAlignment="Center" />
+                            <TextBlock x:Name="QuickLookHotkeyText" Text="Ctrl + Shift + Space"
+                                       FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <Button x:Name="ChangeQuickLookHotkeyButton" Content="Change shortcut"
+                                    Click="ChangeQuickLookHotkeyButton_Click" />
+                            <TextBox x:Name="QuickLookHotkeyCaptureBox" Width="220" IsReadOnly="True"
+                                     PlaceholderText="Press a key combination…" Visibility="Collapsed"
+                                     PreviewKeyDown="QuickLookHotkeyCaptureBox_PreviewKeyDown" />
+                        </StackPanel>
+                        <TextBlock x:Name="QuickLookHotkeyStatusText"
+                                   Style="{StaticResource SettingDescriptionStyle}"
+                                   Text="Checking global shortcut registration…" />
+                        <TextBlock Style="{StaticResource SettingDescriptionStyle}"
+                                   Text="This shortcut is registered system-wide and may intercept the same key combination in other apps. Choose a combination you do not rely on elsewhere; Windows-key shortcuts are reserved." />
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource SettingCardStyle}">
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
@@ -324,7 +360,7 @@
                                       Foreground="{ThemeResource SystemFillColorSuccessBrush}"
                                       VerticalAlignment="Center" />
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Text="Open with registration" />
+                                <TextBlock Text="Register all supported file types" />
                                 <TextBlock x:Name="AssocStatusText"
                                            Style="{StaticResource SettingDescriptionStyle}"
                                            Text="Checking…" />
@@ -332,10 +368,10 @@
                         </Grid>
 
                         <TextBlock Style="{StaticResource SettingDescriptionStyle}"
-                                   Text="When registered, DocGlance appears in the 'Open with' menu for all supported file types. Individual defaults are set per file type in Windows Settings → Default apps." />
+                                   Text="Registration adds DocGlance to 'Open with' for every supported extension. Windows does not let apps force themselves as the default; choose defaults per file type in Windows Settings → Default apps. Space Quick Look works only while DocGlance is open, not system-wide in File Explorer." />
 
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button x:Name="RegisterButton" Content="Register with Windows"
+                            <Button x:Name="RegisterButton" Content="Register all file types"
                                     Style="{StaticResource AccentButtonStyle}"
                                     Click="RegisterButton_Click" />
                             <Button x:Name="UnregisterButton" Content="Remove registration"

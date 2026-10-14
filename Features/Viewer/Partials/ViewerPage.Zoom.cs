@@ -102,7 +102,11 @@ public sealed partial class ViewerPage
         if (_spreadsheetDocument != null)
         {
             SpreadsheetViewerControl.SetZoom(_zoom);
+            return;
         }
+
+        if (_currentRenderedElement != null)
+            DocumentScrollViewer.ChangeView(null, null, (float)_zoom, disableAnimation: false);
     }
 
     private Windows.Foundation.Point GetViewportCenter() =>
@@ -258,6 +262,18 @@ public sealed partial class ViewerPage
         if (_spreadsheetDocument != null)
         {
             SetZoom(SpreadsheetViewerControl.GetFitPageZoom());
+            return;
+        }
+
+        if (_currentRenderedElement != null)
+        {
+            const double rendererWidth = 800.0;
+            const double rendererHeight = 1000.0;
+            const double padding = 28.0;
+            double availableWidth = DocumentScrollViewer.ViewportWidth - padding * 2;
+            double availableHeight = DocumentScrollViewer.ViewportHeight - padding * 2;
+            if (availableWidth > 0 && availableHeight > 0)
+                SetZoom(Math.Min(availableWidth / rendererWidth, availableHeight / rendererHeight));
         }
     }
 

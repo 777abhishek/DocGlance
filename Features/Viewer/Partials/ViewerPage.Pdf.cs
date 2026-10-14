@@ -998,6 +998,10 @@ public sealed partial class ViewerPage
                 return;
             }
 
+            // Spreadsheet loads start at actual size; don't inherit a fit mode
+            // from the previously viewed document type.
+            SetFitMode(FitMode.None);
+
             // Switch the viewer area to the native spreadsheet grid
             ShowSpreadsheetViewer();
 
@@ -1009,11 +1013,9 @@ public sealed partial class ViewerPage
             ViewModel.TotalPages   = sheetCount;
             ViewModel.CurrentPage  = 1;
 
-            // Hand off to the Win2D cell-grid control
+            // Hand off to the Win2D cell-grid control and start at actual size.
             await SpreadsheetViewerControl.LoadDocumentAsync(_spreadsheetDocument, ct);
-            _zoom = SpreadsheetViewerControl.Zoom;
-            SetFitMode(FitMode.FitWidth);
-            ApplyFitWidth();
+            SetZoom(1.0);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)

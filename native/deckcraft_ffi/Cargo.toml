@@ -19,3 +19,4 @@ deckcraft-pdf    = { git = "https://github.com/storytold/deckcraft", branch = "m
 opt-level     = 3
 lto           = "thin"
 codegen-units = 1
+strip         = "symbols"
