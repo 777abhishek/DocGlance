@@ -22,8 +22,8 @@
        IDENTITY  —  fill in from Partner Center before submission
        ═══════════════════════════════════════════════════════════════ -->
   <Identity
-    Name="PLACEHOLDER.QuickView"
-    Publisher="CN=PLACEHOLDER"
+    Name="QuickView"
+    Publisher="CN=QuickView"
     Version="1.0.0.0"
     ProcessorArchitecture="x64" />
 
@@ -274,7 +274,6 @@
             <uap:SupportedFileTypes>
               <uap:FileType>.sh</uap:FileType>
               <uap:FileType>.ps1</uap:FileType>
-              <uap:FileType>.bat</uap:FileType>
             </uap:SupportedFileTypes>
             <uap:DisplayName>Script File</uap:DisplayName>
             <uap:Logo>Assets\FileTypeIcons\Code.png</uap:Logo>

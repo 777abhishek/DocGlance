@@ -15,6 +15,12 @@
          EnableMsixTooling wires up the manifest and packaging pipeline. -->
     <EnableMsixTooling>true</EnableMsixTooling>
 
+    <!-- Sign the MSIX with our self-signed cert (Subject must match Identity Publisher).
+         Signed by thumbprint from the current user's cert store: MSBuild cannot import
+         CNG-keyed PFX files (APPX0105). Recreate/re-export with tools\sign-package.ps1. -->
+    <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
+    <PackageCertificateThumbprint>E5CF57036905C5B943DA229D4F0D5A28EC91E84C</PackageCertificateThumbprint>
+
     <!-- Define PACKAGED symbol so code can branch at compile time between
          packaged (Store) and unpackaged (direct EXE) behaviors. -->
     <DefineConstants>$(DefineConstants);PACKAGED</DefineConstants>
