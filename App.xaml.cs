@@ -10,6 +10,7 @@ using QuickView.Core.Models;
 using QuickView.Common.Validators;
 using QuickView.UI.Shell;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -119,6 +120,11 @@ public partial class App : Application
             Logger.Log("Window activated");
             Infrastructure.Diagnostics.DiagnosticsService.Milestone("WindowActivated");
 
+            // Listen for file handovers from second processes (Explorer double-click
+            // while running). The Windows App SDK redirect is unreliable for unpackaged
+            // apps — this pipe is the guaranteed payload channel (see Program.cs).
+            QuickView.Services.Activation.ActivationIpc.StartServer(OpenExternalFiles);
+
 #if !PACKAGED
             // Register file associations in background (non-blocking)
             // In packaged builds this is skipped — associations come from Package.appxmanifest.
@@ -150,10 +156,55 @@ public partial class App : Application
     private void OnAppActivated(object? sender, AppActivationArguments args)
     {
         // Must hop to the UI thread before touching any XAML.
-        m_window?.DispatcherQueue.TryEnqueue(() =>
+        var data = args?.Data;
+        Logger.Log($"[Reactivation] Redirect delivered: Kind={args?.Kind}, " +
+                   $"DataType={data?.GetType().Name ?? "null"}");
+
+        if (m_window is null)
         {
-            m_window.Activate(); // bring to foreground
-            TryOpenFromActivationArgs(args);
+            Logger.Error("[Reactivation] m_window is null — activation dropped");
+            return;
+        }
+
+        m_window.DispatcherQueue.TryEnqueue(() =>
+        {
+            try
+            {
+                m_window.Activate(); // bring to foreground
+                bool opened = TryOpenFromActivationArgs(args);
+                Logger.Log($"[Reactivation] Redirect-args handling: {(opened ? "file(s) opened" : "no usable file in redirected args")}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("[Reactivation] Failed to handle redirected activation", ex);
+            }
+        });
+    }
+
+    /// <summary>
+    /// Entry point for file paths handed over by a second process (named pipe).
+    /// Runs on a worker thread — hops to the UI thread before touching XAML.
+    /// </summary>
+    private void OpenExternalFiles(IReadOnlyList<string> paths)
+    {
+        if (m_window is null)
+        {
+            Logger.Error("[ActivationIpc] No main window to open paths in");
+            return;
+        }
+
+        m_window.DispatcherQueue.TryEnqueue(() =>
+        {
+            try
+            {
+                m_window.Activate();
+                foreach (var path in paths)
+                    OpenFilePath(path);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("[ActivationIpc] Failed to open handed-over paths", ex);
+            }
         });
     }
 
@@ -185,51 +236,32 @@ public partial class App : Application
     /// <summary>
     /// Inspects AppActivationArguments and opens all files found.
     /// Returns true when at least one file was opened.
+    /// Every branch decision is logged — activation regressions are invisible
+    /// otherwise (the redirected-args path was silent for months).
     /// </summary>
     private static bool TryOpenFromActivationArgs(AppActivationArguments? args)
     {
-        if (args == null) return false;
-
-        var filePaths = new System.Collections.Generic.List<string>();
-
-        if (args.Data is Windows.ApplicationModel.Activation.IFileActivatedEventArgs fileArgs)
+        if (args == null)
         {
-            // Handle multiple files from File Explorer
-            filePaths.AddRange(fileArgs.Files
-                .OfType<Windows.Storage.StorageFile>()
-                .Select(f => f.Path)
-                .Where(p => !string.IsNullOrEmpty(p)));
-        }
-        else if (args.Data is Windows.ApplicationModel.Activation.ILaunchActivatedEventArgs launchArgs)
-        {
-            var raw = launchArgs.Arguments?.Trim().Trim('"');
-            if (!string.IsNullOrEmpty(raw) &&
-                !raw.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(raw, Environment.ProcessPath, StringComparison.OrdinalIgnoreCase) &&
-                File.Exists(raw))
-            {
-                filePaths.Add(raw);
-            }
-        }
-        else if (args.Data is Windows.ApplicationModel.Activation.ICommandLineActivatedEventArgs cmdArgs)
-        {
-            var raw = cmdArgs.Operation?.Arguments?.Trim().Trim('"');
-            if (!string.IsNullOrEmpty(raw) &&
-                !raw.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(raw, Environment.ProcessPath, StringComparison.OrdinalIgnoreCase) &&
-                File.Exists(raw))
-            {
-                filePaths.Add(raw);
-            }
+            Logger.Warn("[Activation] TryOpenFromActivationArgs: args is null");
+            return false;
         }
 
-        if (filePaths.Count > 0)
+        Logger.Log($"[Activation] TryOpenFromActivationArgs: Kind={args.Kind}, " +
+                   $"DataType={args.Data?.GetType().Name ?? "null"}");
+
+        var filePaths = QuickView.Services.Activation.ActivationPaths.FromActivationArgs(args);
+
+        if (filePaths.Count == 0)
         {
-            foreach (var path in filePaths)
-                OpenFilePath(path);
-            return true;
+            Logger.Warn("[Activation] No file paths decoded from activation args " +
+                        "(redirect payload may have been lost — pipe channel is the fallback)");
+            return false;
         }
-        return false;
+
+        foreach (var path in filePaths)
+            OpenFilePath(path);
+        return true;
     }
 
     /// <summary>

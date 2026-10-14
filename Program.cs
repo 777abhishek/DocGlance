@@ -35,7 +35,11 @@
 
 using System;
 using System.Diagnostics;
+using System.Linq;
 using System.Runtime.InteropServices;
+using QuickView.Infrastructure.Diagnostics;
+using QuickView.Infrastructure.Logging;
+using QuickView.Services.Activation;
 
 namespace QuickView;
 
@@ -99,26 +103,55 @@ public static class Program
         WinRT.ComWrappersSupport.InitializeComWrappers();
 
         // STEP 3 — Single-instancing: if an instance is already running,
-        // redirect the activation (e.g. file double-clicked in Explorer) to it and exit.
+        // hand the activation (e.g. file double-clicked in Explorer) to it and exit.
+        //
+        // Payload delivery strategy (two channels, deliberately redundant):
+        //  1. Named pipe (ActivationIpc): the file path(s) are sent directly to the
+        //     running instance. This is the RELIABLE channel — redirected
+        //     ILaunchActivatedEventArgs are known to lose their Arguments for
+        //     unpackaged apps, so the redirect below must not be trusted with the path.
+        //  2. RedirectActivationToAsync: best effort, used only to bring the running
+        //     window to the foreground. Failure here is logged and ignored.
         try
         {
             var mainInstance = Microsoft.Windows.AppLifecycle.AppInstance.FindOrRegisterForKey("QuickViewSingleInstance");
             if (!mainInstance.IsCurrent)
             {
+                Logger.Log("[SingleInstance] Existing instance detected — handing over");
+                DiagnosticsService.Milestone("SecondInstanceHandover");
+
                 var activatedArgs = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs();
-                // Redirect from a thread-pool thread: blocking an STA thread directly on this
-                // WinRT call can deadlock. Bounded wait so a hung primary instance can't hang us.
+                Logger.Log($"[SingleInstance] Redirect args: Kind={activatedArgs?.Kind}, " +
+                           $"DataType={activatedArgs?.Data?.GetType().Name ?? "null"}, " +
+                           $"CmdLine={string.Join(' ', Environment.GetCommandLineArgs().Skip(1))}");
+
+                // Collect the file path(s) this second process was launched with.
+                var paths = ActivationPaths.FromCurrentLaunch();
+                Logger.Log($"[SingleInstance] Extracted paths: {(paths.Count > 0 ? string.Join(" | ", paths) : "(none)")}");
+
+                // Send the payload over the pipe while the redirect runs in parallel.
+                // Both are bounded so a hung or dying primary instance cannot hang us.
+                var pipeTask = System.Threading.Tasks.Task.Run(
+                    () => ActivationIpc.TrySendPaths(paths, TimeSpan.FromSeconds(5)));
+
                 var redirected = System.Threading.Tasks.Task
                     .Run(() => mainInstance.RedirectActivationToAsync(activatedArgs).AsTask())
                     .Wait(TimeSpan.FromSeconds(10));
-                if (!redirected)
-                    Debug.WriteLine("[AppInstance] Activation redirect timed out");
+
+                Logger.Log($"[SingleInstance] Redirect: {(redirected ? "completed" : "TIMEOUT or failed (ignored)")}, " +
+                           $"Pipe delivery: {(pipeTask.Result ? "succeeded" : "failed")}");
+
+                // The Logger writes on a background thread — flush before this
+                // short-lived process exits or the entries above may be lost.
+                Logger.Flush(TimeSpan.FromSeconds(3));
                 return;
             }
+            Logger.Log("[SingleInstance] This process is the primary instance");
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[AppInstance] Single-instance redirection check failed: {ex.Message}");
+            Logger.Error("[SingleInstance] Handover check failed — continuing as primary", ex);
+            Logger.Flush(TimeSpan.FromSeconds(2));
         }
 
         Microsoft.UI.Xaml.Application.Start(p =>
