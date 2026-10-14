@@ -1,10 +1,10 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
-using QuickView.Core.Models;
-using QuickView.Rendering;
-using QuickView.Rendering.Pdf;
-using QuickView.Infrastructure.Logging;
+using DocGlance.Core.Models;
+using DocGlance.Rendering;
+using DocGlance.Rendering.Pdf;
+using DocGlance.Infrastructure.Logging;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
@@ -15,7 +15,7 @@ using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace QuickView.Features.Viewer;
+namespace DocGlance.Features.Viewer;
 
 /// <summary>
 /// PDF rendering: each page is rendered as a full WriteableBitmap and placed

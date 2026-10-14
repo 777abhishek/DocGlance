@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Windows.Data.Pdf;
-using QuickView.Infrastructure.Concurrency;
-using QuickView.Infrastructure.Logging;
+using DocGlance.Infrastructure.Concurrency;
+using DocGlance.Infrastructure.Logging;
 
-namespace QuickView.Rendering.Pdf;
+namespace DocGlance.Rendering.Pdf;
 
 /// <summary>
 /// Owns an open PdfCraft document and its cached page dimensions.

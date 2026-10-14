@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <!--
-  Package.appxmanifest  —  QuickView MSIX package identity for Microsoft Store submission.
+  Package.appxmanifest  —  DocGlance MSIX package identity for Microsoft Store submission.
 
   Store identity reserved in Partner Center. The signing certificate must
   match the Store publisher before building the Store package.
@@ -31,7 +31,7 @@
        PROPERTIES
        ═══════════════════════════════════════════════════════════════ -->
   <Properties>
-    <DisplayName>QuickView</DisplayName>
+    <DisplayName>DocGlance</DisplayName>
     <PublisherDisplayName>777abhishek</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
     <uap10:PackageIntegrity>
@@ -65,7 +65,7 @@
       EntryPoint="$targetentrypoint$">
 
       <uap:VisualElements
-        DisplayName="QuickView"
+        DisplayName="DocGlance"
         Description="Fast document viewer for PDF, PowerPoint, Word, and Excel"
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
@@ -74,7 +74,7 @@
           Wide310x150Logo="Assets\Wide310x150Logo.png"
           Square310x310Logo="Assets\Square310x310Logo.png"
           Square71x71Logo="Assets\SmallTile.png"
-          ShortName="QuickView">
+          ShortName="DocGlance">
 
         </uap:DefaultTile>
         <uap:SplashScreen Image="Assets\SplashScreen.png" />
@@ -87,24 +87,24 @@
       <Extensions>
 
         <!-- FILE TYPE ASSOCIATIONS
-             QuickView supports PDF, PowerPoint, Word, and Excel files
+             DocGlance supports PDF, PowerPoint, Word, and Excel files
              using Rust-based rendering via PDFCraft, DeckCraft, WordCraft, and GridCraft -->
-        
+
         <!-- PDF files (PDFCraft) -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="quickview-pdf">
+          <uap:FileTypeAssociation Name="DocGlance-pdf">
             <uap:SupportedFileTypes>
               <uap:FileType>.pdf</uap:FileType>
             </uap:SupportedFileTypes>
             <uap:DisplayName>PDF Document</uap:DisplayName>
             <uap:Logo>Assets\FileTypeIcons\PDF.png</uap:Logo>
-            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+            <uap:InfoTip>Open with DocGlance</uap:InfoTip>
           </uap:FileTypeAssociation>
         </uap:Extension>
-        
+
         <!-- PowerPoint files (DeckCraft) -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="quickview-pptx">
+          <uap:FileTypeAssociation Name="DocGlance-pptx">
             <uap:SupportedFileTypes>
               <uap:FileType>.pptx</uap:FileType>
               <uap:FileType>.ppt</uap:FileType>
@@ -113,39 +113,39 @@
             </uap:SupportedFileTypes>
             <uap:DisplayName>PowerPoint Presentation</uap:DisplayName>
             <uap:Logo>Assets\FileTypeIcons\PowerPoint.png</uap:Logo>
-            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+            <uap:InfoTip>Open with DocGlance</uap:InfoTip>
           </uap:FileTypeAssociation>
         </uap:Extension>
-        
+
         <!-- Word files (WordCraft - coming soon) -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="quickview-word">
+          <uap:FileTypeAssociation Name="DocGlance-word">
             <uap:SupportedFileTypes>
               <uap:FileType>.docx</uap:FileType>
               <uap:FileType>.doc</uap:FileType>
             </uap:SupportedFileTypes>
             <uap:DisplayName>Word Document</uap:DisplayName>
             <uap:Logo>Assets\FileTypeIcons\Word.png</uap:Logo>
-            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+            <uap:InfoTip>Open with DocGlance</uap:InfoTip>
           </uap:FileTypeAssociation>
         </uap:Extension>
-        
+
         <!-- Excel files (GridCraft - coming soon) -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="quickview-excel">
+          <uap:FileTypeAssociation Name="DocGlance-excel">
             <uap:SupportedFileTypes>
               <uap:FileType>.xlsx</uap:FileType>
               <uap:FileType>.xls</uap:FileType>
             </uap:SupportedFileTypes>
             <uap:DisplayName>Excel Spreadsheet</uap:DisplayName>
             <uap:Logo>Assets\FileTypeIcons\Excel.png</uap:Logo>
-            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+            <uap:InfoTip>Open with DocGlance</uap:InfoTip>
           </uap:FileTypeAssociation>
         </uap:Extension>
 
         <!-- Text files -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="quickview-text">
+          <uap:FileTypeAssociation Name="DocGlance-text">
             <uap:SupportedFileTypes>
               <uap:FileType>.txt</uap:FileType>
               <uap:FileType>.log</uap:FileType>
@@ -159,51 +159,51 @@
             </uap:SupportedFileTypes>
             <uap:DisplayName>Text Document</uap:DisplayName>
             <uap:Logo>Assets\FileTypeIcons\Text.png</uap:Logo>
-            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+            <uap:InfoTip>Open with DocGlance</uap:InfoTip>
           </uap:FileTypeAssociation>
         </uap:Extension>
 
         <!-- CSV/TSV files -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="quickview-csv">
+          <uap:FileTypeAssociation Name="DocGlance-csv">
             <uap:SupportedFileTypes>
               <uap:FileType>.csv</uap:FileType>
               <uap:FileType>.tsv</uap:FileType>
             </uap:SupportedFileTypes>
             <uap:DisplayName>CSV File</uap:DisplayName>
             <uap:Logo>Assets\FileTypeIcons\CSV.png</uap:Logo>
-            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+            <uap:InfoTip>Open with DocGlance</uap:InfoTip>
           </uap:FileTypeAssociation>
         </uap:Extension>
 
         <!-- Markdown files -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="quickview-markdown">
+          <uap:FileTypeAssociation Name="DocGlance-markdown">
             <uap:SupportedFileTypes>
               <uap:FileType>.md</uap:FileType>
               <uap:FileType>.markdown</uap:FileType>
             </uap:SupportedFileTypes>
             <uap:DisplayName>Markdown Document</uap:DisplayName>
             <uap:Logo>Assets\FileTypeIcons\Markdown.png</uap:Logo>
-            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+            <uap:InfoTip>Open with DocGlance</uap:InfoTip>
           </uap:FileTypeAssociation>
         </uap:Extension>
 
         <!-- Rich Text files -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="quickview-rtf">
+          <uap:FileTypeAssociation Name="DocGlance-rtf">
             <uap:SupportedFileTypes>
               <uap:FileType>.rtf</uap:FileType>
             </uap:SupportedFileTypes>
             <uap:DisplayName>Rich Text Document</uap:DisplayName>
             <uap:Logo>Assets\FileTypeIcons\RichText.png</uap:Logo>
-            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+            <uap:InfoTip>Open with DocGlance</uap:InfoTip>
           </uap:FileTypeAssociation>
         </uap:Extension>
 
         <!-- Code files - C# and .NET -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="quickview-code-csharp">
+          <uap:FileTypeAssociation Name="DocGlance-code-csharp">
             <uap:SupportedFileTypes>
               <uap:FileType>.cs</uap:FileType>
               <uap:FileType>.vb</uap:FileType>
@@ -211,13 +211,13 @@
             </uap:SupportedFileTypes>
             <uap:DisplayName>Code File</uap:DisplayName>
             <uap:Logo>Assets\FileTypeIcons\Code.png</uap:Logo>
-            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+            <uap:InfoTip>Open with DocGlance</uap:InfoTip>
           </uap:FileTypeAssociation>
         </uap:Extension>
 
         <!-- Code files - JavaScript/TypeScript -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="quickview-code-js">
+          <uap:FileTypeAssociation Name="DocGlance-code-js">
             <uap:SupportedFileTypes>
               <uap:FileType>.js</uap:FileType>
               <uap:FileType>.mjs</uap:FileType>
@@ -227,25 +227,25 @@
             </uap:SupportedFileTypes>
             <uap:DisplayName>JavaScript/TypeScript Code</uap:DisplayName>
             <uap:Logo>Assets\FileTypeIcons\Code.png</uap:Logo>
-            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+            <uap:InfoTip>Open with DocGlance</uap:InfoTip>
           </uap:FileTypeAssociation>
         </uap:Extension>
 
         <!-- Code files - Python -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="quickview-code-python">
+          <uap:FileTypeAssociation Name="DocGlance-code-python">
             <uap:SupportedFileTypes>
               <uap:FileType>.py</uap:FileType>
             </uap:SupportedFileTypes>
             <uap:DisplayName>Python Code</uap:DisplayName>
             <uap:Logo>Assets\FileTypeIcons\Code.png</uap:Logo>
-            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+            <uap:InfoTip>Open with DocGlance</uap:InfoTip>
           </uap:FileTypeAssociation>
         </uap:Extension>
 
         <!-- Code files - Other languages -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="quickview-code-other">
+          <uap:FileTypeAssociation Name="DocGlance-code-other">
             <uap:SupportedFileTypes>
               <uap:FileType>.java</uap:FileType>
               <uap:FileType>.kt</uap:FileType>
@@ -260,26 +260,26 @@
             </uap:SupportedFileTypes>
             <uap:DisplayName>Code File</uap:DisplayName>
             <uap:Logo>Assets\FileTypeIcons\Code.png</uap:Logo>
-            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+            <uap:InfoTip>Open with DocGlance</uap:InfoTip>
           </uap:FileTypeAssociation>
         </uap:Extension>
 
         <!-- Script files -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="quickview-scripts">
+          <uap:FileTypeAssociation Name="DocGlance-scripts">
             <uap:SupportedFileTypes>
               <uap:FileType>.sh</uap:FileType>
               <uap:FileType>.ps1</uap:FileType>
             </uap:SupportedFileTypes>
             <uap:DisplayName>Script File</uap:DisplayName>
             <uap:Logo>Assets\FileTypeIcons\Code.png</uap:Logo>
-            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+            <uap:InfoTip>Open with DocGlance</uap:InfoTip>
           </uap:FileTypeAssociation>
         </uap:Extension>
 
         <!-- Web files - HTML/CSS -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="quickview-web">
+          <uap:FileTypeAssociation Name="DocGlance-web">
             <uap:SupportedFileTypes>
               <uap:FileType>.html</uap:FileType>
               <uap:FileType>.htm</uap:FileType>
@@ -288,38 +288,38 @@
             </uap:SupportedFileTypes>
             <uap:DisplayName>Web File</uap:DisplayName>
             <uap:Logo>Assets\FileTypeIcons\Code.png</uap:Logo>
-            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+            <uap:InfoTip>Open with DocGlance</uap:InfoTip>
           </uap:FileTypeAssociation>
         </uap:Extension>
 
         <!-- JSON files -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="quickview-json">
+          <uap:FileTypeAssociation Name="DocGlance-json">
             <uap:SupportedFileTypes>
               <uap:FileType>.json</uap:FileType>
             </uap:SupportedFileTypes>
             <uap:DisplayName>JSON File</uap:DisplayName>
             <uap:Logo>Assets\FileTypeIcons\JSON.png</uap:Logo>
-            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+            <uap:InfoTip>Open with DocGlance</uap:InfoTip>
           </uap:FileTypeAssociation>
         </uap:Extension>
 
         <!-- XML files -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="quickview-xml">
+          <uap:FileTypeAssociation Name="DocGlance-xml">
             <uap:SupportedFileTypes>
               <uap:FileType>.xml</uap:FileType>
               <uap:FileType>.xaml</uap:FileType>
             </uap:SupportedFileTypes>
             <uap:DisplayName>XML File</uap:DisplayName>
             <uap:Logo>Assets\FileTypeIcons\XML.png</uap:Logo>
-            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+            <uap:InfoTip>Open with DocGlance</uap:InfoTip>
           </uap:FileTypeAssociation>
         </uap:Extension>
 
         <!-- YAML/TOML files -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="quickview-config">
+          <uap:FileTypeAssociation Name="DocGlance-config">
             <uap:SupportedFileTypes>
               <uap:FileType>.yaml</uap:FileType>
               <uap:FileType>.yml</uap:FileType>
@@ -327,19 +327,19 @@
             </uap:SupportedFileTypes>
             <uap:DisplayName>Configuration File</uap:DisplayName>
             <uap:Logo>Assets\FileTypeIcons\Text.png</uap:Logo>
-            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+            <uap:InfoTip>Open with DocGlance</uap:InfoTip>
           </uap:FileTypeAssociation>
         </uap:Extension>
 
         <!-- SQL files -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="quickview-sql">
+          <uap:FileTypeAssociation Name="DocGlance-sql">
             <uap:SupportedFileTypes>
               <uap:FileType>.sql</uap:FileType>
             </uap:SupportedFileTypes>
             <uap:DisplayName>SQL File</uap:DisplayName>
             <uap:Logo>Assets\FileTypeIcons\Code.png</uap:Logo>
-            <uap:InfoTip>Open with QuickView</uap:InfoTip>
+            <uap:InfoTip>Open with DocGlance</uap:InfoTip>
           </uap:FileTypeAssociation>
         </uap:Extension>
 
@@ -371,4 +371,3 @@
   </Capabilities>
 
 </Package>
-

@@ -1,8 +1,8 @@
 // HomeViewModel.cs — Observable state for HomePage (scan, filter, sort, search).
 
 using CommunityToolkit.Mvvm.ComponentModel;
-using QuickView.Core.Models;
-using QuickView.Common.Formatters;
+using DocGlance.Core.Models;
+using DocGlance.Common.Formatters;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -11,7 +11,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 
-namespace QuickView.Features.Home;
+namespace DocGlance.Features.Home;
 
 /// <summary>
 /// Holds all non-UI state for the Home page: documents, scan tokens, filter, sort, and search.

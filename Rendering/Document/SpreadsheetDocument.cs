@@ -7,7 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Globalization;
 
-namespace QuickView.Rendering.Document;
+namespace DocGlance.Rendering.Document;
 
 /// <summary>
 /// A text search match in a spreadsheet.

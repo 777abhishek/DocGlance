@@ -18,12 +18,12 @@ using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
 using WinRT;
 using WinRT.Interop;
-using QuickView.Core.Models;
-using QuickView.Features.Home;
-using QuickView.Features.Viewer;
-using QuickView.Infrastructure.Logging;
+using DocGlance.Core.Models;
+using DocGlance.Features.Home;
+using DocGlance.Features.Viewer;
+using DocGlance.Infrastructure.Logging;
 
-namespace QuickView.UI.Shell;
+namespace DocGlance.UI.Shell;
 
 public sealed partial class TitleBarWindow : Window
 {
@@ -62,7 +62,7 @@ public sealed partial class TitleBarWindow : Window
 
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBarDragArea);
-        Title = "QuickView";
+        Title = "DocGlance";
         
 
         // Track active window
@@ -125,9 +125,9 @@ public sealed partial class TitleBarWindow : Window
                     return;
 
                 _homePageInitialized = true;
-                QuickView.Infrastructure.Diagnostics.DiagnosticsService.Milestone("HomePageInitializationStarted");
+                DocGlance.Infrastructure.Diagnostics.DiagnosticsService.Milestone("HomePageInitializationStarted");
                 HomeFrame.Navigate(typeof(HomePage));
-                QuickView.Infrastructure.Diagnostics.DiagnosticsService.Milestone("HomePageInitialized");
+                DocGlance.Infrastructure.Diagnostics.DiagnosticsService.Milestone("HomePageInitialized");
             });
     }
 
@@ -162,7 +162,7 @@ public sealed partial class TitleBarWindow : Window
                 DocHost.Content = kv.Value.viewer;
                 DocHost.Visibility = Visibility.Visible;
                 HomeFrame.Visibility = Visibility.Collapsed;
-                Title = doc.Title + " — QuickView";
+                Title = doc.Title + " — DocGlance";
                 return;
             }
         }
@@ -170,8 +170,8 @@ public sealed partial class TitleBarWindow : Window
         Infrastructure.Logging.Logger.Log($"[TitleBarWindow] Creating new tab for document");
         
         // Persist to recent files and refresh the home page strip
-        QuickView.Services.Storage.RecentFilesStore.Push(doc.FilePath);
-        if (HomeFrame.Content is QuickView.Features.Home.HomePage home)
+        DocGlance.Services.Storage.RecentFilesStore.Push(doc.FilePath);
+        if (HomeFrame.Content is DocGlance.Features.Home.HomePage home)
             home.LoadRecentDocuments();
 
         // Create new viewer tab
@@ -197,7 +197,7 @@ public sealed partial class TitleBarWindow : Window
         DocHost.Content = viewer;
         DocHost.Visibility = Visibility.Visible;
         HomeFrame.Visibility = Visibility.Collapsed;
-        Title = doc.Title + " — QuickView";
+        Title = doc.Title + " — DocGlance";
 
         Infrastructure.Logging.Logger.Log($"[TitleBarWindow] Calling viewer.LoadDocument");
         viewer.LoadDocument(doc);
@@ -258,7 +258,7 @@ public sealed partial class TitleBarWindow : Window
         DocHost.Content = frame;
         DocHost.Visibility = Visibility.Visible;
         HomeFrame.Visibility = Visibility.Collapsed;
-        Title = "Settings — QuickView";
+        Title = "Settings — DocGlance";
     }
 
     public void OpenToolsPage()
@@ -308,7 +308,7 @@ public sealed partial class TitleBarWindow : Window
         DocHost.Opacity = 1.0;
         HomeFrame.Visibility = Visibility.Collapsed;
         HomeFrame.Opacity = 0.0;
-        Title = "Document Tools — QuickView";
+        Title = "Document Tools — DocGlance";
         Logger.Log("[TitleBarWindow] Document Tools content activated.");
     }
 
@@ -334,9 +334,9 @@ public sealed partial class TitleBarWindow : Window
         try
         {
             if (!isHome && _tabData.TryGetValue(selected, out var selData))
-                Title = selData.doc.Title + " — QuickView";
+                Title = selData.doc.Title + " — DocGlance";
             else
-                Title = "QuickView";
+                Title = "DocGlance";
         }
         catch (Exception ex)
         {
@@ -556,7 +556,7 @@ public sealed partial class TitleBarWindow : Window
 
     private void Tabs_ExternalTornOutTabsDropped(TabView sender, TabViewExternalTornOutTabsDroppedEventArgs args)
     {
-        // A tab from another QuickView window was dropped onto this one.
+        // A tab from another DocGlance window was dropped onto this one.
         // args.Tabs contains the TabViewItems — but since UI elements can't
         // cross windows we use the Tag (DocumentItem) we attached at tear-out.
         foreach (var obj in args.Tabs)
@@ -864,7 +864,7 @@ public sealed partial class TitleBarWindow : Window
         }
         catch (Exception ex)
         {
-            QuickView.Infrastructure.Logging.Logger.Log(
+            DocGlance.Infrastructure.Logging.Logger.Log(
                 $"[Theme] ConfigureTitleBarTheme failed: {ex.Message}");
         }
     }
@@ -904,7 +904,7 @@ public sealed partial class TitleBarWindow : Window
     public void RestoreSession()
     {
         var dispatcherQueue = DispatcherQueue;
-        QuickView.Infrastructure.Diagnostics.DiagnosticsService.Milestone("SessionRestoreStarted");
+        DocGlance.Infrastructure.Diagnostics.DiagnosticsService.Milestone("SessionRestoreStarted");
 
         _ = Task.Run(() =>
         {
@@ -977,7 +977,7 @@ public sealed partial class TitleBarWindow : Window
                         }
                         finally
                         {
-                            QuickView.Infrastructure.Diagnostics.DiagnosticsService.Milestone("SessionRestoreCompleted");
+                            DocGlance.Infrastructure.Diagnostics.DiagnosticsService.Milestone("SessionRestoreCompleted");
                         }
                     }))
                 {
@@ -987,7 +987,7 @@ public sealed partial class TitleBarWindow : Window
             catch (Exception ex)
             {
                 Logger.Error("RestoreSession failed", ex);
-                QuickView.Infrastructure.Diagnostics.DiagnosticsService.Milestone("SessionRestoreFailed");
+                DocGlance.Infrastructure.Diagnostics.DiagnosticsService.Milestone("SessionRestoreFailed");
             }
         });
     }

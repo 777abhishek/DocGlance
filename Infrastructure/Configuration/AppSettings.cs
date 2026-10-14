@@ -1,8 +1,8 @@
-﻿using QuickView.Core.Enums;
-using QuickView.Services.Storage;
+﻿using DocGlance.Core.Enums;
+using DocGlance.Services.Storage;
 using System;
 
-namespace QuickView.Infrastructure.Configuration;
+namespace DocGlance.Infrastructure.Configuration;
 
 /// <summary>Application-wide settings with typed properties and automatic persistence.</summary>
 public static class AppSettings

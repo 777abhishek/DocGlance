@@ -1,8 +1,8 @@
-﻿using QuickView.Core.Interfaces;
+﻿using DocGlance.Core.Interfaces;
 using System;
 using System.Collections.Concurrent;
 
-namespace QuickView.Rendering;
+namespace DocGlance.Rendering;
 
 /// <summary>
 /// Central registry that maps file extensions to their <see cref="IFileRenderer"/> implementation.

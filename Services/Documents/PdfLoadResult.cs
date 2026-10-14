@@ -1,6 +1,6 @@
-using QuickView.Rendering.Pdf;
+using DocGlance.Rendering.Pdf;
 
-namespace QuickView.Services.Documents;
+namespace DocGlance.Services.Documents;
 
 /// <summary>Result of LoadDocumentAsync operation.</summary>
 public sealed record PdfLoadResult(

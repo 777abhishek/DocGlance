@@ -2,17 +2,17 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
-using QuickView.Core.Models;
-using QuickView.Rendering.Presentation;
-using QuickView.Rendering.Pdf;
-using QuickView.Rendering.Document;
+using DocGlance.Core.Models;
+using DocGlance.Rendering.Presentation;
+using DocGlance.Rendering.Pdf;
+using DocGlance.Rendering.Document;
 using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Windows.UI;
 
-namespace QuickView.Features.Viewer;
+namespace DocGlance.Features.Viewer;
 
 public sealed partial class ViewerPage
 {
@@ -149,7 +149,7 @@ public sealed partial class ViewerPage
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            QuickView.Infrastructure.Logging.Logger.Error("Document search failed", ex);
+            DocGlance.Infrastructure.Logging.Logger.Error("Document search failed", ex);
             FindCount.Text = "Search failed";
         }
         finally { SetSearchLoading(false); }

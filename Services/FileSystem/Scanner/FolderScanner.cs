@@ -1,6 +1,6 @@
-using QuickView.Infrastructure.Logging;
-using QuickView.Core.Models;
-using QuickView.Common.Validators;
+using DocGlance.Infrastructure.Logging;
+using DocGlance.Core.Models;
+using DocGlance.Common.Validators;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -9,7 +9,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace QuickView.Services.FileSystem.Scanner;
+namespace DocGlance.Services.FileSystem.Scanner;
 
 public static class FolderScanner
 {

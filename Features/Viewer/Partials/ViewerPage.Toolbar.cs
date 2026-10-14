@@ -3,13 +3,13 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
-using QuickView.Services.Storage;
+using DocGlance.Services.Storage;
 using System;
 using System.IO;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
 
-namespace QuickView.Features.Viewer;
+namespace DocGlance.Features.Viewer;
 
 public sealed partial class ViewerPage
 {
@@ -144,7 +144,7 @@ public sealed partial class ViewerPage
 
     private void PresentationModeMenuItem_Click(object? sender, EventArgs e)
     {
-        var app = Microsoft.UI.Xaml.Application.Current as QuickView.App;
+        var app = Microsoft.UI.Xaml.Application.Current as DocGlance.App;
         var window = app?.MainWindow;
         if (window == null) return;
 

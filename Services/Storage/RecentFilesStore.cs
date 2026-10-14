@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace QuickView.Services.Storage;
+namespace DocGlance.Services.Storage;
 
 /// <summary>Stores the list of recently opened file paths.</summary>
 public static class RecentFilesStore

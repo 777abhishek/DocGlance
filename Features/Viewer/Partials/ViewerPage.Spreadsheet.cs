@@ -1,13 +1,13 @@
 // ViewerPage.Spreadsheet.cs — Spreadsheet search using native GridCraft FFI
 using Microsoft.UI.Xaml;
-using QuickView.Infrastructure.Logging;
-using QuickView.Rendering.Document;
+using DocGlance.Infrastructure.Logging;
+using DocGlance.Rendering.Document;
 using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace QuickView.Features.Viewer;
+namespace DocGlance.Features.Viewer;
 
 public sealed partial class ViewerPage
 {

@@ -1,5 +1,5 @@
 // SpreadsheetViewer.xaml.cs
-// High-performance Win2D spreadsheet cell grid renderer for QuickView.
+// High-performance Win2D spreadsheet cell grid renderer for DocGlance.
 // Win2D CanvasControl instances are created programmatically to avoid WMC9999
 // XAML compiler errors with WinAppSDK 2.x.
 
@@ -17,12 +17,12 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
-using QuickView.Infrastructure.Logging;
-using QuickView.Rendering.Document;
+using DocGlance.Infrastructure.Logging;
+using DocGlance.Rendering.Document;
 using Windows.Foundation;
 using Windows.UI;
 
-namespace QuickView.Features.Viewer.Spreadsheet;
+namespace DocGlance.Features.Viewer.Spreadsheet;
 
 /// <summary>
 /// Win2D-powered spreadsheet viewer — renders cell grids natively without sidebar.

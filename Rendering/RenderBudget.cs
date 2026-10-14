@@ -1,6 +1,6 @@
 using System;
 
-namespace QuickView.Rendering;
+namespace DocGlance.Rendering;
 
 /// <summary>
 /// Shared raster limits: render at device pixels plus a small text oversample

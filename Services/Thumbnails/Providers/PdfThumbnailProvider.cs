@@ -1,5 +1,5 @@
 using Microsoft.UI.Xaml.Media.Imaging;
-using QuickView.Core.Interfaces;
+using DocGlance.Core.Interfaces;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -8,7 +8,7 @@ using Windows.Storage;
 using Windows.Storage.FileProperties;
 using Windows.Storage.Streams;
 
-namespace QuickView.Services.Thumbnails.Providers;
+namespace DocGlance.Services.Thumbnails.Providers;
 
 public sealed class PdfThumbnailProvider : IThumbnailProvider
 {

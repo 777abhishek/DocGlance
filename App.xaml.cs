@@ -3,19 +3,19 @@
 
 using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
-using QuickView.Infrastructure.Logging;
-using QuickView.Infrastructure.Configuration;
-using QuickView.Services.Registration;
-using QuickView.Core.Models;
-using QuickView.Common.Validators;
-using QuickView.UI.Shell;
+using DocGlance.Infrastructure.Logging;
+using DocGlance.Infrastructure.Configuration;
+using DocGlance.Services.Registration;
+using DocGlance.Core.Models;
+using DocGlance.Common.Validators;
+using DocGlance.UI.Shell;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace QuickView;
+namespace DocGlance;
 
 public partial class App : Application
 {
@@ -103,7 +103,7 @@ public partial class App : Application
             Logger.VerboseEnabled = Infrastructure.Configuration.AppSettings.VerboseLogging;
 
             // WriteableBitmaps must be created on the UI thread; renderers use this dispatcher.
-            QuickView.Rendering.NativeBitmap.Initialize(
+            DocGlance.Rendering.NativeBitmap.Initialize(
                 Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread());
 
             // Register file renderers FIRST (needed for file opening)
@@ -123,7 +123,7 @@ public partial class App : Application
             // Listen for file handovers from second processes (Explorer double-click
             // while running). The Windows App SDK redirect is unreliable for unpackaged
             // apps — this pipe is the guaranteed payload channel (see Program.cs).
-            QuickView.Services.Activation.ActivationIpc.StartServer(OpenExternalFiles);
+            DocGlance.Services.Activation.ActivationIpc.StartServer(OpenExternalFiles);
 
 #if !PACKAGED
             // Register file associations in background (non-blocking)
@@ -223,13 +223,13 @@ public partial class App : Application
 
         // These registry renderers are info-card fallbacks only; actual DOCX/XLSX/PPTX
         // rendering goes through the native wrappers (DocxDocument, SpreadsheetDocument, PptxDocument).
-        var docxRenderer = new QuickView.Rendering.Office.DocxRenderer();
-        var xlsxRenderer = new QuickView.Rendering.Office.XlsxRenderer();
-        var pptxRenderer = new QuickView.Rendering.Office.PptxRenderer();
+        var docxRenderer = new DocGlance.Rendering.Office.DocxRenderer();
+        var xlsxRenderer = new DocGlance.Rendering.Office.XlsxRenderer();
+        var pptxRenderer = new DocGlance.Rendering.Office.PptxRenderer();
         
-        QuickView.Rendering.RendererRegistry.Register(docxRenderer);
-        QuickView.Rendering.RendererRegistry.Register(xlsxRenderer);
-        QuickView.Rendering.RendererRegistry.Register(pptxRenderer);
+        DocGlance.Rendering.RendererRegistry.Register(docxRenderer);
+        DocGlance.Rendering.RendererRegistry.Register(xlsxRenderer);
+        DocGlance.Rendering.RendererRegistry.Register(pptxRenderer);
         
         System.Diagnostics.Debug.WriteLine($"[App] Registered DOCX renderer for: {string.Join(", ", docxRenderer.SupportedExtensions)}");
         System.Diagnostics.Debug.WriteLine($"[App] Registered XLSX renderer for: {string.Join(", ", xlsxRenderer.SupportedExtensions)}");
@@ -253,7 +253,7 @@ public partial class App : Application
         Logger.Log($"[Activation] TryOpenFromActivationArgs: Kind={args.Kind}, " +
                    $"DataType={args.Data?.GetType().Name ?? "null"}");
 
-        var filePaths = QuickView.Services.Activation.ActivationPaths.FromActivationArgs(args);
+        var filePaths = DocGlance.Services.Activation.ActivationPaths.FromActivationArgs(args);
 
         if (filePaths.Count == 0)
         {
@@ -269,7 +269,7 @@ public partial class App : Application
 
     /// <summary>
     /// Fallback: read file path(s) from process command-line arguments.
-    /// Handles: QuickView.exe "C:\path\to\file.pdf" "C:\path\to\file2.docx"
+    /// Handles: DocGlance.exe "C:\path\to\file.pdf" "C:\path\to\file2.docx"
     /// </summary>
     private static bool TryOpenFromCommandLine()
     {

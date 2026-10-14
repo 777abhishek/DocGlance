@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-#  QuickView build + launch script
+#  DocGlance build + launch script
 #
 #  Supports both build modes:
 #    - Packaged (MSIX): default, for Microsoft Store submission
@@ -20,18 +20,18 @@ param(
     [string]$Configuration = "Debug"
 )
 
-$Project  = "$PSScriptRoot\QuickView.csproj"
+$Project  = "$PSScriptRoot\DocGlance.csproj"
 $LogFile  = "$PSScriptRoot\build.log"
-$ExeName  = "QuickView"
+$ExeName  = "DocGlance"
 
 # Determine output path based on build mode
 if ($Unpackaged) {
     $BinDir = "$PSScriptRoot\bin\x64\$Configuration\net8.0-windows10.0.19041.0\win-x64"
-    $Exe = "$BinDir\QuickView.exe"
+    $Exe = "$BinDir\DocGlance.exe"
 } else {
     # Packaged (MSIX) output goes to a different path
     $BinDir = "$PSScriptRoot\bin\$Configuration\net8.0-windows10.0.19041.0\win-x64"
-    $Exe = "$BinDir\QuickView.exe"
+    $Exe = "$BinDir\DocGlance.exe"
 }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -79,7 +79,7 @@ if ($lockProcs) {
 }
 
 # Delete locked intermediate XAML DLLs
-Get-ChildItem -Path "$PSScriptRoot\obj" -Recurse -Filter "QuickView.dll" -ErrorAction SilentlyContinue |
+Get-ChildItem -Path "$PSScriptRoot\obj" -Recurse -Filter "DocGlance.dll" -ErrorAction SilentlyContinue |
     Where-Object { $_.FullName -like "*intermediatexaml*" } |
     ForEach-Object {
         try   { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue; Write-Info "Removed intermediate DLL: $($_.Name)" }
@@ -172,7 +172,7 @@ if ($Unpackaged) {
         Write-Step "Stamping icon into exe…"
         & $rcedit $Exe --set-icon $ico 2>&1 | Out-Null
         if ($LASTEXITCODE -eq 0) {
-            Write-OK "Icon embedded into QuickView.exe"
+            Write-OK "Icon embedded into DocGlance.exe"
         } else {
             Write-Info "rcedit warning (non-fatal): exit $LASTEXITCODE"
         }

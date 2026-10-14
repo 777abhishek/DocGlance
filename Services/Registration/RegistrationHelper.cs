@@ -10,15 +10,15 @@
 // UNPACKAGED (direct EXE / GitHub release):
 //   Original behaviour — registers on first launch, re-registers if the exe moves.
 
-using QuickView.Infrastructure.Logging;
+using DocGlance.Infrastructure.Logging;
 using System.Threading.Tasks;
 
 #if !PACKAGED
-using QuickView.Services.Storage;
+using DocGlance.Services.Storage;
 using System;
 #endif
 
-namespace QuickView.Services.Registration;
+namespace DocGlance.Services.Registration;
 
 public static class RegistrationHelper
 {
@@ -60,7 +60,7 @@ public static class RegistrationHelper
     private const string SubKeyRegistered = "is_registered";
     private const string SubKeyExePath    = "registered_exe";
 
-    /// <summary>True when QuickView is currently registered as an "Open With" handler.</summary>
+    /// <summary>True when DocGlance is currently registered as an "Open With" handler.</summary>
     public static bool IsRegistered => LoadBool(SubKeyRegistered);
 
     /// <summary>

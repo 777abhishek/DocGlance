@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Page
-    x:Class="QuickView.Features.Viewer.ViewerPage"
+    x:Class="DocGlance.Features.Viewer.ViewerPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:models="using:QuickView.Core.Models"
-    xmlns:components="using:QuickView.Features.Viewer.Components"
-    xmlns:spreadsheet="using:QuickView.Features.Viewer.Spreadsheet"
+    xmlns:models="using:DocGlance.Core.Models"
+    xmlns:components="using:DocGlance.Features.Viewer.Components"
+    xmlns:spreadsheet="using:DocGlance.Features.Viewer.Spreadsheet"
     Background="Transparent"
 >
 

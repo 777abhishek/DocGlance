@@ -1,6 +1,6 @@
 using System;
 
-namespace QuickView.Core.Models;
+namespace DocGlance.Core.Models;
 
 public class PdfMetadata
 {

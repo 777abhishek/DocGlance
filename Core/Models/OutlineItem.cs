@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace QuickView.Core.Models;
+namespace DocGlance.Core.Models;
 
 /// <summary>One node in a PDF outline / table of contents tree.</summary>
 public sealed class OutlineItem

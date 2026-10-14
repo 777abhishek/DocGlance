@@ -1,4 +1,4 @@
-using QuickView.Core.Models;
+using DocGlance.Core.Models;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace QuickView.Rendering.Pdf;
+namespace DocGlance.Rendering.Pdf;
 
 /// <summary>Searches PDF text through the PdfCraft native API.</summary>
 public static class PdfTextService

@@ -1,9 +1,9 @@
-﻿using QuickView.Infrastructure.Logging;
+﻿using DocGlance.Infrastructure.Logging;
 using System;
 using System.IO;
 using System.Text.Json;
 
-namespace QuickView.Services.Storage;
+namespace DocGlance.Services.Storage;
 
 /// <summary>
 /// Persists arbitrary settings as JSON in LocalApplicationData.
@@ -15,7 +15,7 @@ public static class SettingsStore
 {
     private static readonly string Dir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "QuickView", "settings");
+        "DocGlance", "settings");
 
     private static readonly object Gate = new();
 

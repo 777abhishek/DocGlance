@@ -2,7 +2,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 
-namespace QuickView.Features.Viewer;
+namespace DocGlance.Features.Viewer;
 
 public sealed partial class ViewerPage
 {

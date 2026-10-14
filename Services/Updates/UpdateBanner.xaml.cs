@@ -1,10 +1,10 @@
 ﻿using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using QuickView.Infrastructure.Logging;
-using QuickView.Services.Updates;
+using DocGlance.Infrastructure.Logging;
+using DocGlance.Services.Updates;
 using System;
 
-namespace QuickView.Services.Updates;
+namespace DocGlance.Services.Updates;
 
 /// <summary>
 /// A subtle InfoBar that appears at the top of the window when an update is available.
@@ -35,7 +35,7 @@ public sealed partial class UpdateBanner : UserControl
         DispatcherQueue.TryEnqueue(() =>
         {
             _pending = e.Release;
-            InfoBar.Title   = $"QuickView {e.Release.Version} is available";
+            InfoBar.Title   = $"DocGlance {e.Release.Version} is available";
             InfoBar.Message = "A new version is ready to install.";
             InfoBar.IsOpen  = true;
         });

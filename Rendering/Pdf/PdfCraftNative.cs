@@ -1,7 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace QuickView.Rendering.Pdf;
+namespace DocGlance.Rendering.Pdf;
 
 internal static class PdfCraftNative
 {

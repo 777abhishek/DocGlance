@@ -4,7 +4,7 @@
     Licensed under the MIT License.
 -->
 <Page
-    x:Class="QuickView.Features.Settings.SettingsPage"
+    x:Class="DocGlance.Features.Settings.SettingsPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -332,7 +332,7 @@
                         </Grid>
 
                         <TextBlock Style="{StaticResource SettingDescriptionStyle}"
-                                   Text="When registered, QuickView appears in the 'Open with' menu for all supported file types. Individual defaults are set per file type in Windows Settings → Default apps." />
+                                   Text="When registered, DocGlance appears in the 'Open with' menu for all supported file types. Individual defaults are set per file type in Windows Settings → Default apps." />
 
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <Button x:Name="RegisterButton" Content="Register with Windows"
@@ -360,7 +360,7 @@
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                                 <TextBlock Text="Supported file types" />
                                 <TextBlock Style="{StaticResource SettingDescriptionStyle}"
-                                           Text="Extensions QuickView can preview" />
+                                           Text="Extensions DocGlance can preview" />
                             </StackPanel>
                         </Grid>
                     </Expander.Header>
@@ -379,7 +379,7 @@
                 <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,8">
                     <Image Source="ms-appx:///Assets/AppIcon.ico" Width="48" Height="48" />
                     <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="QuickView" FontSize="18" FontWeight="SemiBold" />
+                        <TextBlock Text="DocGlance" FontSize="18" FontWeight="SemiBold" />
                         <TextBlock x:Name="VersionText" Text="Version 14.10.26"
                                    Style="{StaticResource SettingDescriptionStyle}" />
                     </StackPanel>
@@ -389,7 +389,7 @@
                            Text="A fast, lightweight document viewer for Windows. Preview PDFs, Office files, code and text without opening heavy applications." />
 
                 <TextBlock Style="{StaticResource SettingDescriptionStyle}"
-                           Text="© 2026 QuickView Contributors. Licensed under the MIT License."
+                           Text="© 2026 DocGlance Contributors. Licensed under the MIT License."
                            Margin="0,0,0,10" />
 
                 <HyperlinkButton x:Name="GitHubLink" Padding="0,6" Click="GitHubLink_Click">
@@ -417,7 +417,7 @@
                 <TextBlock Text="Open source licenses" FontWeight="SemiBold" FontSize="14" Margin="2,24,0,8" />
                 
                 <TextBlock Style="{StaticResource SettingDescriptionStyle}" Margin="0,0,0,12" TextWrapping="Wrap"
-                           Text="QuickView is built with these excellent open source libraries:" />
+                           Text="DocGlance is built with these excellent open source libraries:" />
 
                 <StackPanel Spacing="14">
                     <!-- Windows App SDK -->

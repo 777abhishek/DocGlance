@@ -1,6 +1,6 @@
 using System.Threading;
 
-namespace QuickView.Infrastructure.Concurrency;
+namespace DocGlance.Infrastructure.Concurrency;
 
 /// <summary>
 /// Reference-counted gate that makes "dispose a native document" safe while native

@@ -1,8 +1,8 @@
-# QuickView Native FFI Libraries
+# DocGlance Native FFI Libraries
 
 ## Overview
 
-QuickView uses four Rust FFI libraries to render documents:
+DocGlance uses four Rust FFI libraries to render documents:
 
 - **pdfcraft_ffi** - PDF rendering, text extraction, search, merge/split, PNG export
 - **deckcraft_ffi** - PowerPoint (PPTX) rendering, text extraction, search

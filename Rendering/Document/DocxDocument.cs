@@ -1,5 +1,5 @@
 using Microsoft.UI.Xaml.Media.Imaging;
-using QuickView.Rendering;
+using DocGlance.Rendering;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -11,7 +11,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Globalization;
 
-namespace QuickView.Rendering.Document;
+namespace DocGlance.Rendering.Document;
 
 /// <summary>
 /// Managed wrapper around a WordCraft DOCX document.

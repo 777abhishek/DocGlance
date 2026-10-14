@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace QuickView.Core.Models;
+namespace DocGlance.Core.Models;
 
 /// <summary>
 /// Represents a clickable link in a PDF document (web URL, email, or internal page reference).

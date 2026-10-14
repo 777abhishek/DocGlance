@@ -4,7 +4,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Media;
-using QuickView.Rendering.Text;
+using DocGlance.Rendering.Text;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -12,7 +12,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Windows.UI;
 
-namespace QuickView.Rendering.Code;
+namespace DocGlance.Rendering.Code;
 
 /// <summary>
 /// Syntax-highlighted code file renderer with monospace font and line wrapping option.

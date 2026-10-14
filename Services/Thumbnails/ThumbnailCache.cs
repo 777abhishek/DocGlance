@@ -1,5 +1,5 @@
 using Microsoft.UI.Xaml.Media.Imaging;
-using QuickView.Infrastructure.Configuration;
+using DocGlance.Infrastructure.Configuration;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -9,7 +9,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Windows.Storage.Streams;
 
-namespace QuickView.Services.Thumbnails;
+namespace DocGlance.Services.Thumbnails;
 
 /// <summary>
 /// Disk-based PNG cache for thumbnails.
@@ -20,7 +20,7 @@ public static class ThumbnailCache
 {
     private static readonly string Dir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "QuickView", "thumbcache");
+        "DocGlance", "thumbcache");
 
     private static long MaxCacheSizeBytes => Math.Max(50L * 1024 * 1024, AppSettings.ThumbnailCacheSize);
     private static long TargetCacheSizeBytes => (long)(MaxCacheSizeBytes * 0.8);
@@ -168,7 +168,7 @@ public static class ThumbnailCache
             
             if (deletedCount > 0)
             {
-                QuickView.Infrastructure.Logging.Logger.Log(
+                DocGlance.Infrastructure.Logging.Logger.Log(
                     $"[ThumbnailCache] Evicted {deletedCount} files, " +
                     $"freed {(totalSize - currentSize) / 1024 / 1024} MB, " +
                     $"cache now {currentSize / 1024 / 1024} MB");
@@ -176,7 +176,7 @@ public static class ThumbnailCache
         }
         catch (Exception ex)
         {
-            QuickView.Infrastructure.Logging.Logger.Error("ThumbnailCache eviction failed", ex);
+            DocGlance.Infrastructure.Logging.Logger.Error("ThumbnailCache eviction failed", ex);
         }
         finally
         {

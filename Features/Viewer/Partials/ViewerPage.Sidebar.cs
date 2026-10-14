@@ -1,14 +1,14 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using QuickView.Services.Storage;
-using QuickView.Core.Models;
-using QuickView.Rendering.Pdf;
+using DocGlance.Services.Storage;
+using DocGlance.Core.Models;
+using DocGlance.Rendering.Pdf;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 
-namespace QuickView.Features.Viewer;
+namespace DocGlance.Features.Viewer;
 
 public sealed partial class ViewerPage
 {

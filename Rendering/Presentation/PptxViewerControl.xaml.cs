@@ -7,7 +7,7 @@ using System.Collections.ObjectModel;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace QuickView.Rendering.Presentation;
+namespace DocGlance.Rendering.Presentation;
 
 public sealed partial class PptxViewerControl : UserControl, IDisposable
 {

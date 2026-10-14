@@ -1,6 +1,6 @@
 using System;
 
-namespace QuickView.Common.Formatters;
+namespace DocGlance.Common.Formatters;
 
 /// <summary>
 /// Formats dates for display in user-friendly formats.

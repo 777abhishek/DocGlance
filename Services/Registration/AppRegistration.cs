@@ -21,14 +21,14 @@ using System.Linq;
 using System.Runtime.InteropServices;
 #endif
 
-namespace QuickView.Services.Registration;
+namespace DocGlance.Services.Registration;
 
 public static class AppRegistration
 {
     // ── Supported extensions (used by both builds for the Settings UI list) ──
 
     public static readonly IReadOnlyList<string> SupportedExtensions =
-        QuickView.Core.Constants.SupportedExtensions.All;
+        DocGlance.Core.Constants.SupportedExtensions.All;
 
 #if PACKAGED
 
@@ -57,11 +57,11 @@ public static class AppRegistration
 
     // ── Unpackaged build: write HKCU registry keys (original implementation) ─
 
-    private const string LegacyProgId = "QuickView.AssocFile.1";
-    private const string AppExeKey = "QuickView.exe";
-    private const string AppName  = "QuickView";
+    private const string LegacyProgId = "DocGlance.AssocFile.1";
+    private const string AppExeKey = "DocGlance.exe";
+    private const string AppName  = "DocGlance";
     private const string AppDesc  = "Fast universal file viewer for Windows";
-    private const string CapabKey = @"Software\Clients\QuickView\Capabilities";
+    private const string CapabKey = @"Software\Clients\DocGlance\Capabilities";
 
     private static string GetIconName(string extension) => extension.ToLowerInvariant() switch
     {
@@ -98,7 +98,7 @@ public static class AppRegistration
         _ => "Text Document",
     };
 
-    private static string ProgIdFor(string extension) => $"QuickView.{GetIconName(extension)}";
+    private static string ProgIdFor(string extension) => $"DocGlance.{GetIconName(extension)}";
 
     /// <summary>
     /// Writes all HKCU registry keys needed to appear in "Open With" and be
@@ -113,7 +113,7 @@ public static class AppRegistration
         // 1 ── Per-icon ProgIDs: Windows gets a distinct DefaultIcon for each file type.
         foreach (var iconName in SupportedExtensions.Select(GetIconName).Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            string progId = $"QuickView.{iconName}";
+            string progId = $"DocGlance.{iconName}";
             string description = GetTypeDescription(iconName);
             string typeIconPath = System.IO.Path.Combine(
                 System.IO.Path.GetDirectoryName(exePath)!, "Assets", "FileTypeIcons", $"{iconName}.ico");
@@ -147,7 +147,7 @@ public static class AppRegistration
             openWith.SetValue(intendedProgId, new byte[0], RegistryValueKind.None);
         }
 
-        // 3 ── Applications\QuickView.exe entry
+        // 3 ── Applications\DocGlance.exe entry
         using (var appKey = EnsureKey($@"Software\Classes\Applications\{AppExeKey}"))
             appKey.SetValue("FriendlyAppName", AppName);
         using (var defIcon = EnsureKey($@"Software\Classes\Applications\{AppExeKey}\DefaultIcon"))
@@ -201,11 +201,11 @@ public static class AppRegistration
         }
 
         foreach (var iconName in SupportedExtensions.Select(GetIconName).Distinct(StringComparer.OrdinalIgnoreCase))
-            DeleteKeyTree($@"Software\Classes\QuickView.{iconName}");
+            DeleteKeyTree($@"Software\Classes\DocGlance.{iconName}");
         DeleteKeyTree($@"Software\Classes\{LegacyProgId}");
         DeleteKeyTree($@"Software\Classes\Applications\{AppExeKey}");
         DeleteKeyTree($@"Software\Microsoft\Windows\CurrentVersion\App Paths\{AppExeKey}");
-        DeleteKeyTree(@"Software\Clients\QuickView");
+        DeleteKeyTree(@"Software\Clients\DocGlance");
         using var regApps = Registry.CurrentUser.OpenSubKey(
             @"Software\RegisteredApplications", writable: true);
         regApps?.DeleteValue(AppName, throwOnMissingValue: false);

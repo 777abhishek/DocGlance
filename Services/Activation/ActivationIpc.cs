@@ -22,9 +22,9 @@ using System.Linq;
 using System.Security.Principal;
 using System.Threading;
 using System.Threading.Tasks;
-using QuickView.Infrastructure.Logging;
+using DocGlance.Infrastructure.Logging;
 
-namespace QuickView.Services.Activation;
+namespace DocGlance.Services.Activation;
 
 public static class ActivationIpc
 {
@@ -37,10 +37,10 @@ public static class ActivationIpc
         {
             var sid = WindowsIdentity.GetCurrent().User?.Value;
             if (!string.IsNullOrWhiteSpace(sid))
-                return $"QuickView.Activation.{sid}";
+                return $"DocGlance.Activation.{sid}";
         }
         catch { }
-        return $"QuickView.Activation.{Environment.UserName}";
+        return $"DocGlance.Activation.{Environment.UserName}";
     }
 
     // ── Second process: send the paths to the primary instance ───────────────
@@ -99,7 +99,7 @@ public static class ActivationIpc
         var thread = new Thread(() => ServerLoop(onPathsReceived))
         {
             IsBackground = true,
-            Name = "QuickView-ActivationIpc",
+            Name = "DocGlance-ActivationIpc",
         };
         thread.Start();
     }

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace QuickView.Services.FileSystem.Index;
+namespace DocGlance.Services.FileSystem.Index;
 
 /// <summary>
 /// Low-level data-access layer for the file index.

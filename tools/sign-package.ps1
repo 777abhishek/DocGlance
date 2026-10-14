@@ -1,8 +1,8 @@
 # ─────────────────────────────────────────────────────────────────────────────
-#  QuickView one-time signing setup + sign script
+#  DocGlance one-time signing setup + sign script
 #
 #  Creates a self-signed code-signing certificate (CN=777abhishek), exports
-#  QuickView.pfx (private, gitignored) and QuickView.cer (public), and signs
+#  DocGlance.pfx (private, gitignored) and DocGlance.cer (public), and signs
 #  the built MSIX. Self-signed certs are for local testing, not public trust.
 #
 #  Usage:
@@ -21,9 +21,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 $Root      = Split-Path -Parent $PSScriptRoot
-$PfxPath   = "$Root\QuickView.pfx"
-$CerPath   = "$Root\QuickView.cer"
-$PfxPassword = "QuickView2026!"   # keep in sync with QuickView.csproj
+$PfxPath   = "$Root\DocGlance.pfx"
+$CerPath   = "$Root\DocGlance.cer"
+$PfxPassword = "DocGlance2026!"   # keep in sync with DocGlance.csproj
 $Subject     = "CN=777abhishek"
 
 function Write-OK([string]$m)   { Write-Host "  OK  $m" -ForegroundColor Green }
@@ -40,7 +40,7 @@ if ($RecreateCert -or -not $cert) {
     $cert = New-SelfSignedCertificate -Type Custom `
         -Subject $Subject `
         -KeyUsage DigitalSignature `
-        -FriendlyName "QuickView Signing Cert" `
+        -FriendlyName "DocGlance Signing Cert" `
         -CertStoreLocation "Cert:\CurrentUser\My" `
         -NotAfter (Get-Date).AddYears(3) `
         -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")

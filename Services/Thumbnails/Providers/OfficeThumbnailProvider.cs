@@ -1,12 +1,12 @@
 using Microsoft.UI.Xaml.Media.Imaging;
-using QuickView.Core.Interfaces;
+using DocGlance.Core.Interfaces;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Windows.Storage;
 using Windows.Storage.FileProperties;
 
-namespace QuickView.Services.Thumbnails.Providers;
+namespace DocGlance.Services.Thumbnails.Providers;
 
 public sealed class OfficeThumbnailProvider : IThumbnailProvider
 {

@@ -2,7 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Threading;
 
-namespace QuickView.Infrastructure.Logging;
+namespace DocGlance.Infrastructure.Logging;
 
 /// <summary>
 /// Correlated operation scope returned by <see cref="Logger.BeginOperation"/>.

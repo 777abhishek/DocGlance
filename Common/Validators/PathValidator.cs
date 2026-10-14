@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 
-namespace QuickView.Common.Validators;
+namespace DocGlance.Common.Validators;
 
 /// <summary>
 /// Provides security validation for file paths to prevent symlink, junction, and UNC path attacks.

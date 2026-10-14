@@ -22,7 +22,7 @@ using System;
 using System.Collections.Generic;
 using Windows.UI;
 
-namespace QuickView.Features.Viewer.Components;
+namespace DocGlance.Features.Viewer.Components;
 
 // ── Hit ───────────────────────────────────────────────────────────────────────
 

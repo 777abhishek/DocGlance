@@ -1,7 +1,7 @@
 ﻿using System;
 using System.IO;
 
-namespace QuickView.Services.FileSystem.Watcher;
+namespace DocGlance.Services.FileSystem.Watcher;
 
 /// <summary>
 /// Watches indexed folders for file-system changes and raises events

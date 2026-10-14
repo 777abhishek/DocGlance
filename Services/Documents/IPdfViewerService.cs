@@ -1,11 +1,11 @@
 using Microsoft.UI.Xaml.Media.Imaging;
-using QuickView.Core.Models;
-using QuickView.Rendering.Pdf;
+using DocGlance.Core.Models;
+using DocGlance.Rendering.Pdf;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace QuickView.Services.Documents;
+namespace DocGlance.Services.Documents;
 
 /// <summary>
 /// Orchestrates PDF document lifecycle, progressive rendering, prefetching, and memory management.

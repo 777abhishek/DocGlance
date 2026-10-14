@@ -2,7 +2,7 @@ using Microsoft.UI.Dispatching;
 using System;
 using System.Threading.Tasks;
 
-namespace QuickView.Core.Extensions;
+namespace DocGlance.Core.Extensions;
 
 /// <summary>
 /// Helper for marshalling operations to the UI thread with consistent error handling.

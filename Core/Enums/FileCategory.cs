@@ -1,4 +1,4 @@
-﻿namespace QuickView.Core.Enums;
+﻿namespace DocGlance.Core.Enums;
 
 public enum FileCategory
 {

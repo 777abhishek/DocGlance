@@ -1,9 +1,9 @@
 using Microsoft.UI.Xaml;
-using QuickView.Core.Models;
+using DocGlance.Core.Models;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace QuickView.Core.Interfaces;
+namespace DocGlance.Core.Interfaces;
 
 /// <summary>Renders a file into a UIElement for display in the ViewerPage canvas.</summary>
 public interface IFileRenderer

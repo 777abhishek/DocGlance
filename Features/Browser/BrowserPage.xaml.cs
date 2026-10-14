@@ -1,6 +1,6 @@
 ﻿using Microsoft.UI.Xaml.Controls;
 
-namespace QuickView.Features.Browser;
+namespace DocGlance.Features.Browser;
 
 public sealed partial class BrowserPage : Page
 {

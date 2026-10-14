@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Runtime.InteropServices;
 
-namespace QuickView.Rendering.Document;
+namespace DocGlance.Rendering.Document;
 
 /// <summary>
 /// P/Invoke bindings for wordcraft_ffi.dll — WordCraft DOCX parser and renderer.

@@ -1,7 +1,7 @@
 using System;
 using System.Threading.Tasks;
 
-namespace QuickView.Infrastructure.Logging;
+namespace DocGlance.Infrastructure.Logging;
 
 /// <summary>
 /// Extensions for intentionally-unawaited tasks ("fire and forget").

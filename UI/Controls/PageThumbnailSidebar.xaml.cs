@@ -2,9 +2,9 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Collections.ObjectModel;
-using QuickView.Core.Models;
+using DocGlance.Core.Models;
 
-namespace QuickView.UI.Controls;
+namespace DocGlance.UI.Controls;
 
 public sealed partial class PageThumbnailSidebar : UserControl
 {

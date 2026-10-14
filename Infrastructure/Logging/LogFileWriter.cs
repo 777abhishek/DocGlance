@@ -3,7 +3,7 @@ using System.IO;
 using System.Text;
 using System.Threading;
 
-namespace QuickView.Infrastructure.Logging;
+namespace DocGlance.Infrastructure.Logging;
 
 /// <summary>
 /// File sink for the logger: appending batches and size-based rotation with a
@@ -61,6 +61,6 @@ internal sealed class LogFileWriter
 
         File.Move(_path, _path + ".1");
         File.WriteAllText(_path,
-            $"=== QuickView log (rotated) - {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff zzz} ===\n");
+            $"=== DocGlance log (rotated) - {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff zzz} ===\n");
     }
 }

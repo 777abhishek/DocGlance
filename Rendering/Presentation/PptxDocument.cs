@@ -1,5 +1,5 @@
 using Microsoft.UI.Xaml.Media.Imaging;
-using QuickView.Rendering;
+using DocGlance.Rendering;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -11,7 +11,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace QuickView.Rendering.Presentation;
+namespace DocGlance.Rendering.Presentation;
 
 public readonly record struct PptxSearchRect(double X, double Y, double Width, double Height);
 

@@ -1,5 +1,5 @@
-# QuickView — build all native Rust libraries
-# Run from: C:\Code\QuickView\native\
+# DocGlance — build all native Rust libraries
+# Run from: C:\Code\DocGlance\native\
 # Requires: rustup (winget install Rustlang.Rustup)
 
 Set-StrictMode -Version Latest

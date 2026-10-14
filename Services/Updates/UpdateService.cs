@@ -10,9 +10,9 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
-using QuickView.Infrastructure.Logging;
+using DocGlance.Infrastructure.Logging;
 
-namespace QuickView.Services.Updates;
+namespace DocGlance.Services.Updates;
 
 /// <summary>
 /// Lightweight background update checker.
@@ -28,7 +28,7 @@ public static class UpdateService
 {
     // ── Configuration ────────────────────────────────────────────────────────
     private const string GitHubOwner = "777abhishek";
-    private const string GitHubRepo  = "QuickView";
+    private const string GitHubRepo  = "DocGlance";
     private const string ApiUrl      = $"https://api.github.com/repos/{GitHubOwner}/{GitHubRepo}/releases/latest";
 
     // Store product page — fill in your real Store app ID before submission.
@@ -100,9 +100,9 @@ public static class UpdateService
 
             // Fresh private directory per attempt: never reuse a pre-existing (possibly
             // partial or planted) file at a predictable %TEMP% path.
-            var tempDir = Path.Combine(Path.GetTempPath(), "QuickView-Update-" + Guid.NewGuid().ToString("N"));
+            var tempDir = Path.Combine(Path.GetTempPath(), "DocGlance-Update-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempDir);
-            var tempPath = Path.Combine(tempDir, "QuickView-Setup.exe");
+            var tempPath = Path.Combine(tempDir, "DocGlance-Setup.exe");
 
             Logger.Log($"[Update] Downloading {release.InstallerUrl}");
             using (var resp = await _httpClient.GetAsync(release.InstallerUrl,
@@ -267,7 +267,7 @@ public static class UpdateService
             // Marshal event invocation to the UI thread so subscribers can safely
             // touch XAML elements without throwing cross-thread exceptions.
             // Application.Current is the base WinUI type; cast to our App class.
-            var app = Microsoft.UI.Xaml.Application.Current as QuickView.App;
+            var app = Microsoft.UI.Xaml.Application.Current as DocGlance.App;
             var window = app?.MainWindow;
             if (window?.DispatcherQueue != null)
             {
@@ -319,7 +319,7 @@ public static class UpdateService
     {
         var client = new HttpClient();
         // GitHub API requires a User-Agent header.
-        client.DefaultRequestHeaders.UserAgent.ParseAdd($"QuickView/{GetCurrentVersion()}");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd($"DocGlance/{GetCurrentVersion()}");
         client.Timeout = TimeSpan.FromSeconds(20);
         return client;
     }
@@ -470,7 +470,7 @@ public static class UpdateService
             using var current = GetSignerCertificate(self);
             if (current is null)
             {
-                error = "This build of QuickView is not signed, so the update publisher cannot be verified. " +
+                error = "This build of DocGlance is not signed, so the update publisher cannot be verified. " +
                         "Download the update manually from the releases page.";
                 return false;
             }

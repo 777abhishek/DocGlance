@@ -1,14 +1,14 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
-using QuickView.Rendering.Pdf;
+using DocGlance.Rendering.Pdf;
 using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Windows.System;
 
-namespace QuickView.Features.Viewer;
+namespace DocGlance.Features.Viewer;
 
 public sealed partial class ViewerPage
 {
@@ -153,7 +153,7 @@ public sealed partial class ViewerPage
             // Calculate zoom to fit width
             double targetZoom = avail / widthLp;
             
-            QuickView.Infrastructure.Logging.Logger.Log($"ApplyFitWidth PPTX: widthLp={widthLp}, avail={avail}, targetZoom={targetZoom}");
+            DocGlance.Infrastructure.Logging.Logger.Log($"ApplyFitWidth PPTX: widthLp={widthLp}, avail={avail}, targetZoom={targetZoom}");
             
             SetZoom(targetZoom);
             return;
@@ -231,7 +231,7 @@ public sealed partial class ViewerPage
             // Fit both dimensions
             double targetZoom = Math.Min(aw / widthLp, ah / heightLp);
             
-            QuickView.Infrastructure.Logging.Logger.Log($"ApplyFitPage PPTX: widthLp={widthLp}, heightLp={heightLp}, aw={aw}, ah={ah}, targetZoom={targetZoom}");
+            DocGlance.Infrastructure.Logging.Logger.Log($"ApplyFitPage PPTX: widthLp={widthLp}, heightLp={heightLp}, aw={aw}, ah={ah}, targetZoom={targetZoom}");
             
             SetZoom(targetZoom);
             return;

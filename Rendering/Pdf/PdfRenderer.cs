@@ -1,5 +1,5 @@
 using Microsoft.UI.Xaml.Media.Imaging;
-using QuickView.Common.Validators;
+using DocGlance.Common.Validators;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -10,7 +10,7 @@ using Windows.Data.Pdf;
 using Windows.Storage;
 using Windows.Storage.Streams;
 
-namespace QuickView.Rendering.Pdf;
+namespace DocGlance.Rendering.Pdf;
 
 public readonly record struct PdfOpenResult(PdfDocumentState? Document, string? Error, bool NeedsPassword = false)
 {

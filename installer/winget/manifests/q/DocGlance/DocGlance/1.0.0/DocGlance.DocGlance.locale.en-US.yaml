@@ -1,0 +1,28 @@
+﻿# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+
+PackageIdentifier: DocGlance.DocGlance
+PackageVersion: 1.0.0
+PackageLocale: en-US
+Publisher: DocGlance Contributors
+PublisherUrl: https://github.com/777abhishek/DocGlance
+PublisherSupportUrl: https://github.com/777abhishek/DocGlance/issues
+Author: DocGlance Contributors
+PackageName: DocGlance
+PackageUrl: https://github.com/777abhishek/DocGlance
+License: MIT
+LicenseUrl: https://github.com/777abhishek/DocGlance/blob/main/LICENSE
+Copyright: Copyright (c) 2025 DocGlance Contributors
+ShortDescription: Fast universal file previewer for Windows
+Description: DocGlance is a native Windows file previewer built with WinUI 3. Instantly preview PDFs, documents, images, and code files with progressive rendering, full-text search, and syntax highlighting. Self-contained with zero dependencies.
+Moniker: DocGlance
+Tags:
+  - viewer
+  - pdf
+  - preview
+  - document-viewer
+  - file-preview
+  - winui3
+  - code-viewer
+ReleaseNotesUrl: https://github.com/777abhishek/DocGlance/releases/tag/v1.0.0
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

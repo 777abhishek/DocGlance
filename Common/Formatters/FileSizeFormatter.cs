@@ -1,4 +1,4 @@
-namespace QuickView.Common.Formatters;
+namespace DocGlance.Common.Formatters;
 
 /// <summary>
 /// Formats file sizes in human-readable units (B, KB, MB, GB).

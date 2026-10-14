@@ -3,7 +3,7 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 
-namespace QuickView.Core.Models;
+namespace DocGlance.Core.Models;
 
 /// <summary>
 /// Represents a grouped collection of documents with a group header.

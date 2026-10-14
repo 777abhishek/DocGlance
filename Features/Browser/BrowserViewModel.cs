@@ -1,11 +1,11 @@
-using QuickView.Services.FileSystem.Scanner;
-using QuickView.Core.Models;
+using DocGlance.Services.FileSystem.Scanner;
+using DocGlance.Core.Models;
 using System;
 using System.Collections.ObjectModel;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace QuickView.Features.Browser;
+namespace DocGlance.Features.Browser;
 
 /// <summary>
 /// ViewModel for BrowserPage — manages the current folder path and its contents.
@@ -51,7 +51,7 @@ public sealed class BrowserViewModel
         }
         catch (Exception ex)
         {
-            QuickView.Infrastructure.Logging.Logger.Error(
+            DocGlance.Infrastructure.Logging.Logger.Error(
                 $"BrowserViewModel.NavigateAsync({folderPath})", ex);
         }
     }

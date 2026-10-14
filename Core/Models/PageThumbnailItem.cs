@@ -2,7 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 
-namespace QuickView.Core.Models;
+namespace DocGlance.Core.Models;
 
 public partial class PageThumbnailItem : ObservableObject
 {

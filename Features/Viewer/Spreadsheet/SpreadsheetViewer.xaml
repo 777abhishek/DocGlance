@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <UserControl
-    x:Class="QuickView.Features.Viewer.Spreadsheet.SpreadsheetViewer"
+    x:Class="DocGlance.Features.Viewer.Spreadsheet.SpreadsheetViewer"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
@@ -23,7 +23,7 @@
 
             <!-- Corner (top-left) -->
             <Border Grid.Row="0" Grid.Column="0" x:Name="CornerCell"
-                    Background="{ThemeResource QuickViewElevatedSurfaceBrush}"
+                    Background="{ThemeResource DocGlanceElevatedSurfaceBrush}"
                     BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                     BorderThickness="0,0,1,1"/>
 
@@ -82,7 +82,7 @@
 
         <!-- Sheet tab bar -->
         <Border Grid.Row="1"
-            Background="{ThemeResource QuickViewSurfaceBrush}"
+            Background="{ThemeResource DocGlanceSurfaceBrush}"
             BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
             BorderThickness="0,1,0,0"
             Height="34">

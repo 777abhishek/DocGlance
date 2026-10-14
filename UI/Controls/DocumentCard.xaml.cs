@@ -4,9 +4,9 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI;
 using System;
 using Windows.UI;
-using QuickView.Core.Models;
+using DocGlance.Core.Models;
 
-namespace QuickView.UI.Controls;
+namespace DocGlance.UI.Controls;
 
 /// <summary>
 /// Clickable document card.
@@ -60,7 +60,7 @@ public sealed partial class DocumentCard : UserControl
         }
         
         Infrastructure.Logging.Logger.Log($"[DocumentCard] Calling TitleBarWindow.Current?.OpenDocument");
-        global::QuickView.UI.Shell.TitleBarWindow.Current?.OpenDocument(Document);
+        global::DocGlance.UI.Shell.TitleBarWindow.Current?.OpenDocument(Document);
     }
 
     // ── Card visuals ──────────────────────────────────────────────────────────
@@ -99,7 +99,7 @@ public sealed partial class DocumentCard : UserControl
     private void OpenMenuItem_Click(object sender, RoutedEventArgs e)
     {
         if (Document == null) return;
-        global::QuickView.UI.Shell.TitleBarWindow.Current?.OpenDocument(Document);
+        global::DocGlance.UI.Shell.TitleBarWindow.Current?.OpenDocument(Document);
     }
 
     private void BookmarkMenuItem_Click(object sender, RoutedEventArgs e)

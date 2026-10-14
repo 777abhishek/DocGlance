@@ -1,8 +1,8 @@
-# Dependency Strategy for QuickView Native Libraries
+# Dependency Strategy for DocGlance Native Libraries
 
 ## Current Situation
 
-QuickView uses three **external rendering libraries** via FFI:
+DocGlance uses three **external rendering libraries** via FFI:
 - **deckcraft** - PPTX (PowerPoint) parsing and rendering
 - **gridcraft** - XLSX (Excel) parsing and rendering  
 - **wordcraft** - DOCX (Word) parsing and rendering
@@ -87,7 +87,7 @@ If they're published, use semantic versioning for stability.
 - When you're actively contributing to the upstream library
 
 **Bad use cases:**
-- Production applications (like QuickView)
+- Production applications (like DocGlance)
 - FFI boundaries (ABI stability is critical)
 - External dependencies you don't control
 - Applications with users who expect stability
@@ -99,7 +99,7 @@ You're now on **Option 2** with aggressive auto-update:
 - Auto-update: ✅ Runs on every build
 - Control: ❌ None - gets latest code automatically
 
-## Recommended Changes for QuickView
+## Recommended Changes for DocGlance
 
 ### 1. Remove Auto-Update from Build Script
 The build script should just build, not update:

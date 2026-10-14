@@ -1,5 +1,5 @@
 ﻿# ─────────────────────────────────────────────────────────────────────────────
-#  QuickView — Package build script
+#  DocGlance — Package build script
 #
 #  Creates a Store upload package, a signed sideload package, and/or the
 #  unpackaged EXE installer. Store packages use Microsoft's re-signing flow;
@@ -30,10 +30,10 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $Root          = $PSScriptRoot
-$Project       = "$Root\QuickView.csproj"
+$Project       = "$Root\DocGlance.csproj"
 $PublishDir    = "$Root\publish"
 $Installer     = "$Root\installer"
-$IssFile       = "$Installer\QuickView.iss"
+$IssFile       = "$Installer\DocGlance.iss"
 $OutputDir     = "$Installer\output"
 $rcedit        = "$Root\tools\rcedit.exe"
 $Ico           = "$Root\Assets\AppIcon.ico"
@@ -45,7 +45,7 @@ function Write-OK  ([string]$msg) { Write-Host "  ✓  $msg" -ForegroundColor Gr
 function Write-Fail([string]$msg) { Write-Host "  ✗  $msg" -ForegroundColor Red; exit 1 }
 function Write-Info([string]$msg) { Write-Host "     $msg" -ForegroundColor Gray }
 
-function Get-QuickViewSigningCertificate {
+function Get-DocGlanceSigningCertificate {
     Get-ChildItem "Cert:\CurrentUser\My" |
         Where-Object {
             $_.Subject -eq "CN=777abhishek" -and
@@ -57,15 +57,15 @@ function Get-QuickViewSigningCertificate {
         Select-Object -First 1
 }
 
-function Get-OrCreateQuickViewSigningCertificate {
-    $certificate = Get-QuickViewSigningCertificate
+function Get-OrCreateDocGlanceSigningCertificate {
+    $certificate = Get-DocGlanceSigningCertificate
     if ($certificate) { return $certificate }
 
     Write-Step "Creating local EXE signing certificate for CN=777abhishek…"
     New-SelfSignedCertificate -Type Custom `
         -Subject "CN=777abhishek" `
         -KeyUsage DigitalSignature `
-        -FriendlyName "QuickView EXE Development Signing" `
+        -FriendlyName "DocGlance EXE Development Signing" `
         -CertStoreLocation "Cert:\CurrentUser\My" `
         -NotAfter (Get-Date).AddYears(3) `
         -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
@@ -136,7 +136,7 @@ function Trust-PackageCertificateForInstall([string]$certificatePath, [string]$t
 
 Write-Host ""
 Write-Host "  ╔═══════════════════════════════════════════════════════════╗" -ForegroundColor Magenta
-Write-Host "  ║  QuickView Package Builder                                 ║" -ForegroundColor Magenta
+Write-Host "  ║  DocGlance Package Builder                                 ║" -ForegroundColor Magenta
 Write-Host "  ╚═══════════════════════════════════════════════════════════╝" -ForegroundColor Magenta
 
 if (($StoreUpload -and ($InstallMsix -or $MsixOnly -or $InstallerOnly)) -or
@@ -192,7 +192,7 @@ Write-OK "Native libraries built and copied to the .NET output locations"
 
 # ── 1. Publish (for unpackaged EXE installer) ─────────────────────────────────
 if ($BuildInstaller) {
-    $signingCertificate = Get-OrCreateQuickViewSigningCertificate
+    $signingCertificate = Get-OrCreateDocGlanceSigningCertificate
     if (-not $signingCertificate -or -not $signingCertificate.HasPrivateKey) {
         Write-Fail "Could not create or find the CN=777abhishek EXE signing certificate."
     }
@@ -203,7 +203,7 @@ if ($BuildInstaller) {
     }
 
     if (-not $SkipPublish) {
-        Write-Step "Publishing QuickView for unpackaged EXE (Release, x64)…"
+        Write-Step "Publishing DocGlance for unpackaged EXE (Release, x64)…"
 
         if (Test-Path $PublishDir) {
             Remove-Item $PublishDir -Recurse -Force
@@ -243,9 +243,9 @@ if ($BuildInstaller) {
     }
 
     # ── 2. Patch exe icon ─────────────────────────────────────────────────────
-    $exePath = "$PublishDir\QuickView.exe"
+    $exePath = "$PublishDir\DocGlance.exe"
     if ((Test-Path $rcedit) -and (Test-Path $Ico) -and (Test-Path $exePath)) {
-        Write-Step "Patching icon into QuickView.exe…"
+        Write-Step "Patching icon into DocGlance.exe…"
         & $rcedit $exePath --set-icon $Ico 2>&1 | Out-Null
         if ($LASTEXITCODE -eq 0) { Write-OK "Icon patched" }
         else { Write-Info "rcedit warning (non-fatal)" }
@@ -255,11 +255,11 @@ if ($BuildInstaller) {
         Write-Fail "Published app executable not found: $exePath"
     }
 
-    Write-Step "Signing QuickView.exe…"
+    Write-Step "Signing DocGlance.exe…"
     & $signtool sign /sha1 $signingCertificate.Thumbprint /fd SHA256 `
         /tr http://timestamp.digicert.com /td SHA256 $exePath
-    if ($LASTEXITCODE -ne 0) { Write-Fail "Signing QuickView.exe failed (exit $LASTEXITCODE)" }
-    Write-OK "Signed QuickView.exe as $($signingCertificate.Subject)"
+    if ($LASTEXITCODE -ne 0) { Write-Fail "Signing DocGlance.exe failed (exit $LASTEXITCODE)" }
+    Write-OK "Signed DocGlance.exe as $($signingCertificate.Subject)"
     Write-Info "This is a self-signed test certificate; other PCs must explicitly trust it."
 }
 
@@ -443,12 +443,12 @@ if ($BuildInstaller) {
     # Inject version and the SDK signing command at compile time.
     & $iscc `
         "/DAppVersion=$PackageVersion" `
-        "/SQuickViewSign=$signToolCommand" `
+        "/SDocGlanceSign=$signToolCommand" `
         $IssFile
 
     if ($LASTEXITCODE -ne 0) { Write-Fail "iscc failed (exit $LASTEXITCODE)" }
 
-    $exeInstaller = "$OutputDir\QuickView-Setup-x64.exe"
+    $exeInstaller = "$OutputDir\DocGlance-Setup-x64.exe"
     if (-not (Test-Path $exeInstaller)) {
         Write-Fail "EXE installer not produced at: $exeInstaller"
     }
@@ -471,7 +471,7 @@ if ($StoreUpload) {
 }
 
 if ($BuildInstaller) {
-    Write-Info "EXE installer → $OutputDir\QuickView-Setup-x64.exe"
+    Write-Info "EXE installer → $OutputDir\DocGlance-Setup-x64.exe"
     Write-Info "  Use for: GitHub releases, direct distribution"
 }
 

@@ -1,21 +1,21 @@
-﻿using QuickView.Core.Models;
+﻿using DocGlance.Core.Models;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
 
-namespace QuickView.Services.Storage;
+namespace DocGlance.Services.Storage;
 
 /// <summary>
-/// Persists per-file bookmarks to %LocalAppData%\QuickView\bookmarks.json.
+/// Persists per-file bookmarks to %LocalAppData%\DocGlance\bookmarks.json.
 /// Thread-safe for single-threaded UI use (all calls from UI thread).
 /// </summary>
 public static class BookmarkStore
 {
     static readonly string _path = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "QuickView", "bookmarks.json");
+        "DocGlance", "bookmarks.json");
 
     static readonly JsonSerializerOptions _opts = new() { WriteIndented = true };
 

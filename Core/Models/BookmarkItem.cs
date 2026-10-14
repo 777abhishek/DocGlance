@@ -1,4 +1,4 @@
-namespace QuickView.Core.Models;
+namespace DocGlance.Core.Models;
 
 /// <summary>A user-created bookmark — one page within one document.</summary>
 public sealed class BookmarkItem

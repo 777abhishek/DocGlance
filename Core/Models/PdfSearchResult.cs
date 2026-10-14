@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace QuickView.Core.Models;
+namespace DocGlance.Core.Models;
 
 /// <summary>
 /// One search hit on a page.

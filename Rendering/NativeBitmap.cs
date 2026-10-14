@@ -6,7 +6,7 @@ using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading.Tasks;
 using Windows.Storage.Streams;
 
-namespace QuickView.Rendering;
+namespace DocGlance.Rendering;
 
 /// <summary>
 /// Copies a native RGBA8 buffer into a WriteableBitmap without a second managed pixel array.

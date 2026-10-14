@@ -7,13 +7,13 @@
     Source: C:\Code\WinUI3\WinUIGallery\Samples\StoragePickers\StoragePickersPage.xaml.cs – FolderPicker
 -->
 <Page
-    x:Class="QuickView.Features.Home.HomePage"
+    x:Class="DocGlance.Features.Home.HomePage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:local="using:QuickView.Features.Home"
-    xmlns:models="using:QuickView.Core.Models"
-    xmlns:controls="using:QuickView.UI.Controls"
+    xmlns:local="using:DocGlance.Features.Home"
+    xmlns:models="using:DocGlance.Core.Models"
+    xmlns:controls="using:DocGlance.UI.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
     Background="Transparent"
@@ -222,7 +222,7 @@
                             Opacity="0.85"/>
                     </Grid>
                     <TextBlock
-                        Text="QuickView every file, very fast"
+                        Text="DocGlance every file, very fast"
                         FontSize="15"
                         HorizontalAlignment="Center"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"

@@ -2,7 +2,7 @@
 using System;
 using System.IO;
 
-namespace QuickView.Services.FileSystem.Index;
+namespace DocGlance.Services.FileSystem.Index;
 
 public class FileIndexContext : DbContext
 {
@@ -13,7 +13,7 @@ public class FileIndexContext : DbContext
     {
         var dbPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "QuickView", "fileindex.db");
+            "DocGlance", "fileindex.db");
         Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
         optionsBuilder.UseSqlite($"Data Source={dbPath}");
     }

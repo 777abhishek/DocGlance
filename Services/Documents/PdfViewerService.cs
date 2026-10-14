@@ -1,13 +1,13 @@
 using Microsoft.UI.Xaml.Media.Imaging;
-using QuickView.Core.Models;
-using QuickView.Rendering.Pdf;
-using QuickView.Infrastructure.Logging;
+using DocGlance.Core.Models;
+using DocGlance.Rendering.Pdf;
+using DocGlance.Infrastructure.Logging;
 using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace QuickView.Services.Documents;
+namespace DocGlance.Services.Documents;
 
 /// <summary>
 /// Per-tab PDF document lifecycle and render bookkeeping (which pages/thumbnails have been

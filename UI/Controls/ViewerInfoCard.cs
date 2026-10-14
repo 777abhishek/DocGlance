@@ -9,9 +9,9 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using System;
-using QuickView.Core.Models;
+using DocGlance.Core.Models;
 
-namespace QuickView.UI.Controls;
+namespace DocGlance.UI.Controls;
 
 /// <summary>
 /// A centred card showing file icon, name, metadata, path and

@@ -3,10 +3,10 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using QuickView.Core.Models;
+using DocGlance.Core.Models;
 using System;
 
-namespace QuickView.Features.Viewer;
+namespace DocGlance.Features.Viewer;
 
 /// <summary>
 /// Owns all document-viewer state: page, zoom, rotation, sidebar, document reference.

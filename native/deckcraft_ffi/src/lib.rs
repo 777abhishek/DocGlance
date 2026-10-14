@@ -1,6 +1,6 @@
 //! deckcraft_ffi — C-ABI wrapper around DeckCraft's PPTX parser and renderer.
 //!
-//! Exposes 10 functions that QuickView calls via C# P/Invoke:
+//! Exposes 10 functions that DocGlance calls via C# P/Invoke:
 //!   dc_open_pptx          — parse a PPTX/PPT file from bytes → opaque handle
 //!   dc_slide_count        — number of slides
 //!   dc_get_slide_size     — slide dimensions in PDF points (width × height)

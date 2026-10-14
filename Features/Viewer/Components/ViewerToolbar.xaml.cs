@@ -3,9 +3,9 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using System;
-using QuickView.Infrastructure.Logging;
+using DocGlance.Infrastructure.Logging;
 
-namespace QuickView.Features.Viewer.Components;
+namespace DocGlance.Features.Viewer.Components;
 
 public sealed partial class ViewerToolbar : UserControl
 {
@@ -104,7 +104,7 @@ public sealed partial class ViewerToolbar : UserControl
     {
         Logger.Log("[ViewerToolbar] Document Tools menu item clicked.");
 
-        var window = QuickView.UI.Shell.TitleBarWindow.Current;
+        var window = DocGlance.UI.Shell.TitleBarWindow.Current;
         if (window == null)
         {
             Logger.Log("[ViewerToolbar] Document Tools navigation failed: TitleBarWindow.Current is null.");

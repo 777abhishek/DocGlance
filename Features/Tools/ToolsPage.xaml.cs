@@ -19,14 +19,14 @@ using Windows.Storage.Streams;
 using Windows.Storage.Pickers;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.System;
-using QuickView.Common.Validators;
-using QuickView.Rendering.Document;
-using QuickView.Rendering.Presentation;
-using QuickView.Infrastructure.Logging;
-using QuickView.Rendering.Pdf;
+using DocGlance.Common.Validators;
+using DocGlance.Rendering.Document;
+using DocGlance.Rendering.Presentation;
+using DocGlance.Infrastructure.Logging;
+using DocGlance.Rendering.Pdf;
 using WinRT.Interop;
 
-namespace QuickView.Features.Tools;
+namespace DocGlance.Features.Tools;
 
 public sealed class NullToVisibilityConverter : Microsoft.UI.Xaml.Data.IValueConverter
 {
@@ -660,7 +660,7 @@ public sealed partial class ToolsPage : Page
                     continue;
                 }
 
-                tempDir ??= Path.Combine(Path.GetTempPath(), "QuickView", "pdf-merge-" + Guid.NewGuid().ToString("N"));
+                tempDir ??= Path.Combine(Path.GetTempPath(), "DocGlance", "pdf-merge-" + Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(tempDir);
                 var copy = Path.Combine(tempDir, $"{mergePaths.Count:000}.pdf");
                 File.Copy(item.FilePath, copy);
@@ -745,7 +745,7 @@ public sealed partial class ToolsPage : Page
         if (selectedIndices.Any(i => i < 0 || i >= document.PageCount))
             throw new InvalidOperationException("One or more page numbers are out of range.");
         
-        string outputDirectory = Path.Combine(Path.GetTempPath(), "QuickView", "pdf-split-" + Guid.NewGuid().ToString("N"));
+        string outputDirectory = Path.Combine(Path.GetTempPath(), "DocGlance", "pdf-split-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(outputDirectory);
         IntPtr outputDir = Marshal.StringToCoTaskMemUTF8(outputDirectory);
         string indices = string.Join(",", selectedIndices);

@@ -7,9 +7,9 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
-using QuickView.Infrastructure.Logging;
-using QuickView.Rendering.Document;
-using QuickView.Rendering.Presentation;
+using DocGlance.Infrastructure.Logging;
+using DocGlance.Rendering.Document;
+using DocGlance.Rendering.Presentation;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -17,7 +17,7 @@ using System.Text;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
 
-namespace QuickView.Features.Viewer;
+namespace DocGlance.Features.Viewer;
 
 public sealed partial class ViewerPage
 {

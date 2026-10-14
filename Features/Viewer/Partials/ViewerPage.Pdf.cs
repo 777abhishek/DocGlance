@@ -3,12 +3,12 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
-using QuickView.Services.Documents;
-using QuickView.UI.Controls;
-using QuickView.Infrastructure.Logging;
-using QuickView.Core.Models;
-using QuickView.Rendering;
-using QuickView.Rendering.Pdf;
+using DocGlance.Services.Documents;
+using DocGlance.UI.Controls;
+using DocGlance.Infrastructure.Logging;
+using DocGlance.Core.Models;
+using DocGlance.Rendering;
+using DocGlance.Rendering.Pdf;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -16,7 +16,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace QuickView.Features.Viewer;
+namespace DocGlance.Features.Viewer;
 
 public sealed partial class ViewerPage
 {
@@ -117,7 +117,7 @@ public sealed partial class ViewerPage
         {
             // Try RendererRegistry (Office etc.) before falling back to info card
             System.Diagnostics.Debug.WriteLine($"[ViewerPage] Looking for renderer for extension: '{ext}'");
-            var renderer = QuickView.Rendering.RendererRegistry.GetRenderer(ext);
+            var renderer = DocGlance.Rendering.RendererRegistry.GetRenderer(ext);
             System.Diagnostics.Debug.WriteLine($"[ViewerPage] Renderer found: {renderer?.GetType().Name ?? "null"}");
             
             if (renderer != null)
@@ -381,7 +381,7 @@ public sealed partial class ViewerPage
         Toolbar.SidebarButtonVisibility = Visibility.Collapsed;
     }
 
-    private async Task LoadViaRendererAsync(QuickView.Core.Interfaces.IFileRenderer renderer,
+    private async Task LoadViaRendererAsync(DocGlance.Core.Interfaces.IFileRenderer renderer,
                                            string filePath, CancellationToken ct)
     {
         try
@@ -449,7 +449,7 @@ public sealed partial class ViewerPage
         catch (System.Exception ex)
         {
             ShowLoading(false);
-            QuickView.Infrastructure.Logging.Logger.Error($"Renderer failed for {filePath}", ex);
+            DocGlance.Infrastructure.Logging.Logger.Error($"Renderer failed for {filePath}", ex);
             ShowErrorCard($"Failed to load file: {ex.Message}");
         }
     }
@@ -478,15 +478,15 @@ public sealed partial class ViewerPage
     // PPTX SUPPORT — Treat slides like PDF pages
     // ══════════════════════════════════════════════════════════════════════════
     
-    private QuickView.Rendering.Presentation.PptxDocument? _pptxDocument;
-    private QuickView.Rendering.Document.DocxDocument? _docxDocument;
+    private DocGlance.Rendering.Presentation.PptxDocument? _pptxDocument;
+    private DocGlance.Rendering.Document.DocxDocument? _docxDocument;
     
     private async Task LoadPptxAsync(string filePath, CancellationToken ct)
     {
         ShowLoading(true);
         try
         {
-            _pptxSearchResults = Array.Empty<QuickView.Rendering.Presentation.PptxSearchMatch>();
+            _pptxSearchResults = Array.Empty<DocGlance.Rendering.Presentation.PptxSearchMatch>();
             _activePptxSearchIndex = -1;
             FindCount.Text = "";
 
@@ -501,14 +501,14 @@ public sealed partial class ViewerPage
             // Clear any existing PPTX slides
             ClearPptxCache();
             
-            if (!QuickView.Rendering.Presentation.DeckCraftNative.IsAvailable)
+            if (!DocGlance.Rendering.Presentation.DeckCraftNative.IsAvailable)
             {
                 ShowErrorCard("PPTX renderer not available");
                 return;
             }
 
             _pptxDocument?.Dispose();
-            _pptxDocument = await QuickView.Rendering.Presentation.PptxDocument.OpenAsync(filePath, ct);
+            _pptxDocument = await DocGlance.Rendering.Presentation.PptxDocument.OpenAsync(filePath, ct);
             
             if (_pptxDocument == null)
             {
@@ -958,7 +958,7 @@ public sealed partial class ViewerPage
     // SPREADSHEET (GridCraft XLSX — native Win2D grid viewer)
     // ══════════════════════════════════════════════════════════════════════════
 
-    private QuickView.Rendering.Document.SpreadsheetDocument? _spreadsheetDocument;
+    private DocGlance.Rendering.Document.SpreadsheetDocument? _spreadsheetDocument;
 
     private async Task LoadXlsxAsync(string filePath, CancellationToken ct)
     {
@@ -983,14 +983,14 @@ public sealed partial class ViewerPage
             _activeSpreadsheetIndex = -1;
             SpreadsheetViewerControl.ClearSearchMatches();
 
-            if (!QuickView.Rendering.Document.GridCraftNative.IsAvailable)
+            if (!DocGlance.Rendering.Document.GridCraftNative.IsAvailable)
             {
                 ShowErrorCard("GridCraft XLSX renderer not available.\nPlease ensure gridcraft_ffi.dll is present.");
                 return;
             }
 
             _spreadsheetDocument?.Dispose();
-            _spreadsheetDocument = await QuickView.Rendering.Document.SpreadsheetDocument.OpenAsync(filePath, ct);
+            _spreadsheetDocument = await DocGlance.Rendering.Document.SpreadsheetDocument.OpenAsync(filePath, ct);
 
             if (_spreadsheetDocument == null)
             {
@@ -1052,7 +1052,7 @@ public sealed partial class ViewerPage
             _pptxDocument = null;
             ClearPptxCache();
 
-            if (!QuickView.Rendering.Document.WordCraftNative.IsAvailable)
+            if (!DocGlance.Rendering.Document.WordCraftNative.IsAvailable)
             {
                 ShowErrorCard("WordCraft DOCX renderer not available.\nPlease ensure wordcraft_ffi.dll is present.");
                 return;
@@ -1061,7 +1061,7 @@ public sealed partial class ViewerPage
             DocumentScrollViewer.ViewChanged -= OnDocxViewportChanged;
             ClearDocxCache();
             _docxDocument?.Dispose();
-            _docxDocument = await QuickView.Rendering.Document.DocxDocument.OpenAsync(filePath, ct);
+            _docxDocument = await DocGlance.Rendering.Document.DocxDocument.OpenAsync(filePath, ct);
 
             if (_docxDocument == null)
             {
@@ -1072,7 +1072,7 @@ public sealed partial class ViewerPage
             // Each DOCX page is a page
             _total = _docxDocument.PageCount;
             _page = 1;
-            _docxSearchResults = Array.Empty<QuickView.Rendering.Document.DocxDocument.DocxSearchMatch>();
+            _docxSearchResults = Array.Empty<DocGlance.Rendering.Document.DocxDocument.DocxSearchMatch>();
             _activeDocxSearchIndex = -1;
             SearchHighlightCanvas.Children.Clear();
             Toolbar.UpdatePageInfo(_page, _total);

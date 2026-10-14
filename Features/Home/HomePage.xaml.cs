@@ -10,15 +10,15 @@ using System.Linq;
 using System.Threading.Tasks;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
-using QuickView.Core.Models;
-using QuickView.Common.Formatters;
-using QuickView.Services.FileSystem.Index;
-using QuickView.Services.FileSystem.Scanner;
-using QuickView.Services.Thumbnails;
-using QuickView.Infrastructure.Logging;
-using QuickView.Services.Storage;
+using DocGlance.Core.Models;
+using DocGlance.Common.Formatters;
+using DocGlance.Services.FileSystem.Index;
+using DocGlance.Services.FileSystem.Scanner;
+using DocGlance.Services.Thumbnails;
+using DocGlance.Infrastructure.Logging;
+using DocGlance.Services.Storage;
 
-namespace QuickView.Features.Home;
+namespace DocGlance.Features.Home;
 
 public sealed partial class HomePage : Page
 {
@@ -280,7 +280,7 @@ public sealed partial class HomePage : Page
             foreach (var ext in new[]{ ".pdf",".docx",".doc",".xlsx",".xls",".pptx",".ppt",
                                         ".txt",".md",".png",".jpg",".jpeg",".mp4",".mkv",".mp3" })
                 picker.FileTypeFilter.Add(ext);
-            InitializeWithWindow.Initialize(picker, QuickView.UI.Shell.TitleBarWindow.Current?.Hwnd ?? IntPtr.Zero);
+            InitializeWithWindow.Initialize(picker, DocGlance.UI.Shell.TitleBarWindow.Current?.Hwnd ?? IntPtr.Zero);
 
             var file = await picker.PickSingleFileAsync();
             if (file == null) return;
@@ -294,7 +294,7 @@ public sealed partial class HomePage : Page
                 FileSize      = FormatSize((long)props.Size),
                 LastWriteTime = props.DateModified.DateTime,
             };
-            QuickView.UI.Shell.TitleBarWindow.Current?.OpenDocument(doc);
+            DocGlance.UI.Shell.TitleBarWindow.Current?.OpenDocument(doc);
         }
         catch (Exception ex) { Logger.Error("OpenFile_Click", ex); }
     }
@@ -302,7 +302,7 @@ public sealed partial class HomePage : Page
     private void Tools_Click(object sender, RoutedEventArgs e)
     {
         Logger.Log("[HomePage] Document Tools button clicked from filter section.");
-        QuickView.UI.Shell.TitleBarWindow.Current?.OpenToolsPage();
+        DocGlance.UI.Shell.TitleBarWindow.Current?.OpenToolsPage();
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -316,7 +316,7 @@ public sealed partial class HomePage : Page
             var picker = new FolderPicker();
             picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
             picker.FileTypeFilter.Add("*");
-            InitializeWithWindow.Initialize(picker, QuickView.UI.Shell.TitleBarWindow.Current?.Hwnd ?? IntPtr.Zero);
+            InitializeWithWindow.Initialize(picker, DocGlance.UI.Shell.TitleBarWindow.Current?.Hwnd ?? IntPtr.Zero);
 
             var folder = await picker.PickSingleFolderAsync();
             if (folder == null) return;

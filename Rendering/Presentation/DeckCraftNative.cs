@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Runtime.InteropServices;
 
-namespace QuickView.Rendering.Presentation;
+namespace DocGlance.Rendering.Presentation;
 
 /// <summary>
 /// P/Invoke bindings for deckcraft_ffi.dll — DeckCraft PPTX parser and renderer.

@@ -3,9 +3,9 @@ using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using QuickView.Infrastructure.Logging;
+using DocGlance.Infrastructure.Logging;
 
-namespace QuickView.Infrastructure.Diagnostics;
+namespace DocGlance.Infrastructure.Diagnostics;
 
 /// <summary>
 /// Records environment, startup milestones and memory checkpoints so a crash or hang

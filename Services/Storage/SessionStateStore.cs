@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace QuickView.Services.Storage;
+namespace DocGlance.Services.Storage;
 
 /// <summary>
 /// Stores session state (open tabs, selected tab) so the app can restore

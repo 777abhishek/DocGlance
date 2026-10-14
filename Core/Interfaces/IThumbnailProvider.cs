@@ -2,7 +2,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace QuickView.Core.Interfaces;
+namespace DocGlance.Core.Interfaces;
 
 /// <summary>Provides a thumbnail image for a file.</summary>
 public interface IThumbnailProvider

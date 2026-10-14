@@ -1,9 +1,9 @@
-using QuickView.Core.Enums;
+using DocGlance.Core.Enums;
 using System;
 using System.Collections.Generic;
 using System.IO;
 
-namespace QuickView.Common.Utilities;
+namespace DocGlance.Common.Utilities;
 
 /// <summary>
 /// Detects file types and categories based on extension and content.

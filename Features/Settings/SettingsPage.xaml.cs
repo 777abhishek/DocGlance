@@ -2,23 +2,23 @@
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Composition.SystemBackdrops;
-using QuickView.Services.Registration;
-using QuickView.Services.Updates;
-using QuickView.Services.Storage;
-using QuickView.Infrastructure.Configuration;
-using QuickView.Infrastructure.Logging;
-using QuickView.Core.Enums;
+using DocGlance.Services.Registration;
+using DocGlance.Services.Updates;
+using DocGlance.Services.Storage;
+using DocGlance.Infrastructure.Configuration;
+using DocGlance.Infrastructure.Logging;
+using DocGlance.Core.Enums;
 using System;
 using System.Linq;
 
 using System.Threading.Tasks;
 
-namespace QuickView.Features.Settings;
+namespace DocGlance.Features.Settings;
 
 public sealed partial class SettingsPage : Page
 {
     private const string GitHubOwner = "777abhishek"; // TODO: Update with your GitHub username
-    private const string GitHubRepo = "QuickView";
+    private const string GitHubRepo = "DocGlance";
 
     public SettingsPage()
     {
@@ -113,7 +113,7 @@ public sealed partial class SettingsPage : Page
             _ => ElementTheme.Default,
         };
 
-        ((QuickView.App)Application.Current).SetTheme(theme);
+        ((DocGlance.App)Application.Current).SetTheme(theme);
     }
     
     // ── Viewer ────────────────────────────────────────────────────────────────
@@ -213,7 +213,7 @@ public sealed partial class SettingsPage : Page
         // Show that associations are managed by the package/Store
         AssocStatusIcon.Glyph      = "\uE73E"; // checkmark
         AssocStatusIcon.Foreground = ResourceBrush("SystemFillColorSuccessBrush", Microsoft.UI.Colors.Green);
-        AssocStatusText.Text       = "QuickView is a packaged app — file associations are managed automatically.";
+        AssocStatusText.Text       = "DocGlance is a packaged app — file associations are managed automatically.";
         
         // Disable manual registration buttons (they're no-ops in packaged builds)
         RegisterButton.IsEnabled   = false;
@@ -228,7 +228,7 @@ public sealed partial class SettingsPage : Page
         {
             AssocStatusIcon.Glyph      = "\uE73E"; // checkmark
             AssocStatusIcon.Foreground = ResourceBrush("SystemFillColorSuccessBrush", Microsoft.UI.Colors.Green);
-            AssocStatusText.Text       = "QuickView is registered — it appears in 'Open with' for all supported file types.";
+            AssocStatusText.Text       = "DocGlance is registered — it appears in 'Open with' for all supported file types.";
             RegisterButton.IsEnabled   = false;
             UnregisterButton.IsEnabled = true;
         }
@@ -256,7 +256,7 @@ public sealed partial class SettingsPage : Page
         catch (Exception ex) { Logger.Error("RegisterButton_Click", ex); ok = false; }
 
         ShowInfoBar(
-            ok ? "QuickView is now registered with Windows." : "Registration failed — check the log.",
+            ok ? "DocGlance is now registered with Windows." : "Registration failed — check the log.",
             ok ? InfoBarSeverity.Success : InfoBarSeverity.Error);
 
 #if PACKAGED
@@ -279,7 +279,7 @@ public sealed partial class SettingsPage : Page
         catch (Exception ex) { Logger.Error("UnregisterButton_Click", ex); ok = false; }
 
         ShowInfoBar(
-            ok ? "QuickView has been removed from Windows file associations."
+            ok ? "DocGlance has been removed from Windows file associations."
                : "Unregister failed — check the log.",
             ok ? InfoBarSeverity.Success : InfoBarSeverity.Error);
 
@@ -359,7 +359,7 @@ public sealed partial class SettingsPage : Page
                     Padding = new Thickness(16),
                     Text = @"MIT License
 
-Copyright (c) 2026 QuickView Contributors
+Copyright (c) 2026 DocGlance Contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the ""Software""), to deal
@@ -383,7 +383,7 @@ SOFTWARE.
 
 THIRD-PARTY LIBRARIES
 
-All third-party libraries used in QuickView are licensed under the MIT License:
+All third-party libraries used in DocGlance are licensed under the MIT License:
 
 • Windows App SDK (Microsoft Corporation)
 • Win2D (Microsoft Corporation)

@@ -1,5 +1,5 @@
 // ActivationPaths.cs
-// Extracts file paths from every activation shape QuickView can receive.
+// Extracts file paths from every activation shape DocGlance can receive.
 //
 // Used by BOTH sides of the single-instance handover:
 //  - the second process (Program.Main) to know what to send over the pipe,
@@ -7,7 +7,7 @@
 //
 // Shapes handled:
 //  - IFileActivatedEventArgs        (MSIX file association / StorageFile payloads)
-//  - ILaunchActivatedEventArgs      (classic "QuickView.exe \"path\""; for unpackaged
+//  - ILaunchActivatedEventArgs      (classic "DocGlance.exe \"path\""; for unpackaged
 //                                    apps the Arguments may be the FULL command line
 //                                    including the exe, so it is tokenised properly)
 //  - ICommandLineActivatedEventArgs (activation via registered command-line surface)
@@ -17,7 +17,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace QuickView.Services.Activation;
+namespace DocGlance.Services.Activation;
 
 public static class ActivationPaths
 {

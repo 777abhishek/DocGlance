@@ -1,6 +1,6 @@
 //! gridcraft_ffi — C-ABI wrapper around GridCraft's XLSX parser, engine, and PDF export.
 //!
-//! Exposes functions for QuickView via C# P/Invoke:
+//! Exposes functions for DocGlance via C# P/Invoke:
 //!   gc_open_xlsx             — parse an XLSX file from bytes → opaque handle
 //!   gc_sheet_count           — number of sheets in workbook
 //!   gc_get_sheet_name        — get sheet title/name

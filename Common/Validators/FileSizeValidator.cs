@@ -1,9 +1,9 @@
 using System;
 using System.IO;
-using QuickView.Core.Constants;
-using QuickView.Infrastructure.Configuration;
+using DocGlance.Core.Constants;
+using DocGlance.Infrastructure.Configuration;
 
-namespace QuickView.Common.Validators;
+namespace DocGlance.Common.Validators;
 
 /// <summary>
 /// Validates file sizes to prevent DoS attacks from attempting to load extremely large files.

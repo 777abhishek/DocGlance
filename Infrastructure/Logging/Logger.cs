@@ -7,7 +7,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace QuickView.Infrastructure.Logging;
+namespace DocGlance.Infrastructure.Logging;
 
 /// <summary>Severity of a log entry, rendered in the [LEVEL] field.</summary>
 public enum LogLevel
@@ -36,7 +36,7 @@ public enum LogLevel
 ///  - Document contents, extracted text and credentials are never written; user paths are
 ///    sanitised by the writer thread.
 ///
-/// Log location: %LOCALAPPDATA%\QuickView\Logs\app.log (rotated archives: app.log.1 … app.log.5).
+/// Log location: %LOCALAPPDATA%\DocGlance\Logs\app.log (rotated archives: app.log.1 … app.log.5).
 /// </summary>
 public static class Logger
 {
@@ -81,7 +81,7 @@ public static class Logger
         {
             LogDir = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "QuickView",
+                "DocGlance",
                 "Logs");
 
             Directory.CreateDirectory(LogDir);
@@ -90,14 +90,14 @@ public static class Logger
             // APPEND to existing log instead of overwriting it every launch.
             // This preserves multi-session history. Rotation kicks in at 5 MB.
             File.AppendAllText(LogPath,
-                $"\n=== QuickView session start - {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff zzz} " +
+                $"\n=== DocGlance session start - {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff zzz} " +
                 $"PID={Environment.ProcessId} ===\n");
         }
         catch
         {
             // Fallback to temp if AppData fails
             LogDir = Path.GetTempPath();
-            LogPath = Path.Combine(LogDir, "QuickView_app.log");
+            LogPath = Path.Combine(LogDir, "DocGlance_app.log");
         }
 
         _fileWriter = new LogFileWriter(LogPath, MaxLogSizeBytes, RetainedArchives);
@@ -105,7 +105,7 @@ public static class Logger
         var writer = new Thread(WriteLoop)
         {
             IsBackground = true,
-            Name = "QuickView-Logger",
+            Name = "DocGlance-Logger",
             Priority = ThreadPriority.BelowNormal
         };
         writer.Start();

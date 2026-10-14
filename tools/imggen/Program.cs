@@ -105,7 +105,7 @@ using var src = (Bitmap)Image.FromFile(srcPath);
     int textTop = iconY + iconSize + pad + 14;
 
     // app name
-    DrawCentered(g, "QuickView", "Segoe UI", 10.5f, FontStyle.Bold,
+    DrawCentered(g, "DocGlance", "Segoe UI", 10.5f, FontStyle.Bold,
                  Color.FromArgb(12, 12, 12), new RectangleF(0, textTop, W, 22));
 
     // tagline
@@ -166,7 +166,7 @@ using var src = (Bitmap)Image.FromFile(srcPath);
 
     using (var font = new Font("Segoe UI", 11f, FontStyle.Bold, GraphicsUnit.Point))
     using (var b    = new SolidBrush(Color.FromArgb(12, 12, 12)))
-        g.DrawString("QuickView", font, b, tx, 7);
+        g.DrawString("DocGlance", font, b, tx, 7);
 
     using (var font = new Font("Segoe UI", 7.5f, FontStyle.Regular, GraphicsUnit.Point))
     using (var b    = new SolidBrush(Color.FromArgb(88, 88, 88)))

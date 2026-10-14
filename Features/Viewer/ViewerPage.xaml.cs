@@ -8,17 +8,17 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
-using QuickView.Services;
-using QuickView.Services.Documents;
-using QuickView.Core.Models;
-using QuickView.Rendering.Pdf;
-using QuickView.Infrastructure.Logging;
+using DocGlance.Services;
+using DocGlance.Services.Documents;
+using DocGlance.Core.Models;
+using DocGlance.Rendering.Pdf;
+using DocGlance.Infrastructure.Logging;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Threading;
 
-namespace QuickView.Features.Viewer;
+namespace DocGlance.Features.Viewer;
 
 public sealed partial class ViewerPage : Page
 {

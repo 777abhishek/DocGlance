@@ -1,7 +1,7 @@
-using QuickView.Rendering.Pdf;
+using DocGlance.Rendering.Pdf;
 using System.Collections.Generic;
 
-namespace QuickView.Core.Models;
+namespace DocGlance.Core.Models;
 
 /// <summary>
 /// Tracks the current viewport state for PDF rendering.

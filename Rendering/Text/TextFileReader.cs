@@ -1,8 +1,8 @@
 using System.IO;
 using System.Text;
-using QuickView.Common.Validators;
+using DocGlance.Common.Validators;
 
-namespace QuickView.Rendering.Text;
+namespace DocGlance.Rendering.Text;
 
 /// <summary>
 /// Reads at most <paramref name="maxChars"/> characters. Never slurps the whole file.

@@ -1,9 +1,9 @@
-using QuickView.Core.Models;
+using DocGlance.Core.Models;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace QuickView.Core.Interfaces;
+namespace DocGlance.Core.Interfaces;
 
 /// <summary>Scans a folder and returns a list of discovered files.</summary>
 public interface IFileScanner

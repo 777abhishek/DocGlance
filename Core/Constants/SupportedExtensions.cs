@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace QuickView.Core.Constants;
+namespace DocGlance.Core.Constants;
 
 /// <summary>
-/// Single source of truth for the file types QuickView opens. File-association registration
+/// Single source of truth for the file types DocGlance opens. File-association registration
 /// and size-limit selection are derived from these lists.
 /// Package.appxmanifest cannot reference code; keep its file-type list in sync with <see cref="All"/>.
 /// </summary>

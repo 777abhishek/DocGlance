@@ -1,4 +1,4 @@
-// Program.cs — Custom entry point for QuickView (WinUI 3 unpackaged).
+// Program.cs — Custom entry point for DocGlance (WinUI 3 unpackaged).
 //
 // WHY THIS EXISTS
 // ───────────────
@@ -37,11 +37,11 @@ using System;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
-using QuickView.Infrastructure.Diagnostics;
-using QuickView.Infrastructure.Logging;
-using QuickView.Services.Activation;
+using DocGlance.Infrastructure.Diagnostics;
+using DocGlance.Infrastructure.Logging;
+using DocGlance.Services.Activation;
 
-namespace QuickView;
+namespace DocGlance;
 
 // IMPORTANT: When DISABLE_XAML_GENERATED_MAIN is defined, the XAML compiler
 // generates a separate internal XamlGeneratedProgram class (not Program).
@@ -81,13 +81,13 @@ public static class Program
             AppDomain.CurrentDomain.UnhandledException += (_, e) =>
             {
                 if (e.ExceptionObject is Exception ex)
-                    QuickView.Infrastructure.Logging.Logger.Write(
-                        QuickView.Infrastructure.Logging.LogLevel.Fatal,
+                    DocGlance.Infrastructure.Logging.Logger.Write(
+                        DocGlance.Infrastructure.Logging.LogLevel.Fatal,
                         $"Event=BootstrapUnhandledException IsTerminating={e.IsTerminating}", ex);
-                QuickView.Infrastructure.Logging.Logger.Flush(TimeSpan.FromSeconds(2));
+                DocGlance.Infrastructure.Logging.Logger.Flush(TimeSpan.FromSeconds(2));
             };
-            QuickView.Infrastructure.Logging.Logger.Log("Process started");
-            QuickView.Infrastructure.Diagnostics.DiagnosticsService.Milestone("ProcessStart");
+            DocGlance.Infrastructure.Logging.Logger.Log("Process started");
+            DocGlance.Infrastructure.Diagnostics.DiagnosticsService.Milestone("ProcessStart");
         }
         catch
         {
@@ -114,7 +114,7 @@ public static class Program
         //     window to the foreground. Failure here is logged and ignored.
         try
         {
-            var mainInstance = Microsoft.Windows.AppLifecycle.AppInstance.FindOrRegisterForKey("QuickViewSingleInstance");
+            var mainInstance = Microsoft.Windows.AppLifecycle.AppInstance.FindOrRegisterForKey("DocGlanceSingleInstance");
             if (!mainInstance.IsCurrent)
             {
                 Logger.Log("[SingleInstance] Existing instance detected — handing over");

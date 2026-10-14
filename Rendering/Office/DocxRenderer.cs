@@ -1,12 +1,12 @@
 using Microsoft.UI.Xaml;
-using QuickView.UI.Controls;
-using QuickView.Core.Interfaces;
-using QuickView.Core.Models;
+using DocGlance.UI.Controls;
+using DocGlance.Core.Interfaces;
+using DocGlance.Core.Models;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace QuickView.Rendering.Office;
+namespace DocGlance.Rendering.Office;
 
 public sealed class DocxRenderer : IFileRenderer
 {

@@ -1,12 +1,12 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using QuickView.Common.Formatters;
-using QuickView.Core.Models;
+using DocGlance.Common.Formatters;
+using DocGlance.Core.Models;
 using System;
 using System.IO;
 
-namespace QuickView.Features.Viewer.Components;
+namespace DocGlance.Features.Viewer.Components;
 
 /// <summary>
 /// Clean document info popup — shows file name, type, size, pages, path, dates.

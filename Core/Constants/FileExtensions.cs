@@ -1,4 +1,4 @@
-﻿namespace QuickView.Core.Constants;
+﻿namespace DocGlance.Core.Constants;
 
 /// <summary>Canonical file extension strings used across the app - documents only.</summary>
 public static class FileExtensions

@@ -1,7 +1,7 @@
 using Microsoft.UI.Xaml.Media.Imaging;
-using QuickView.Core.Interfaces;
-using QuickView.Infrastructure.Logging;
-using QuickView.Services.Thumbnails.Providers;
+using DocGlance.Core.Interfaces;
+using DocGlance.Infrastructure.Logging;
+using DocGlance.Services.Thumbnails.Providers;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -9,7 +9,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace QuickView.Services.Thumbnails;
+namespace DocGlance.Services.Thumbnails;
 
 /// <summary>
 /// Orchestrates thumbnail generation by routing requests through registered

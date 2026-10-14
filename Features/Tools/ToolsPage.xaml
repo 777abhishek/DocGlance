@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Page
-    x:Class="QuickView.Features.Tools.ToolsPage"
+    x:Class="DocGlance.Features.Tools.ToolsPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="using:QuickView.Features.Tools"
+    xmlns:local="using:DocGlance.Features.Tools"
     Background="Transparent">
 
     <Page.Resources>

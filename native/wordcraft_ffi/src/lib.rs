@@ -1,6 +1,6 @@
 //! wordcraft_ffi — C-ABI wrapper around WordCraft's DOCX parser, layout engine, and renderer.
 //!
-//! Exposes 8 functions that QuickView calls via C# P/Invoke:
+//! Exposes 8 functions that DocGlance calls via C# P/Invoke:
 //!   wc_open_docx          — parse a DOCX file from bytes, layout document → opaque handle
 //!   wc_page_count         — number of laid-out pages
 //!   wc_get_page_size      — page dimensions in PDF points (width × height)

@@ -1,11 +1,11 @@
 using Microsoft.EntityFrameworkCore;
-using QuickView.Core.Models;
+using DocGlance.Core.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace QuickView.Services.FileSystem.Index;
+namespace DocGlance.Services.FileSystem.Index;
 
 public static class FileIndexService
 {

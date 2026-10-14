@@ -3,14 +3,14 @@
 
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
-using QuickView.Common.Formatters;
+using DocGlance.Common.Formatters;
 using System;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
 using Windows.UI;
 
-namespace QuickView.Core.Models;
+namespace DocGlance.Core.Models;
 
 public class DocumentItem : INotifyPropertyChanged
 {

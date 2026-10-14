@@ -5,11 +5,11 @@
     Pattern from Rune/MainWindow.xaml — TabView IS the title bar.
 -->
 <Window
-    x:Class="QuickView.UI.Shell.TitleBarWindow"
+    x:Class="DocGlance.UI.Shell.TitleBarWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:update="using:QuickView.Services.Updates"
-    Title="QuickView">
+    xmlns:update="using:DocGlance.Services.Updates"
+    Title="DocGlance">
 
 
     <Grid x:Name="RootGrid" AllowDrop="True"
@@ -58,7 +58,7 @@
             <TabView.TabStripHeader>
                 <StackPanel Orientation="Horizontal" Spacing="8" Margin="12,0,8,0" VerticalAlignment="Center">
                     <Image Source="/Assets/AppIcon.ico" Width="16" Height="16"/>
-                    <TextBlock Text="QuickView"
+                    <TextBlock Text="DocGlance"
                                FontSize="12"
                                FontWeight="SemiBold"
                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
