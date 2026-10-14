@@ -117,11 +117,20 @@
           </uap:FileTypeAssociation>
         </uap:Extension>
 
-        <!-- Word files (WordCraft - coming soon) -->
+        <!-- Word documents: separate associations so both extensions get the Word icon. -->
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name="docglance-word">
+          <uap:FileTypeAssociation Name="docglance-docx">
             <uap:SupportedFileTypes>
               <uap:FileType>.docx</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>Word Document</uap:DisplayName>
+            <uap:Logo>Assets\FileTypeIcons\Word.png</uap:Logo>
+            <uap:InfoTip>Open with DocGlance</uap:InfoTip>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="docglance-doc">
+            <uap:SupportedFileTypes>
               <uap:FileType>.doc</uap:FileType>
             </uap:SupportedFileTypes>
             <uap:DisplayName>Word Document</uap:DisplayName>

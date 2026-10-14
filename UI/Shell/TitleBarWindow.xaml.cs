@@ -406,6 +406,34 @@ public sealed partial class TitleBarWindow : Window
 
     // ── Open a document in a new tab (or focus existing) ─────────────────────
 
+    private static BitmapIconSource CreateDocumentIconSource(string fileType)
+    {
+        string iconName = fileType.TrimStart('.').ToLowerInvariant() switch
+        {
+            "pdf" => "PDF",
+            "pptx" or "ppt" or "pptm" or "ppsx" => "PowerPoint",
+            "docx" or "doc" => "Word",
+            "xlsx" or "xls" => "Excel",
+            "csv" or "tsv" => "CSV",
+            "log" => "LOG",
+            "md" or "markdown" => "Markdown",
+            "rtf" => "RichText",
+            "json" => "JSON",
+            "xml" or "xaml" => "XML",
+            "cs" or "vb" or "fs" or "js" or "mjs" or "ts" or "tsx" or "jsx" or
+            "py" or "java" or "kt" or "cpp" or "c" or "h" or "go" or "rs" or
+            "swift" or "rb" or "php" or "sh" or "ps1" or "bat" or "html" or
+            "htm" or "css" or "scss" or "sql" => "Code",
+            _ => "Text",
+        };
+
+        return new BitmapIconSource
+        {
+            UriSource = new Uri($"ms-appx:///Assets/FileTypeIcons/{iconName}.png"),
+            ShowAsMonochrome = false,
+        };
+    }
+
     public void OpenDocument(DocumentItem doc)
     {
         Infrastructure.Logging.Logger.Log($"[TitleBarWindow] OpenDocument called: Title={doc.Title}, FilePath={doc.FilePath}, FileType={doc.FileType}");
@@ -440,12 +468,7 @@ public sealed partial class TitleBarWindow : Window
         {
             Header     = doc.Title,
             IsClosable = true,
-            IconSource = new FontIconSource
-            {
-                Glyph      = doc.FileGlyph,
-                FontSize   = 12,
-                FontFamily = new FontFamily("ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"),
-            },
+            IconSource = CreateDocumentIconSource(doc.FileType),
         };
 
         _tabData[tab] = (viewer, doc);
