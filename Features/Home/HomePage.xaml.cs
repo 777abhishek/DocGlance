@@ -4,6 +4,7 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -35,6 +36,7 @@ public sealed partial class HomePage : Page
 
     // ── Page-level state (UI concerns only) ───────────────────────────────────
     private bool   _loaded;
+    private int    _recentLoadGeneration;
     private DispatcherQueue _dispatcherQueue = null!;
 
 
@@ -128,14 +130,42 @@ public sealed partial class HomePage : Page
 
     public void LoadRecentDocuments()
     {
-        ViewModel.RecentDocuments.Clear();
-        foreach (var path in RecentFilesStore.Load())
+        _ = LoadRecentDocumentsAsync(++_recentLoadGeneration);
+    }
+
+    private async Task LoadRecentDocumentsAsync(int generation)
+    {
+        List<DocumentItem> documents;
+        try
         {
-            if (!File.Exists(path)) continue;
-            try { ViewModel.RecentDocuments.Add(DocumentItem.FromFileInfo(new FileInfo(path))); }
-            catch { }
+            documents = await Task.Run(() =>
+            {
+                var recentDocuments = new List<DocumentItem>();
+                foreach (var path in RecentFilesStore.Load())
+                {
+                    if (!File.Exists(path)) continue;
+                    try { recentDocuments.Add(DocumentItem.FromFileInfo(new FileInfo(path))); }
+                    catch { }
+                }
+                return recentDocuments;
+            });
         }
-        if (ViewModel.ShowingRecent && _loaded) RefreshDisplay();
+        catch (Exception ex)
+        {
+            Logger.Log($"[RecentFiles] Failed to load recent documents: {ex.Message}");
+            return;
+        }
+
+        _dispatcherQueue.TryEnqueue(() =>
+        {
+            if (generation != _recentLoadGeneration) return;
+
+            ViewModel.RecentDocuments.Clear();
+            foreach (var document in documents)
+                ViewModel.RecentDocuments.Add(document);
+
+            if (ViewModel.ShowingRecent && _loaded) RefreshDisplay();
+        });
     }
 
     public void PushRecent(string filePath)
@@ -146,6 +176,8 @@ public sealed partial class HomePage : Page
 
     private void ClearRecent_Click(object sender, RoutedEventArgs e)
     {
+        // Ignore any in-flight disk scan so it cannot repopulate the cleared list.
+        _recentLoadGeneration++;
         foreach (var doc in ViewModel.RecentDocuments.ToList())
             RecentFilesStore.Remove(doc.FilePath);
         ViewModel.RecentDocuments.Clear();

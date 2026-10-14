@@ -2,12 +2,8 @@
 <!--
   Package.appxmanifest  —  QuickView MSIX package identity for Microsoft Store submission.
 
-  BEFORE SUBMITTING TO THE STORE, replace the placeholder values below:
-    Identity Name        → the Package/Identity Name from Partner Center
-    Identity Publisher   → the Publisher CN= from Partner Center (e.g. CN=XXXXXXXX-XXXX-...)
-    PhoneIdentity        → generate with: New-Guid in PowerShell (or leave Partner Center default)
-
-  Everything else (DisplayName, Description, file associations) is production-ready.
+  The current identity is for local GitHub sideload builds. Before Store
+  submission, replace it with the identity and publisher from Partner Center.
 -->
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
@@ -19,12 +15,12 @@
   IgnorableNamespaces="mp uap3 uap10 rescap">
 
   <!-- ═══════════════════════════════════════════════════════════════
-       IDENTITY  —  fill in from Partner Center before submission
+       IDENTITY  —  local sideload identity; replace for Store submission
        ═══════════════════════════════════════════════════════════════ -->
   <Identity
     Name="QuickView"
-    Publisher="CN=QuickView"
-    Version="1.0.0.0"
+    Publisher="CN=777abhishek"
+    Version="14.10.26.0"
     ProcessorArchitecture="x64" />
 
   <mp:PhoneIdentity
@@ -36,7 +32,7 @@
        ═══════════════════════════════════════════════════════════════ -->
   <Properties>
     <DisplayName>QuickView</DisplayName>
-    <PublisherDisplayName>QuickView Contributors</PublisherDisplayName>
+    <PublisherDisplayName>777abhishek</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
     <uap10:PackageIntegrity>
       <uap10:Content Enforcement="on" />

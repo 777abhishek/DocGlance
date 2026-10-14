@@ -10,7 +10,7 @@ using System.Runtime.CompilerServices;
 // version 0.0.0.0 (and the updater would treat every release as newer).
 // Keep these in sync with the values in QuickView.csproj when bumping a release.
 [assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
-[assembly: AssemblyInformationalVersion("2026.09.28")]
-[assembly: AssemblyCompany("QuickView Contributors")]
+[assembly: AssemblyFileVersion("14.10.26.0")]
+[assembly: AssemblyInformationalVersion("14.10.26")]
+[assembly: AssemblyCompany("777abhishek")]
 [assembly: AssemblyProduct("QuickView")]

@@ -380,7 +380,7 @@
                     <Image Source="ms-appx:///Assets/AppIcon.ico" Width="48" Height="48" />
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="QuickView" FontSize="18" FontWeight="SemiBold" />
-                        <TextBlock x:Name="VersionText" Text="Version 2026.09.28"
+                        <TextBlock x:Name="VersionText" Text="Version 14.10.26"
                                    Style="{StaticResource SettingDescriptionStyle}" />
                     </StackPanel>
                 </StackPanel>

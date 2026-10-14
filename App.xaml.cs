@@ -133,15 +133,18 @@ public partial class App : Application
 
             // Check for file-open activation
             var activatedArgs = AppInstance.GetCurrent().GetActivatedEventArgs();
-            if (!TryOpenFromActivationArgs(activatedArgs))
+            bool openedFromActivation = TryOpenFromActivationArgs(activatedArgs);
+            bool openedFromCommandLine = !openedFromActivation && TryOpenFromCommandLine();
+
+            // File activation takes precedence. Defer session work until the window has
+            // had a chance to present its first frame; RestoreSession does its I/O off-thread.
+            if (!openedFromActivation && !openedFromCommandLine &&
+                m_window is TitleBarWindow titleBarWindow && AppSettings.RestoreLastSession)
             {
-                TryOpenFromCommandLine();
-                
-                // If no files opened and RestoreLastSession is enabled, restore previous session
-                if (m_window is TitleBarWindow titleBarWindow && AppSettings.RestoreLastSession)
-                {
-                    titleBarWindow.RestoreSession();
-                }
+                Infrastructure.Diagnostics.DiagnosticsService.Milestone("SessionRestoreScheduled");
+                titleBarWindow.DispatcherQueue.TryEnqueue(
+                    Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+                    titleBarWindow.RestoreSession);
             }
         }
         catch (Exception ex)
@@ -170,7 +173,7 @@ public partial class App : Application
         {
             try
             {
-                m_window.Activate(); // bring to foreground
+                ((TitleBarWindow)m_window).RestoreAndActivate();
                 bool opened = TryOpenFromActivationArgs(args);
                 Logger.Log($"[Reactivation] Redirect-args handling: {(opened ? "file(s) opened" : "no usable file in redirected args")}");
             }
@@ -197,7 +200,7 @@ public partial class App : Application
         {
             try
             {
-                m_window.Activate();
+                ((TitleBarWindow)m_window).RestoreAndActivate();
                 foreach (var path in paths)
                     OpenFilePath(path);
             }
@@ -268,8 +271,9 @@ public partial class App : Application
     /// Fallback: read file path(s) from process command-line arguments.
     /// Handles: QuickView.exe "C:\path\to\file.pdf" "C:\path\to\file2.docx"
     /// </summary>
-    private static void TryOpenFromCommandLine()
+    private static bool TryOpenFromCommandLine()
     {
+        bool openedAny = false;
         try
         {
             var cmdArgs = Environment.GetCommandLineArgs();
@@ -282,6 +286,7 @@ public partial class App : Application
                     File.Exists(path))
                 {
                     OpenFilePath(path);
+                    openedAny = true;
                 }
             }
         }
@@ -289,6 +294,8 @@ public partial class App : Application
         {
             Logger.Error("TryOpenFromCommandLine", ex);
         }
+
+        return openedAny;
     }
 
     /// <summary>

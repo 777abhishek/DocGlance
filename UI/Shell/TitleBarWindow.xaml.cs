@@ -42,9 +42,18 @@ public sealed partial class TitleBarWindow : Window
     private DesktopAcrylicController? _acrylicController;
     private SystemBackdropConfiguration? _acrylicConfiguration;
     private ICompositionSupportsSystemBackdrop? _acrylicTarget;
+    private bool _homePageInitialized;
+    private bool _homePageInitializationQueued;
 
     // ── HWND (for pickers in unpackaged apps) ─────────────────────────────────
     public IntPtr Hwnd => WindowNative.GetWindowHandle(this);
+
+    public void RestoreAndActivate()
+    {
+        // Window.Activate() alone does not reliably restore a minimized WinUI window.
+        ShowWindow(Hwnd, SW_RESTORE);
+        Activate();
+    }
 
     public TitleBarWindow()
     {
@@ -85,7 +94,7 @@ public sealed partial class TitleBarWindow : Window
         AddHomeTab();
 
         // Navigate to HomePage and start update checker
-        HomeFrame.Navigate(typeof(HomePage));
+        RootGrid.Loaded += RootGrid_Loaded;
         UpdateBannerControl.Attach();
         
         // Listen for theme changes to update title bar
@@ -93,6 +102,33 @@ public sealed partial class TitleBarWindow : Window
         {
             root.ActualThemeChanged += (s, e) => ConfigureTitleBarTheme();
         }
+    }
+
+    private void RootGrid_Loaded(object sender, RoutedEventArgs e)
+    {
+        RootGrid.Loaded -= RootGrid_Loaded;
+        QueueHomePageInitialization();
+    }
+
+    private void QueueHomePageInitialization()
+    {
+        if (_homePageInitialized || _homePageInitializationQueued)
+            return;
+
+        _homePageInitializationQueued = true;
+        DispatcherQueue.TryEnqueue(
+            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            () =>
+            {
+                _homePageInitializationQueued = false;
+                if (_homePageInitialized || !ReferenceEquals(Tabs.SelectedItem, _homeTab))
+                    return;
+
+                _homePageInitialized = true;
+                QuickView.Infrastructure.Diagnostics.DiagnosticsService.Milestone("HomePageInitializationStarted");
+                HomeFrame.Navigate(typeof(HomePage));
+                QuickView.Infrastructure.Diagnostics.DiagnosticsService.Milestone("HomePageInitialized");
+            });
     }
 
     // ── Home tab ──────────────────────────────────────────────────────────────
@@ -291,6 +327,8 @@ public sealed partial class TitleBarWindow : Window
         var selectionVersion = ++_selectionChangeVersion;
 
         bool isHome = ReferenceEquals(selected, _homeTab);
+        if (isHome)
+            QueueHomePageInitialization();
 
         // Update window title to document name (safely - check if window is still valid)
         try
@@ -645,6 +683,11 @@ public sealed partial class TitleBarWindow : Window
     private const uint LR_LOADFROMFILE = 0x00000010;
     private const int  IMAGE_ICON      = 1;
     private const int  WM_SETICON      = 0x0080;
+    private const int  SW_RESTORE      = 9;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern IntPtr LoadImage(IntPtr hInst, string lpszName,
@@ -860,58 +903,93 @@ public sealed partial class TitleBarWindow : Window
     /// </summary>
     public void RestoreSession()
     {
-        try
+        var dispatcherQueue = DispatcherQueue;
+        QuickView.Infrastructure.Diagnostics.DiagnosticsService.Milestone("SessionRestoreStarted");
+
+        _ = Task.Run(() =>
         {
-            var state = Services.Storage.SessionStateStore.LoadSessionState();
-            if (state == null || state.OpenFiles.Count == 0)
+            try
             {
-                Logger.Log("[Session] No previous session to restore");
-                return;
-            }
+                var state = Services.Storage.SessionStateStore.LoadSessionState();
+                var documents = new List<DocumentItem>();
+                int selectedDocumentIndex = -1;
 
-            Logger.Log($"[Session] Restoring {state.OpenFiles.Count} tabs");
-
-            TabViewItem? tabToSelect = null;
-            int currentIndex = 0;
-
-            foreach (var filePath in state.OpenFiles)
-            {
-                if (!File.Exists(filePath))
+                if (state != null)
                 {
-                    Logger.Log($"[Session] Skipping missing file: {filePath}");
-                    continue;
-                }
-
-                try
-                {
-                    var fi = new FileInfo(filePath);
-                    var doc = DocumentItem.FromFileInfo(fi);
-                    OpenDocument(doc);
-
-                    // Track which tab to select
-                    if (currentIndex == state.SelectedTabIndex && _tabData.Count > 0)
+                    for (int i = 0; i < state.OpenFiles.Count; i++)
                     {
-                        tabToSelect = _tabData.Keys.Last();
+                        var filePath = state.OpenFiles[i];
+                        try
+                        {
+                            if (!File.Exists(filePath))
+                            {
+                                Logger.Log($"[Session] Skipping missing file: {filePath}");
+                                continue;
+                            }
+
+                            var document = DocumentItem.FromFileInfo(new FileInfo(filePath));
+                            if (documents.Count == state.SelectedTabIndex)
+                                selectedDocumentIndex = documents.Count;
+                            documents.Add(document);
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Error($"Failed to prepare restored tab for: {filePath}", ex);
+                        }
                     }
-
-                    currentIndex++;
                 }
-                catch (Exception ex)
+
+                if (!dispatcherQueue.TryEnqueue(
+                    Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+                    () =>
+                    {
+                        try
+                        {
+                            if (documents.Count == 0)
+                            {
+                                Logger.Log("[Session] No previous session to restore");
+                                return;
+                            }
+
+                            Logger.Log($"[Session] Restoring {documents.Count} tabs");
+                            DocumentItem? selectedDocument = null;
+                            foreach (var (document, index) in documents.Select((document, index) => (document, index)))
+                            {
+                                try
+                                {
+                                    OpenDocument(document);
+                                    if (index == selectedDocumentIndex)
+                                        selectedDocument = document;
+                                }
+                                catch (Exception ex)
+                                {
+                                    Logger.Error($"Failed to restore tab for: {document.FilePath}", ex);
+                                }
+                            }
+
+                            if (selectedDocument != null)
+                            {
+                                var selectedTab = _tabData
+                                    .FirstOrDefault(entry => ReferenceEquals(entry.Value.doc, selectedDocument)).Key;
+                                if (selectedTab != null)
+                                    Tabs.SelectedItem = selectedTab;
+                            }
+                        }
+                        finally
+                        {
+                            QuickView.Infrastructure.Diagnostics.DiagnosticsService.Milestone("SessionRestoreCompleted");
+                        }
+                    }))
                 {
-                    Logger.Error($"Failed to restore tab for: {filePath}", ex);
+                    Logger.Warn("[Session] UI dispatcher unavailable; restored session was not applied");
                 }
             }
-
-            // Select the previously selected tab
-            if (tabToSelect != null)
+            catch (Exception ex)
             {
-                Tabs.SelectedItem = tabToSelect;
+                Logger.Error("RestoreSession failed", ex);
+                QuickView.Infrastructure.Diagnostics.DiagnosticsService.Milestone("SessionRestoreFailed");
             }
-        }
-        catch (Exception ex)
-        {
-            Logger.Error("RestoreSession failed", ex);
-        }
+        });
     }
 
 }

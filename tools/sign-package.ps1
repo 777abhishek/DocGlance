@@ -1,18 +1,20 @@
 # ─────────────────────────────────────────────────────────────────────────────
 #  QuickView one-time signing setup + sign script
 #
-#  Creates a self-signed code-signing certificate (CN=QuickView), exports
-#  QuickView.pfx (private, gitignored) and QuickView.cer (public, share this),
-#  and signs the built MSIX.
+#  Creates a self-signed code-signing certificate (CN=777abhishek), exports
+#  QuickView.pfx (private, gitignored) and QuickView.cer (public), and signs
+#  the built MSIX. Self-signed certs are for local testing, not public trust.
 #
 #  Usage:
 #    .\tools\sign-package.ps1                     # create cert (if missing) + sign
 #    .\tools\sign-package.ps1 -RecreateCert       # force a new certificate
-#    .\tools\sign-package.ps1 -Trust              # also import CER into TrustedPeople (needs admin)
+#    .\tools\sign-package.ps1 -CertificateOnly    # create/export without requiring an MSIX
+#    .\tools\sign-package.ps1 -Trust              # trust on this test PC (needs admin)
 #    .\tools\sign-package.ps1 -Path <msix path>   # sign a specific package
 # ─────────────────────────────────────────────────────────────────────────────
 param(
     [switch]$RecreateCert,
+    [switch]$CertificateOnly,
     [switch]$Trust,
     [string]$Path
 )
@@ -22,7 +24,7 @@ $Root      = Split-Path -Parent $PSScriptRoot
 $PfxPath   = "$Root\QuickView.pfx"
 $CerPath   = "$Root\QuickView.cer"
 $PfxPassword = "QuickView2026!"   # keep in sync with QuickView.csproj
-$Subject     = "CN=QuickView"
+$Subject     = "CN=777abhishek"
 
 function Write-OK([string]$m)   { Write-Host "  OK  $m" -ForegroundColor Green }
 function Write-Fail([string]$m) { Write-Host "  !!  $m" -ForegroundColor Red }
@@ -51,9 +53,33 @@ if ($RecreateCert -or -not $cert) {
 $pw = ConvertTo-SecureString -String $PfxPassword -Force -AsPlainText
 Export-PfxCertificate -Cert $cert -FilePath $PfxPath -Password $pw | Out-Null
 Export-Certificate  -Cert $cert -FilePath $CerPath | Out-Null
-Write-OK "Exported $PfxPath (keep private) and $CerPath (share this)"
+Write-OK "Exported $PfxPath (keep private) and $CerPath (public certificate)"
 
-# ── 3. Locate the MSIX ────────────────────────────────────────────────────────
+# ── 3. Trust the certificate on this test machine ─────────────────────────────
+if ($Trust) {
+    foreach ($store in @("Root", "TrustedPeople", "TrustedPublisher")) {
+        $storePath = "Cert:\LocalMachine\$store"
+        $already = Get-ChildItem $storePath -ErrorAction SilentlyContinue |
+            Where-Object Thumbprint -eq $cert.Thumbprint
+        if (-not $already) {
+            Import-Certificate -FilePath $CerPath -CertStoreLocation $storePath | Out-Null
+            Write-OK "Imported CER into LocalMachine\$store"
+        } else {
+            Write-OK "Certificate already trusted in LocalMachine\$store"
+        }
+    }
+    Write-Info "Local test machine is configured for this self-signed certificate."
+    Write-Info "Do not distribute trust in this certificate to machines you do not control."
+} elseif ($CertificateOnly) {
+    Write-Info "For local testing, trust this certificate with .\tools\sign-package.ps1 -CertificateOnly -Trust (run as Administrator)."
+}
+
+if ($CertificateOnly) {
+    Write-OK "Certificate setup complete; skipped MSIX signing."
+    exit 0
+}
+
+# ── 4. Locate the MSIX ────────────────────────────────────────────────────────
 if (-not $Path) {
     $candidates = @(
         "$Root\installer\output",
@@ -70,7 +96,7 @@ if (-not $Path) {
 }
 Write-Info "Package: $Path"
 
-# ── 4. Sign with signtool ─────────────────────────────────────────────────────
+# ── 5. Sign with signtool ─────────────────────────────────────────────────────
 $kits = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Directory -ErrorAction SilentlyContinue |
     Where-Object { $_.Name -match '^\d+\.' } | Sort-Object Name -Descending
 if (-not $kits) { Write-Fail "Windows SDK signtool not found. Install the Windows SDK."; exit 1 }
@@ -79,7 +105,8 @@ $signed = $false
 foreach ($kit in $kits) {
     $signtool = Join-Path $kit.FullName "x64\signtool.exe"
     if (-not (Test-Path $signtool)) { continue }
-    & $signtool sign /fd SHA256 /f $PfxPath /p $PfxPassword $Path
+    & $signtool sign /fd SHA256 /f $PfxPath /p $PfxPassword `
+        /tr http://timestamp.digicert.com /td SHA256 $Path
     if ($LASTEXITCODE -eq 0) {
         Write-OK "Signed with $signtool"
         & $signtool verify /pa /v $Path
@@ -89,18 +116,8 @@ foreach ($kit in $kits) {
 }
 if (-not $signed) { Write-Fail "Signing failed"; exit 1 }
 
-# ── 5. Trust the certificate ──────────────────────────────────────────────────
-if ($Trust) {
-    $already = Get-ChildItem "Cert:\LocalMachine\TrustedPeople" -ErrorAction SilentlyContinue |
-        Where-Object Thumbprint -eq $cert.Thumbprint
-    if ($already) {
-        Write-OK "Certificate already trusted"
-    } else {
-        Import-Certificate -FilePath $CerPath -CertStoreLocation "Cert:\LocalMachine\TrustedPeople" | Out-Null
-        Write-OK "Imported CER into LocalMachine\TrustedPeople"
-    }
-    Write-Info "You can now double-click the .msix to install."
-} else {
-    Write-Info "Not trusting yet. Run as Administrator:"
-    Write-Info "  Import-Certificate -FilePath `"$CerPath`" -CertStoreLocation 'Cert:\LocalMachine\TrustedPeople'"
+if (-not $Trust) {
+    Write-Info "Certificate is not trusted on this machine. For local testing, run as Administrator:"
+    Write-Info "  .\tools\sign-package.ps1 -CertificateOnly -Trust"
+    Write-Info "This self-signed certificate will still be untrusted on public users' PCs."
 }

@@ -3,13 +3,14 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Composition.SystemBackdrops;
 using QuickView.Services.Registration;
+using QuickView.Services.Updates;
 using QuickView.Services.Storage;
 using QuickView.Infrastructure.Configuration;
 using QuickView.Infrastructure.Logging;
 using QuickView.Core.Enums;
 using System;
 using System.Linq;
-using System.Reflection;
+
 using System.Threading.Tasks;
 
 namespace QuickView.Features.Settings;
@@ -29,13 +30,7 @@ public sealed partial class SettingsPage : Page
 
     private void SettingsPage_Loaded(object sender, RoutedEventArgs e)
     {
-        // Set version from assembly
-        var version = Assembly.GetExecutingAssembly().GetName().Version;
-        if (version != null)
-        {
-            // Format as YYYY.MM.DD
-            VersionText.Text = $"Version {version.Major}.{version.Minor:D2}.{version.Build:D2}";
-        }
+        VersionText.Text = $"Version {UpdateService.GetDisplayVersion()}";
 
         // Populate supported types list
         SupportedTypesText.Text = string.Join("  ",

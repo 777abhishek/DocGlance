@@ -2,7 +2,7 @@
 #  QuickView — Package build script
 #
 #  Produces BOTH distribution formats:
-#    1. MSIX package:   installer\output\QuickView_1.0.0.0_x64.msix (for Store)
+#    1. MSIX package:   installer\output\QuickView_14.10.26.0_x64.msix (for Store)
 #    2. EXE installer:  installer\output\QuickView-Setup-x64.exe (for GitHub)
 #
 #  Usage:
@@ -20,7 +20,7 @@ param(
     [switch]$SkipPublish,
     [switch]$MsixOnly,
     [switch]$InstallerOnly,
-    [string]$Version = "1.0.0.0"
+    [string]$Version = "14.10.26.0"
 )
 
 Set-StrictMode -Version Latest
@@ -41,6 +41,25 @@ function Write-Step([string]$msg) { Write-Host "`n  $msg" -ForegroundColor Cyan 
 function Write-OK  ([string]$msg) { Write-Host "  ✓  $msg" -ForegroundColor Green }
 function Write-Fail([string]$msg) { Write-Host "  ✗  $msg" -ForegroundColor Red; exit 1 }
 function Write-Info([string]$msg) { Write-Host "     $msg" -ForegroundColor Gray }
+
+function Get-QuickViewSigningCertificate {
+    Get-ChildItem "Cert:\CurrentUser\My" |
+        Where-Object {
+            $_.Subject -eq "CN=777abhishek" -and
+            $_.HasPrivateKey -and
+            $_.NotAfter -gt (Get-Date) -and
+            $_.EnhancedKeyUsageList.ObjectId.Value -contains "1.3.6.1.5.5.7.3.3"
+        } |
+        Sort-Object NotAfter -Descending |
+        Select-Object -First 1
+}
+
+function Get-WindowsSdkSignTool {
+    $sdkBin = "${env:ProgramFiles(x86)}\Windows Kits\10\bin"
+    Get-ChildItem -Path "$sdkBin\*\x64\signtool.exe" -ErrorAction SilentlyContinue |
+        Sort-Object FullName -Descending |
+        Select-Object -First 1 -ExpandProperty FullName
+}
 
 Write-Host ""
 Write-Host "  ╔═══════════════════════════════════════════════════════════╗" -ForegroundColor Magenta
@@ -69,6 +88,16 @@ Write-OK "Native libraries built and copied to the .NET output locations"
 
 # ── 1. Publish (for unpackaged EXE installer) ─────────────────────────────────
 if ($InstallerOnly -or (-not $MsixOnly)) {
+    $signingCertificate = Get-QuickViewSigningCertificate
+    if (-not $signingCertificate) {
+        Write-Fail "No valid CN=777abhishek code-signing certificate with a private key found in CurrentUser\My. Run tools\sign-package.ps1 -CertificateOnly first."
+    }
+
+    $signtool = Get-WindowsSdkSignTool
+    if (-not $signtool) {
+        Write-Fail "Windows SDK signtool.exe not found. Install the Windows SDK."
+    }
+
     if (-not $SkipPublish) {
         Write-Step "Publishing QuickView for unpackaged EXE (Release, x64)…"
 
@@ -117,6 +146,17 @@ if ($InstallerOnly -or (-not $MsixOnly)) {
         if ($LASTEXITCODE -eq 0) { Write-OK "Icon patched" }
         else { Write-Info "rcedit warning (non-fatal)" }
     }
+
+    if (-not (Test-Path $exePath)) {
+        Write-Fail "Published app executable not found: $exePath"
+    }
+
+    Write-Step "Signing QuickView.exe…"
+    & $signtool sign /sha1 $signingCertificate.Thumbprint /fd SHA256 `
+        /tr http://timestamp.digicert.com /td SHA256 $exePath
+    if ($LASTEXITCODE -ne 0) { Write-Fail "Signing QuickView.exe failed (exit $LASTEXITCODE)" }
+    Write-OK "Signed QuickView.exe as $($signingCertificate.Subject)"
+    Write-Info "This is a self-signed test certificate; other PCs must explicitly trust it."
 }
 
 # ── 3. Build MSIX package ─────────────────────────────────────────────────────
@@ -249,9 +289,16 @@ if ($InstallerOnly -or (-not $MsixOnly)) {
 
     New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 
-    # Inject version into .iss at build time
+    # Inno Setup signs both Setup and the generated uninstaller with the same
+    # certificate used for the published app executable.
+    $signToolCommand = '$q' + $signtool + '$q sign /sha1 ' +
+        $signingCertificate.Thumbprint +
+        ' /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $f'
+
+    # Inject version and the SDK signing command at compile time.
     & $iscc `
         "/DAppVersion=$Version" `
+        "/SQuickViewSign=$signToolCommand" `
         $IssFile
 
     if ($LASTEXITCODE -ne 0) { Write-Fail "iscc failed (exit $LASTEXITCODE)" }

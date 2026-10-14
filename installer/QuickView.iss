@@ -5,14 +5,13 @@
 ;  Self-contained installer: all .NET runtime DLLs are bundled.
 ;  Windows App SDK 2.4 is downloaded and installed on demand if missing.
 ;
-;  To compile:
-;    iscc installer\QuickView.iss
-;  Or use build-installer.ps1 which does publish + compile in one step.
+;  Compile through build-installer.ps1 so Inno Setup receives the local
+;  Windows SDK signing command for the app, setup, and uninstaller.
 ; ─────────────────────────────────────────────────────────────────────────────
 
 #define AppName      "QuickView"
-#define AppVersion   "2026.09.28"
-#define AppPublisher "QuickView Contributors"
+#define AppVersion   "14.10.26"
+#define AppPublisher "777abhishek"
 #define AppURL       "https://github.com/777abhishek/QuickView"
 #define AppExeName   "QuickView.exe"
 #define PublishDir   "..\publish"
@@ -48,6 +47,10 @@ WizardStyle=classic
 ; Dual-mode install: admin or current user (casual users install without UAC)
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog commandline
+; Sign the installer and generated uninstaller. build-installer.ps1 supplies
+; QuickViewSign from the Windows SDK and the local signing certificate.
+SignTool=QuickViewSign
+SignedUninstaller=yes
 ; Uninstall
 UninstallDisplayIcon={app}\{#AppExeName}
 UninstallDisplayName={#AppName}
@@ -56,7 +59,7 @@ CloseApplications=yes
 ; Create uninstall entry in Add/Remove Programs
 CreateUninstallRegKey=yes
 ; Version info embedded into the installer EXE (visible in Explorer → Properties)
-VersionInfoVersion=2026.09.28.0
+VersionInfoVersion=14.10.26.0
 VersionInfoDescription={#AppName} Setup
 VersionInfoProductName={#AppName}
 VersionInfoCompany={#AppPublisher}

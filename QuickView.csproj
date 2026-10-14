@@ -19,7 +19,7 @@
          Signed by thumbprint from the current user's cert store: MSBuild cannot import
          CNG-keyed PFX files (APPX0105). Recreate/re-export with tools\sign-package.ps1. -->
     <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
-    <PackageCertificateThumbprint>E5CF57036905C5B943DA229D4F0D5A28EC91E84C</PackageCertificateThumbprint>
+    <PackageCertificateThumbprint>959E3537149C890544FEC5E729DD9A0DC961C44A</PackageCertificateThumbprint>
 
     <!-- Define PACKAGED symbol so code can branch at compile time between
          packaged (Store) and unpackaged (direct EXE) behaviors. -->
@@ -59,12 +59,12 @@
 
     <!-- Version / file info -->
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.0.0</FileVersion>
-    <InformationalVersion>2026.09.28</InformationalVersion>
-    <Company>QuickView Contributors</Company>
+    <FileVersion>14.10.26.0</FileVersion>
+    <InformationalVersion>14.10.26</InformationalVersion>
+    <Company>777abhishek</Company>
     <Product>QuickView</Product>
     <Description>Fast universal file viewer for Windows</Description>
-    <Copyright>Copyright © 2026 QuickView Contributors</Copyright>
+    <Copyright>Copyright © 2026 777abhishek</Copyright>
   </PropertyGroup>
 
   <ItemGroup>
