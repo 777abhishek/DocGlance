@@ -91,6 +91,12 @@ internal static class PdfCraftNative
         IntPtr contents, nuint contentsLen);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern PcPdfBuffer pc_get_document_outline(IntPtr doc);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern PcPdfBuffer pc_get_text_annotations(IntPtr doc);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     internal static extern uint pc_count_removable_annotations(
         IntPtr doc, uint pageIndex, IntPtr rects, nuint rectsLen);
 

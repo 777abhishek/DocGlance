@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml.Media.Imaging;
 using DocGlance.Rendering;
 using System;
 using System.Collections.Generic;
+using System.IO.Compression;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -10,6 +11,8 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Globalization;
+using System.Xml.Linq;
+using DocGlance.Core.Models;
 
 namespace DocGlance.Rendering.Document;
 
@@ -19,6 +22,9 @@ namespace DocGlance.Rendering.Document;
 /// </summary>
 public sealed class DocxDocument : IDisposable
 {
+    private static readonly XNamespace WordNamespace =
+        "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+
     private WordCraftNative.WcDocumentHandle _handle;
     private readonly SemaphoreSlim _renderLock = new(1, 1);
     private readonly object _nativeGate = new();
@@ -73,6 +79,111 @@ public sealed class DocxDocument : IDisposable
         }, ct);
 
         return handle.IsValid ? new DocxDocument(handle) : null;
+    }
+
+    public static IReadOnlyList<OutlineItem> ReadOutline(string filePath)
+    {
+        using var archive = ZipFile.OpenRead(filePath);
+        var documentEntry = archive.GetEntry("word/document.xml");
+        if (documentEntry == null)
+            return Array.Empty<OutlineItem>();
+
+        var styles = new Dictionary<string, XElement>(StringComparer.OrdinalIgnoreCase);
+        var stylesEntry = archive.GetEntry("word/styles.xml");
+        if (stylesEntry != null)
+        {
+            using var stylesStream = stylesEntry.Open();
+            var styleDocument = XDocument.Load(stylesStream);
+            foreach (var style in styleDocument.Descendants(WordNamespace + "style"))
+            {
+                string? id = (string?)style.Attribute(WordNamespace + "styleId");
+                if (!string.IsNullOrEmpty(id))
+                    styles[id] = style;
+            }
+        }
+
+        int? GetStyleLevel(string? styleId, HashSet<string>? visited = null)
+        {
+            if (string.IsNullOrEmpty(styleId))
+                return null;
+
+            string normalized = styleId.Replace(" ", string.Empty, StringComparison.Ordinal);
+            int? conventionalLevel =
+                normalized.StartsWith("Heading", StringComparison.OrdinalIgnoreCase) &&
+                int.TryParse(normalized.AsSpan("Heading".Length), out int heading) &&
+                heading is >= 1 and <= 9
+                    ? heading - 1
+                    : null;
+            if (!styles.TryGetValue(styleId, out var style))
+                return conventionalLevel;
+            visited ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (!visited.Add(styleId))
+                return null;
+
+            var outlineLevel = style.Element(WordNamespace + "pPr")?
+                .Element(WordNamespace + "outlineLvl")?
+                .Attribute(WordNamespace + "val");
+            if (outlineLevel != null &&
+                int.TryParse(outlineLevel.Value, out int level) &&
+                level is >= 0 and <= 8)
+                return level;
+
+            string? basedOn = (string?)style.Element(WordNamespace + "basedOn")?
+                .Attribute(WordNamespace + "val");
+            int? inherited = GetStyleLevel(basedOn, visited);
+            if (inherited.HasValue)
+                return inherited;
+            return conventionalLevel;
+        }
+
+        var roots = new List<OutlineItem>();
+        var ancestors = new List<OutlineItem>();
+        using var documentStream = documentEntry.Open();
+        var doc = XDocument.Load(documentStream);
+        foreach (var paragraph in doc.Descendants(WordNamespace + "p"))
+        {
+            var paragraphProperties = paragraph.Element(WordNamespace + "pPr");
+            var directLevel = paragraphProperties?
+                .Element(WordNamespace + "outlineLvl")?
+                .Attribute(WordNamespace + "val");
+            int? level = directLevel != null &&
+                int.TryParse(directLevel.Value, out int direct) &&
+                direct is >= 0 and <= 8
+                    ? direct
+                    : null;
+
+            string? styleId = (string?)paragraphProperties?
+                .Element(WordNamespace + "pStyle")?
+                .Attribute(WordNamespace + "val");
+            level ??= GetStyleLevel(styleId);
+            if (level == null)
+                continue;
+
+            var text = new StringBuilder();
+            foreach (var element in paragraph.Descendants())
+            {
+                if (element.Name == WordNamespace + "t")
+                    text.Append(element.Value);
+                else if (element.Name == WordNamespace + "tab")
+                    text.Append('\t');
+                else if (element.Name == WordNamespace + "br" || element.Name == WordNamespace + "cr")
+                    text.AppendLine();
+            }
+            string title = string.Join(" ", text.ToString()
+                .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+            if (string.IsNullOrWhiteSpace(title))
+                continue;
+
+            var item = new OutlineItem { Title = title, Level = level.Value };
+            while (ancestors.Count > item.Level)
+                ancestors.RemoveAt(ancestors.Count - 1);
+            if (ancestors.Count == 0)
+                roots.Add(item);
+            else
+                ancestors[^1].Children.Add(item);
+            ancestors.Add(item);
+        }
+        return roots;
     }
 
     /// <summary>

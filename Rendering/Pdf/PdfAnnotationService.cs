@@ -1,6 +1,7 @@
 using DocGlance.Core.Models;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -16,10 +17,48 @@ public enum PdfTextAnnotationKind : uint
     Note,
 }
 
+public sealed record PdfTextAnnotation(
+    int PageIndex,
+    PdfTextAnnotationKind Kind,
+    string Contents,
+    IReadOnlyList<PdfSearchRect> Rectangles);
+
 /// <summary>Creates and removes persistent PDF annotations through PdfCraft.</summary>
 public static class PdfAnnotationService
 {
     private const int MaximumContentsBytes = 1_048_576;
+
+    public static Task<IReadOnlyList<OutlineItem>> GetOutlineAsync(
+        PdfDocumentState state,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        if (state.ManagedPdfDocument != null)
+            return Task.FromResult<IReadOnlyList<OutlineItem>>(Array.Empty<OutlineItem>());
+
+        return Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            byte[] bytes = GetDocumentBuffer(state, PdfCraftNative.pc_get_document_outline);
+            return ParseOutline(bytes);
+        }, cancellationToken);
+    }
+
+    public static Task<IReadOnlyList<PdfTextAnnotation>> GetAnnotationsAsync(
+        PdfDocumentState state,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        if (state.ManagedPdfDocument != null)
+            return Task.FromResult<IReadOnlyList<PdfTextAnnotation>>(Array.Empty<PdfTextAnnotation>());
+
+        return Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            byte[] bytes = GetDocumentBuffer(state, PdfCraftNative.pc_get_text_annotations);
+            return ParseAnnotations(bytes, state.PageCount);
+        }, cancellationToken);
+    }
 
     public static Task<byte[]> AddAsync(
         PdfDocumentState state,
@@ -205,5 +244,114 @@ public static class PdfAnnotationService
         {
             PdfCraftNative.pc_free_pdf_buffer(buffer);
         }
+    }
+
+    private static byte[] GetDocumentBuffer(
+        PdfDocumentState state,
+        Func<IntPtr, PdfCraftNative.PcPdfBuffer> nativeCall)
+    {
+        var (handle, lease) = state.BeginNativeCall();
+        if (lease == null)
+            throw new ObjectDisposedException(nameof(PdfDocumentState));
+
+        try
+        {
+            return CopyAndFree(nativeCall(handle), "PdfCraft could not read document annotations.");
+        }
+        finally
+        {
+            lease.Dispose();
+        }
+    }
+
+    private static IReadOnlyList<OutlineItem> ParseOutline(byte[] bytes)
+    {
+        if (bytes.Length == 0)
+            return Array.Empty<OutlineItem>();
+        using var reader = new BinaryReader(new MemoryStream(bytes), Encoding.UTF8);
+        uint count = reader.ReadUInt32();
+        if (count > 100_000)
+            throw new InvalidDataException("PDF outline contains too many entries.");
+
+        var roots = new List<OutlineItem>();
+        var parents = new List<OutlineItem>();
+        for (uint i = 0; i < count; i++)
+        {
+            uint level = reader.ReadUInt32();
+            uint page = reader.ReadUInt32();
+            uint titleLength = reader.ReadUInt32();
+            if (level > 64 || page > int.MaxValue || titleLength > 1_048_576)
+                throw new InvalidDataException("PDF outline entry exceeds the supported size.");
+            byte[] titleBytes = reader.ReadBytes((int)titleLength);
+            if (titleBytes.Length != titleLength)
+                throw new EndOfStreamException("PDF outline entry is truncated.");
+            var item = new OutlineItem
+            {
+                Level = (int)level,
+                Page = (int)page,
+                Title = Encoding.UTF8.GetString(titleBytes),
+            };
+            while (parents.Count > item.Level)
+                parents.RemoveAt(parents.Count - 1);
+            if (parents.Count == 0)
+                roots.Add(item);
+            else
+                parents[^1].Children.Add(item);
+            parents.Add(item);
+        }
+
+        if (reader.BaseStream.Position != reader.BaseStream.Length)
+            throw new InvalidDataException("PDF outline contains trailing data.");
+        return roots;
+    }
+
+    private static IReadOnlyList<PdfTextAnnotation> ParseAnnotations(byte[] bytes, int pageCount)
+    {
+        if (bytes.Length == 0)
+            return Array.Empty<PdfTextAnnotation>();
+        using var reader = new BinaryReader(new MemoryStream(bytes), Encoding.UTF8);
+        uint count = reader.ReadUInt32();
+        if (count > 65_536)
+            throw new InvalidDataException("PDF contains too many markup annotations.");
+
+        var annotations = new List<PdfTextAnnotation>((int)count);
+        for (uint i = 0; i < count; i++)
+        {
+            uint page = reader.ReadUInt32();
+            uint kind = reader.ReadUInt32();
+            uint contentsLength = reader.ReadUInt32();
+            if (page >= pageCount || kind > (uint)PdfTextAnnotationKind.Note ||
+                contentsLength > MaximumContentsBytes)
+                throw new InvalidDataException("PDF annotation entry is invalid.");
+            byte[] contents = reader.ReadBytes((int)contentsLength);
+            if (contents.Length != contentsLength)
+                throw new EndOfStreamException("PDF annotation contents are truncated.");
+
+            uint rectangleCount = reader.ReadUInt32();
+            if (rectangleCount > 4096)
+                throw new InvalidDataException("PDF annotation has too many geometry regions.");
+            var rectangles = new PdfSearchRect[(int)rectangleCount];
+            for (int rect = 0; rect < rectangles.Length; rect++)
+            {
+                double x = reader.ReadSingle();
+                double y = reader.ReadSingle();
+                double width = reader.ReadSingle();
+                double height = reader.ReadSingle();
+                if (!double.IsFinite(x) || !double.IsFinite(y) ||
+                    !double.IsFinite(width) || !double.IsFinite(height) ||
+                    width <= 0 || height <= 0)
+                    throw new InvalidDataException("PDF annotation geometry is invalid.");
+                rectangles[rect] = new PdfSearchRect(x, y, width, height);
+            }
+            annotations.Add(new PdfTextAnnotation(
+                (int)page,
+                (PdfTextAnnotationKind)kind,
+                Encoding.UTF8.GetString(contents),
+                rectangles));
+        }
+
+        if (reader.BaseStream.Position != reader.BaseStream.Length)
+            throw new InvalidDataException("PDF annotation data contains trailing bytes.");
+        return annotations;
     }
 }

@@ -12,6 +12,7 @@ pdfcraft-cos = { git = "https://github.com/storytold/pdfcraft", tag = "v0.7.1" }
 pdfcraft-render = { git = "https://github.com/storytold/pdfcraft", tag = "v0.7.1" }
 pdfcraft-organize = { git = "https://github.com/storytold/pdfcraft", tag = "v0.7.1" }
 png = "0.18"
+lopdf = { path = "vendor/lopdf" }
 
 [patch.crates-io]
 hayro = { path = "vendor/hayro" }

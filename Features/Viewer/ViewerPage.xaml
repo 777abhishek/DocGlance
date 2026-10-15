@@ -247,9 +247,38 @@
                     </ListView.ItemContainerStyle>
                 </ListView>
 
+                <TextBlock x:Name="NoNotesLabel" Grid.Row="0"
+                    Text="No notes in this document" Visibility="Collapsed"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+
+                <ListView x:Name="NotesList" Grid.Row="0"
+                    Visibility="Collapsed"
+                    SelectionMode="None"
+                    IsItemClickEnabled="True"
+                    ItemClick="NotesList_ItemClick"
+                    Padding="2,4" Background="Transparent">
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Padding="6,5" Spacing="3">
+                                <TextBlock Text="{Binding PageDisplay}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    FontWeight="SemiBold"
+                                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                                <TextBlock Text="{Binding Contents}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    TextWrapping="Wrap"
+                                    MaxLines="4"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+
                 <!-- Tab switcher -->
                 <Grid Grid.Row="1" Padding="4,3" ColumnSpacing="2">
                     <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="*"/>
@@ -271,6 +300,12 @@
                         Click="BookmarksTab_Click"
                         ToolTipService.ToolTip="Bookmarks">
                         <FontIcon Glyph="&#xE8A4;" FontSize="14"/>
+                    </ToggleButton>
+                    <ToggleButton Grid.Column="3" x:Name="NotesTab"
+                        Style="{StaticResource SidebarTabStyle}"
+                        Click="NotesTab_Click"
+                        ToolTipService.ToolTip="Notes">
+                        <FontIcon Glyph="&#xE70B;" FontSize="14"/>
                     </ToggleButton>
                 </Grid>
             </Grid>
@@ -305,6 +340,9 @@
                             
                         <!-- Canvas for search highlight overlays -->
                         <Canvas x:Name="SearchHighlightCanvas"
+                            IsHitTestVisible="False"/>
+
+                        <Canvas x:Name="PdfAnnotationCanvas"
                             IsHitTestVisible="False"/>
 
                         <!-- Selection is independent from search highlights and never intercepts input. -->

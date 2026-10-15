@@ -1,6 +1,7 @@
 ﻿// tools/imggen/Program.cs
 // Generates:
-//   Assets/AppIcon.ico                   — multi-size icon (16,20,24,32,48,64,128,256)
+//   Assets/AppIcon.ico                   — multi-size icon (16–256 px)
+//   Assets/*.png                         — MSIX logo and target-size variants
 //   installer/assets/wizard-sidebar.bmp  — 164×314 px
 //   installer/assets/wizard-header.bmp   — 497×55  px
 
@@ -11,7 +12,7 @@ using System.Drawing.Text;
 
 // Resolve workspace root relative to this exe's location (bin/.../net8.0-windows/imggen.exe)
 var root     = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
-var srcPath  = Path.Combine(root, "Assets", "android-chrome-512x512.png");
+var srcPath  = Path.Combine(root, "Assets", "AppIconNew.png");
 var icoOut   = Path.Combine(root, "Assets", "AppIcon.ico");
 var outDir   = Path.Combine(root, "installer", "assets");
 Directory.CreateDirectory(outDir);
@@ -36,7 +37,7 @@ using var src = (Bitmap)Image.FromFile(srcPath);
 //  For sizes ≥ 256 Windows expects a compressed PNG payload inside the .ico.
 //  For sizes ≤ 128 raw 32bpp BMP (BITMAPINFOHEADER + XOR mask) works fine.
 {
-    var sizes = new[] { 16, 20, 24, 32, 48, 64, 128, 256 };
+    var sizes = new[] { 16, 20, 24, 32, 40, 48, 64, 128, 256 };
 
     // Render each size from the high-quality source
     var frames = new List<(int size, byte[] data)>();
@@ -71,7 +72,54 @@ using var src = (Bitmap)Image.FromFile(srcPath);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2.  wizard-sidebar.bmp  —  164 × 314 px
+// 2. MSIX package and shell icon variants
+// ─────────────────────────────────────────────────────────────────────────────
+{
+    var assetsDir = Path.Combine(root, "Assets");
+    var scales = new[] { 100, 125, 150, 200, 250, 300, 400 };
+
+    void SaveVariants(string baseName, int width, int height, bool badge = false)
+    {
+        foreach (int scale in scales)
+        {
+            int outputWidth = (width * scale + 50) / 100;
+            int outputHeight = (height * scale + 50) / 100;
+            using var image = RenderVariant(src, outputWidth, outputHeight, badge);
+            string scaledPath = Path.Combine(assetsDir, $"{baseName}.scale-{scale}.png");
+            image.Save(scaledPath, ImageFormat.Png);
+            if (scale == 100)
+            {
+                string basePath = Path.Combine(assetsDir, $"{baseName}.png");
+                image.Save(basePath, ImageFormat.Png);
+            }
+        }
+    }
+
+    SaveVariants("Square44x44Logo", 44, 44);
+    SaveVariants("Square71x71Logo", 71, 71);
+    SaveVariants("SmallTile", 71, 71);
+    SaveVariants("Square150x150Logo", 150, 150);
+    SaveVariants("Square310x310Logo", 310, 310);
+    SaveVariants("StoreLogo", 50, 50);
+    SaveVariants("Wide310x150Logo", 310, 150);
+    SaveVariants("SplashScreen", 620, 300);
+    SaveVariants("BadgeLogo", 24, 24, badge: true);
+
+    int[] targetSizes = { 16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 256 };
+    foreach (int size in targetSizes)
+    {
+        using var image = RenderVariant(src, size, size);
+        string baseName = $"Square44x44Logo.targetsize-{size}";
+        image.Save(Path.Combine(assetsDir, $"{baseName}.png"), ImageFormat.Png);
+        image.Save(Path.Combine(assetsDir, $"{baseName}_altform-lightunplated.png"), ImageFormat.Png);
+        image.Save(Path.Combine(assetsDir, $"{baseName}_altform-unplated.png"), ImageFormat.Png);
+    }
+
+    Console.WriteLine($"✓  MSIX logos and target-size variants regenerated from {Path.GetFileName(srcPath)}");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3.  wizard-sidebar.bmp  —  164 × 314 px
 // ─────────────────────────────────────────────────────────────────────────────
 {
     const int W = 164, H = 314;
@@ -140,7 +188,7 @@ using var src = (Bitmap)Image.FromFile(srcPath);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3.  wizard-header.bmp  —  497 × 55 px
+// 4.  wizard-header.bmp  —  497 × 55 px
 // ─────────────────────────────────────────────────────────────────────────────
 {
     const int W = 497, H = 55;
@@ -188,6 +236,44 @@ static void Setup(Graphics g)
     g.InterpolationMode  = InterpolationMode.HighQualityBicubic;
     g.TextRenderingHint  = TextRenderingHint.ClearTypeGridFit;
     g.CompositingQuality = CompositingQuality.HighQuality;
+}
+
+static Bitmap RenderVariant(Bitmap source, int width, int height, bool badge = false)
+{
+    var result = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+    using (var graphics = Graphics.FromImage(result))
+    {
+        graphics.SmoothingMode = SmoothingMode.HighQuality;
+        graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+        graphics.CompositingQuality = CompositingQuality.HighQuality;
+        graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+        graphics.Clear(Color.Transparent);
+
+        float scale = Math.Min((float)width / source.Width, (float)height / source.Height);
+        int drawWidth = Math.Max(1, (int)Math.Round(source.Width * scale));
+        int drawHeight = Math.Max(1, (int)Math.Round(source.Height * scale));
+        graphics.DrawImage(source,
+            (width - drawWidth) / 2,
+            (height - drawHeight) / 2,
+            drawWidth,
+            drawHeight);
+    }
+
+    if (!badge)
+        return result;
+
+    for (int y = 0; y < result.Height; y++)
+    {
+        for (int x = 0; x < result.Width; x++)
+        {
+            Color pixel = result.GetPixel(x, y);
+            double saturation = pixel.GetSaturation();
+            double colorOpacity = Math.Clamp((saturation - 0.15) / 0.55, 0, 1);
+            int alpha = (int)Math.Round(pixel.A * colorOpacity);
+            result.SetPixel(x, y, Color.FromArgb(alpha, 255, 255, 255));
+        }
+    }
+    return result;
 }
 
 static void DrawCentered(Graphics g, string text, string family, float pt,

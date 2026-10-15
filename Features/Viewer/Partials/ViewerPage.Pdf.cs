@@ -66,6 +66,7 @@ public sealed partial class ViewerPage
         _spreadsheetSearchGeneration++;
         ClearSpreadsheetSearch();
         ClearOfficeSelection();
+        ClearOfficeHighlights();
         _selectedText = null;
         _officeSelectionAnchor = null;
         _officeSelectionFocus = null;
@@ -91,6 +92,8 @@ public sealed partial class ViewerPage
         ThumbnailList.ItemsSource = Thumbnails;
         _outline.Clear();
         OutlineTree.RootNodes.Clear();
+        SetPdfAnnotations(Array.Empty<PdfTextAnnotation>());
+        PdfAnnotationCanvas.Children.Clear();
 
         _rotation = 0;
         _fitMode  = FitMode.None;
@@ -174,6 +177,7 @@ public sealed partial class ViewerPage
             }
 
             Infrastructure.Logging.Logger.Log($"[PDF] Document loaded: {_total} pages");
+            await LoadPdfNavigationDataAsync(_pdfState, ct);
 
             Toolbar.UpdatePageInfo(_page, _total);
             _page = 1;
@@ -524,6 +528,7 @@ public sealed partial class ViewerPage
 
             // Treat PPTX like PDF: each slide = 1 page
             _total = _pptxDocument.SlideCount;
+            await LoadPptxOutlineAsync(ct);
             _page = 1;
             Toolbar.UpdatePageInfo(_page, _total);
             ViewModel.TotalPages = _total;
@@ -1081,6 +1086,7 @@ public sealed partial class ViewerPage
 
             // Each DOCX page is a page
             _total = _docxDocument.PageCount;
+            await LoadDocxOutlineAsync(filePath, ct);
             _page = 1;
             _docxSearchResults = Array.Empty<DocGlance.Rendering.Document.DocxDocument.DocxSearchMatch>();
             _activeDocxSearchIndex = -1;

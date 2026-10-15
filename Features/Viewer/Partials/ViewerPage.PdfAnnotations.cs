@@ -4,15 +4,108 @@ using DocGlance.Rendering.Pdf;
 using DocGlance.Services.Documents;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Shapes;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
+using Windows.UI;
 
 namespace DocGlance.Features.Viewer;
 
 public sealed partial class ViewerPage
 {
+    private async Task LoadPdfNavigationDataAsync(
+        PdfDocumentState state,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        try
+        {
+            SetOutlineItems(await PdfAnnotationService.GetOutlineAsync(state, cancellationToken));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Logger.Error("[Sidebar] Could not load PDF outline", ex);
+            SetOutlineItems(Array.Empty<OutlineItem>());
+        }
+
+        try
+        {
+            var annotations = await PdfAnnotationService.GetAnnotationsAsync(state, cancellationToken);
+            if (!ReferenceEquals(_pdfState, state))
+                return;
+            SetPdfAnnotations(annotations);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Logger.Error("[PDFAnnotation] Could not load saved annotations", ex);
+            SetPdfAnnotations(Array.Empty<PdfTextAnnotation>());
+        }
+    }
+
+    private void DrawPdfAnnotationOverlays()
+    {
+        PdfAnnotationCanvas.Children.Clear();
+        if (_pdfState == null || _pdfAnnotations.Count == 0)
+            return;
+
+        const double PtToLp = 96.0 / 72.0;
+        foreach (var annotation in _pdfAnnotations)
+        {
+            if ((uint)annotation.PageIndex >= (uint)_pdfState.PageCount)
+                continue;
+            double pageTop = GetPageTopLp(annotation.PageIndex);
+            foreach (var rect in annotation.Rectangles)
+            {
+                double x = rect.X * PtToLp;
+                double y = pageTop + rect.Y * PtToLp;
+                double width = rect.Width * PtToLp;
+                double height = rect.Height * PtToLp;
+                if (width <= 0 || height <= 0)
+                    continue;
+
+                if (annotation.Kind == PdfTextAnnotationKind.Note)
+                {
+                    var noteIcon = new FontIcon
+                    {
+                        Glyph = "\uE70B",
+                        FontSize = 13,
+                        Foreground = new SolidColorBrush(Color.FromArgb(255, 180, 120, 0)),
+                    };
+                    Canvas.SetLeft(noteIcon, x);
+                    Canvas.SetTop(noteIcon, y);
+                    PdfAnnotationCanvas.Children.Add(noteIcon);
+                    continue;
+                }
+
+                double lineHeight = Math.Clamp(height * 0.09, 1.25, 2.5);
+                var mark = new Rectangle
+                {
+                    Width = width,
+                    Height = annotation.Kind == PdfTextAnnotationKind.Highlight ? height : lineHeight,
+                    IsHitTestVisible = false,
+                    Fill = annotation.Kind switch
+                    {
+                        PdfTextAnnotationKind.Highlight =>
+                            new SolidColorBrush(Color.FromArgb(85, 255, 220, 40)),
+                        PdfTextAnnotationKind.Underline =>
+                            new SolidColorBrush(Color.FromArgb(255, 0, 85, 190)),
+                        _ => new SolidColorBrush(Color.FromArgb(230, 210, 45, 45)),
+                    },
+                };
+                Canvas.SetLeft(mark, x);
+                Canvas.SetTop(mark, annotation.Kind switch
+                {
+                    PdfTextAnnotationKind.Underline => y + height - lineHeight,
+                    PdfTextAnnotationKind.Strikeout => y + (height - lineHeight) / 2,
+                    _ => y,
+                });
+                PdfAnnotationCanvas.Children.Add(mark);
+            }
+        }
+    }
+
     private IReadOnlyList<PdfSearchRect> GetPdfSelectionRects()
     {
         if (!HasPdfTextSelection ||
@@ -182,6 +275,7 @@ public sealed partial class ViewerPage
 
         _pdfState = loadResult.Document;
         _total = loadResult.PageCount;
+        await LoadPdfNavigationDataAsync(_pdfState, _cts?.Token ?? default);
         _page = Math.Clamp(_page, 1, Math.Max(1, _total));
         if (_viewportState != null)
             _viewportState.CurrentPageIndex = _page - 1;

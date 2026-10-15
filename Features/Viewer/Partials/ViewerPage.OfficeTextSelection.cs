@@ -22,6 +22,7 @@ namespace DocGlance.Features.Viewer;
 public sealed partial class ViewerPage
 {
     private readonly List<Rectangle> _selectionOverlays = new();
+    private readonly List<Rectangle> _officeHighlightOverlays = new();
     private string? _selectedText;
     private OfficeTextPosition? _officeSelectionAnchor;
     private OfficeTextPosition? _officeSelectionFocus;
@@ -396,8 +397,95 @@ public sealed partial class ViewerPage
         };
         copyItem.Click += (_, _) => CopyOfficeTextToClipboard();
         flyout.Items.Add(copyItem);
+        var highlightItem = new MenuFlyoutItem
+        {
+            Text = "Highlight",
+            Icon = new SymbolIcon(Symbol.Highlight),
+        };
+        highlightItem.Click += (_, _) => HighlightOfficeTextSelection();
+        flyout.Items.Add(highlightItem);
         flyout.ShowAt(PdfViewportCanvas, e.GetPosition(PdfViewportCanvas));
         e.Handled = true;
+    }
+
+    private void HighlightOfficeTextSelection()
+    {
+        if (_officeSelectionAnchor is not { } anchor ||
+            _officeSelectionFocus is not { } focus ||
+            CompareOfficePositions(anchor, focus) == 0)
+            return;
+
+        ClearOfficeSelection();
+        foreach (Rect rect in GetOfficeSelectionRectangles(anchor, focus))
+        {
+            var overlay = new Rectangle
+            {
+                Fill = new SolidColorBrush(Color.FromArgb(105, 255, 216, 0)),
+                Width = rect.Width,
+                Height = rect.Height,
+                IsHitTestVisible = false,
+            };
+            Canvas.SetLeft(overlay, rect.X);
+            Canvas.SetTop(overlay, rect.Y);
+            Canvas.SetZIndex(overlay, 14);
+            PdfViewportCanvas.Children.Add(overlay);
+            _officeHighlightOverlays.Add(overlay);
+        }
+    }
+
+    private IReadOnlyList<Rect> GetOfficeSelectionRectangles(
+        OfficeTextPosition anchor,
+        OfficeTextPosition focus)
+    {
+        var (start, end) = CompareOfficePositions(anchor, focus) <= 0
+            ? (anchor, focus)
+            : (focus, anchor);
+        var rectangles = new List<Rect>();
+        for (int page = start.PageIndex; page <= end.PageIndex; page++)
+        {
+            int offsetCount = _docxDocument != null
+                ? _docxDocument.GetPageTextOffsetCount(page)
+                : GetPptxTextMap(page).GlyphCount;
+            int rangeStart = page == start.PageIndex ? start.Offset : 0;
+            int rangeEnd = page == end.PageIndex ? end.Offset : offsetCount;
+            rangeStart = Math.Clamp(rangeStart, 0, offsetCount);
+            rangeEnd = Math.Clamp(rangeEnd, rangeStart, offsetCount);
+            if (rangeStart == rangeEnd)
+                continue;
+
+            if (_docxDocument != null)
+            {
+                rectangles.AddRange(_docxDocument.GetSelectionRects(page, rangeStart, rangeEnd)
+                    .Select(rect => new Rect(
+                        rect.X * 96.0 / 72.0,
+                        GetDocxPageTopLp(rect.PageIndex) + rect.Y * 96.0 / 72.0,
+                        rect.Width * 96.0 / 72.0,
+                        rect.Height * 96.0 / 72.0)));
+            }
+            else
+            {
+                rectangles.AddRange(GetPptxTextMap(page).GetSelectionRects(rangeStart, rangeEnd)
+                    .Select(rect =>
+                    {
+                        const double PtToLp = 96.0 / 72.0;
+                        var (_, heightPt) = _pptxDocument!.GetSlideSize(page);
+                        double top = 20 + page * (heightPt * PtToLp + 12);
+                        return new Rect(
+                            rect.X * PtToLp,
+                            top + rect.Y * PtToLp,
+                            rect.Width * PtToLp,
+                            rect.Height * PtToLp);
+                    }));
+            }
+        }
+        return rectangles;
+    }
+
+    private void ClearOfficeHighlights()
+    {
+        foreach (var overlay in _officeHighlightOverlays)
+            PdfViewportCanvas.Children.Remove(overlay);
+        _officeHighlightOverlays.Clear();
     }
 
     private void CopyOfficeTextToClipboard()

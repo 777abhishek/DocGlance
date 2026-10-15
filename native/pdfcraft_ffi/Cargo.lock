@@ -872,6 +872,7 @@ dependencies = [
 name = "pdfcraft_ffi"
 version = "0.1.0"
 dependencies = [
+ "lopdf",
  "pdfcraft-cos",
  "pdfcraft-organize",
  "pdfcraft-render",

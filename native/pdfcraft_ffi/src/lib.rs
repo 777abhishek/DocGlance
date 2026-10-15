@@ -9,6 +9,7 @@ use pdfcraft_cos::{write_full, write_incremental, Dict, Document, Object, PdfStr
 use pdfcraft_render::{
     inspect, PageRenderer, RenderConfig, RenderRequest, RequestKind,
 };
+use lopdf::{Document as LopdfDocument, Object as LopdfObject};
 
 pub struct PcDocument {
     bytes: Arc<Vec<u8>>,
@@ -86,6 +87,172 @@ fn copy_buffer(bytes: Vec<u8>) -> PcPdfBuffer {
     let result = PcPdfBuffer { data: bytes.as_mut_ptr(), len: bytes.len() };
     std::mem::forget(bytes);
     result
+}
+
+fn push_u32(buffer: &mut Vec<u8>, value: u32) {
+    buffer.extend_from_slice(&value.to_le_bytes());
+}
+
+fn push_f32(buffer: &mut Vec<u8>, value: f32) {
+    buffer.extend_from_slice(&value.to_le_bytes());
+}
+
+fn read_lopdf_string(value: &[u8]) -> String {
+    if value.starts_with(&[0xfe, 0xff]) {
+        let units: Vec<u16> = value[2..]
+            .chunks_exact(2)
+            .map(|pair| u16::from_be_bytes([pair[0], pair[1]]))
+            .collect();
+        String::from_utf16_lossy(&units)
+    } else if value.starts_with(&[0xff, 0xfe]) {
+        let units: Vec<u16> = value[2..]
+            .chunks_exact(2)
+            .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+            .collect();
+        String::from_utf16_lossy(&units)
+    } else {
+        String::from_utf8_lossy(value).into_owned()
+    }
+}
+
+fn extract_document_outline(bytes: &[u8]) -> Option<Vec<u8>> {
+    let document = LopdfDocument::load_mem(bytes).ok()?;
+    if document.catalog().ok()?.get(b"Outlines").is_err() {
+        return Some(0u32.to_le_bytes().to_vec());
+    }
+    let toc = match document.get_toc() {
+        Ok(toc) => toc,
+        Err(_) => return None,
+    };
+    let entries = toc.toc;
+    let mut output = Vec::new();
+    push_u32(&mut output, entries.len().try_into().ok()?);
+    for entry in entries {
+        let title = entry.title.as_bytes();
+        push_u32(&mut output, entry.level.saturating_sub(1).try_into().ok()?);
+        push_u32(&mut output, entry.page.try_into().ok()?);
+        push_u32(&mut output, title.len().try_into().ok()?);
+        output.extend_from_slice(title);
+    }
+    Some(output)
+}
+
+fn annotation_rectangles_in_view(
+    dict: &lopdf::Dictionary,
+    page: &pdfcraft_render::PageInfo,
+) -> Option<Vec<[f32; 4]>> {
+    let user_rectangles: Vec<[f32; 4]> = if let Ok(values) = dict.get(b"QuadPoints").and_then(LopdfObject::as_array) {
+        let mut rects = Vec::new();
+        for quad in values.chunks_exact(8) {
+            let points: Vec<f32> = quad
+                .iter()
+                .map(|value| value.as_float().ok())
+                .collect::<Option<_>>()?;
+            let corners = [
+                page.user_to_view(points[0], points[1]),
+                page.user_to_view(points[2], points[3]),
+                page.user_to_view(points[4], points[5]),
+                page.user_to_view(points[6], points[7]),
+            ];
+            let x0 = corners.iter().map(|point| point[0]).fold(f32::INFINITY, f32::min);
+            let y0 = corners.iter().map(|point| point[1]).fold(f32::INFINITY, f32::min);
+            let x1 = corners.iter().map(|point| point[0]).fold(f32::NEG_INFINITY, f32::max);
+            let y1 = corners.iter().map(|point| point[1]).fold(f32::NEG_INFINITY, f32::max);
+            if [x0, y0, x1, y1].iter().all(|value| value.is_finite()) && x1 > x0 && y1 > y0 {
+                rects.push([x0, y0, x1 - x0, y1 - y0]);
+            }
+        }
+        rects
+    } else {
+        let values = dict.get(b"Rect").ok()?.as_array().ok()?;
+        if values.len() != 4 {
+            return None;
+        }
+        let coords: Vec<f32> = values
+            .iter()
+            .map(|value| value.as_float().ok())
+            .collect::<Option<_>>()?;
+        let corners = [
+            page.user_to_view(coords[0], coords[1]),
+            page.user_to_view(coords[2], coords[3]),
+        ];
+        let x0 = corners[0][0].min(corners[1][0]);
+        let y0 = corners[0][1].min(corners[1][1]);
+        let x1 = corners[0][0].max(corners[1][0]);
+        let y1 = corners[0][1].max(corners[1][1]);
+        vec![[x0, y0, x1 - x0, y1 - y0]]
+    };
+    Some(user_rectangles)
+}
+
+fn extract_text_annotations(source: &PcDocument) -> Option<Vec<u8>> {
+    let document = LopdfDocument::load_mem(source.bytes.as_slice()).ok()?;
+    let pages = document.get_pages();
+    let mut entries = Vec::new();
+    for (page_number, page_id) in pages {
+        let page_index = page_number.checked_sub(1)? as usize;
+        let page_info = source.info.pages.get(page_index)?;
+        let page_dict = document.get_object(page_id).ok()?.as_dict().ok()?;
+        let annotations = match page_dict.get(b"Annots") {
+            Ok(LopdfObject::Array(items)) => items.clone(),
+            Ok(LopdfObject::Reference(reference)) => document.get_object(*reference).ok()?.as_array().ok()?.clone(),
+            Ok(_) => continue,
+            Err(_) => continue,
+        };
+        for annotation in annotations {
+            let annotation_dict = match annotation {
+                LopdfObject::Dictionary(dict) => dict,
+                LopdfObject::Reference(reference) => document.get_object(reference).ok()?.as_dict().ok()?.clone(),
+                _ => continue,
+            };
+            let Some(subtype) = annotation_dict.get(b"Subtype").ok().and_then(|value| value.as_name().ok()) else {
+                continue;
+            };
+            let kind = match subtype {
+                b"Highlight" => 0u32,
+                b"Underline" => 1u32,
+                b"StrikeOut" => 2u32,
+                b"Text" => 3u32,
+                _ => continue,
+            };
+            let content = annotation_dict
+                .get(b"Contents")
+                .and_then(LopdfObject::as_str)
+                .map(read_lopdf_string)
+                .unwrap_or_default();
+            let Some(rects) = annotation_rectangles_in_view(&annotation_dict, page_info) else {
+                continue;
+            };
+            if rects.is_empty() || rects.len() > 4096 || content.len() > 1_048_576 {
+                continue;
+            }
+            entries.push((page_index as u32, kind, content, rects));
+            if entries.len() > 65_536 ||
+                entries.iter().map(|entry| entry.3.len()).sum::<usize>() > 1_000_000
+            {
+                return None;
+            }
+        }
+    }
+
+    let mut output = Vec::new();
+    push_u32(&mut output, entries.len().try_into().ok()?);
+    for (page, kind, content, rects) in entries {
+        push_u32(&mut output, page);
+        push_u32(&mut output, kind);
+        push_u32(&mut output, content.len().try_into().ok()?);
+        output.extend_from_slice(content.as_bytes());
+        push_u32(&mut output, rects.len().try_into().ok()?);
+        for rect in rects {
+            for value in rect {
+                push_f32(&mut output, value);
+            }
+        }
+    }
+    if output.len() > 64 * 1024 * 1024 {
+        return None;
+    }
+    Some(output)
 }
 
 fn selection_rects_in_user_space(
@@ -503,6 +670,25 @@ pub extern "C" fn pc_add_text_annotation(
         }
         let contents = std::str::from_utf8(input(contents, contents_len)?).ok()?;
         copy_buffer(apply_annotation(doc, page_index as usize, rects, kind, contents)?)
+    })
+}
+
+/// Return document outline entries as a little-endian binary buffer.
+/// Each entry is (level, 1-based page, UTF-8 title length, UTF-8 title).
+#[no_mangle]
+pub extern "C" fn pc_get_document_outline(doc: *const PcDocument) -> PcPdfBuffer {
+    ffi_opt!(PcPdfBuffer::null(), {
+        let doc = unsafe { doc.as_ref() }?;
+        copy_buffer(extract_document_outline(doc.bytes.as_slice())?)
+    })
+}
+
+/// Return markup and text-note annotations as a binary buffer in page view coordinates.
+#[no_mangle]
+pub extern "C" fn pc_get_text_annotations(doc: *const PcDocument) -> PcPdfBuffer {
+    ffi_opt!(PcPdfBuffer::null(), {
+        let doc = unsafe { doc.as_ref() }?;
+        copy_buffer(extract_text_annotations(doc)?)
     })
 }
 
@@ -1065,7 +1251,7 @@ mod pdf_text_selection_tests {
             assert!(false, "could not create note annotation");
             return;
         };
-        let Some(note_doc) = Document::open(Arc::new(note)).ok() else {
+        let Some(note_doc) = Document::open(Arc::new(note.clone())).ok() else {
             assert!(false, "could not reopen PDF with note");
             return;
         };
@@ -1081,6 +1267,28 @@ mod pdf_text_selection_tests {
         let resolved_note = note_doc.resolve(&notes[0]);
         assert_eq!(resolved_note.as_dict().and_then(|dict| dict.name(b"Subtype")), Some(b"Text".as_slice()));
         assert_eq!(overlapping_annotation_count(&note_doc, note_page_ref, &[[10.0, 70.0, 40.0, 80.0]]), Some(1));
+
+        let Some(note_native) = open_document(note) else {
+            assert!(false, "could not open PDF with note in renderer");
+            return;
+        };
+        let note_source = unsafe { Box::from_raw(note_native) };
+        let Some(serialized_notes) = extract_text_annotations(&note_source) else {
+            assert!(false, "could not enumerate saved annotations");
+            return;
+        };
+        let mut note_data = std::io::Cursor::new(serialized_notes);
+        assert_eq!(u32::from_le_bytes(note_data.get_ref()[0..4].try_into().unwrap()), 1);
+        assert_eq!(u32::from_le_bytes(note_data.get_ref()[4..8].try_into().unwrap()), 0);
+        assert_eq!(u32::from_le_bytes(note_data.get_ref()[8..12].try_into().unwrap()), 3);
+        let contents_len = u32::from_le_bytes(note_data.get_ref()[12..16].try_into().unwrap()) as usize;
+        assert_eq!(&note_data.get_ref()[16..16 + contents_len], b"Review this passage");
+        note_data.set_position((16 + contents_len + 4) as u64);
+        for _ in 0..4 {
+            let mut value = [0; 4];
+            std::io::Read::read_exact(&mut note_data, &mut value).unwrap();
+            assert!(f32::from_le_bytes(value).is_finite());
+        }
 
         let Some(marked_native) = open_document(marked) else {
             assert!(false, "could not open annotated PDF in renderer");
@@ -1105,5 +1313,47 @@ mod pdf_text_selection_tests {
             return;
         };
         assert!(remaining.is_empty());
+    }
+
+    #[test]
+    fn outline_without_bookmarks_is_an_empty_serialized_list() {
+        let Some(bytes) = one_page_pdf() else {
+            assert!(false, "could not build test PDF");
+            return;
+        };
+        let outline = extract_document_outline(&bytes).expect("outline parsing should succeed");
+        assert_eq!(outline, 0u32.to_le_bytes());
+    }
+
+    #[test]
+    fn outline_serializes_title_and_page_number() {
+        let Some(bytes) = one_page_pdf() else {
+            assert!(false, "could not build test PDF");
+            return;
+        };
+        let mut document = LopdfDocument::load_mem(&bytes).expect("test PDF should parse");
+        let page = *document.get_pages().get(&1).expect("test PDF should have one page");
+        document.add_bookmark(
+            lopdf::Bookmark::new("Chapter One".into(), [0.0, 0.0, 0.0], 0, page),
+            None,
+        );
+        let outline_ref = document.build_outline().expect("outline object should be built");
+        document.catalog_mut().expect("catalog should exist").set("Outlines", outline_ref);
+        let mut outlined_pdf = Vec::new();
+        document.save_to(&mut outlined_pdf).expect("outlined PDF should save");
+
+        let serialized = extract_document_outline(&outlined_pdf).expect("outline should parse");
+        let mut cursor = std::io::Cursor::new(serialized);
+        let mut count = [0; 4];
+        std::io::Read::read_exact(&mut cursor, &mut count).unwrap();
+        assert_eq!(u32::from_le_bytes(count), 1);
+        let mut entry = [0; 12];
+        std::io::Read::read_exact(&mut cursor, &mut entry).unwrap();
+        assert_eq!(u32::from_le_bytes(entry[0..4].try_into().unwrap()), 0);
+        assert_eq!(u32::from_le_bytes(entry[4..8].try_into().unwrap()), 1);
+        assert_eq!(u32::from_le_bytes(entry[8..12].try_into().unwrap()), 11);
+        let mut title = vec![0; 11];
+        std::io::Read::read_exact(&mut cursor, &mut title).unwrap();
+        assert_eq!(title, b"Chapter One");
     }
 }

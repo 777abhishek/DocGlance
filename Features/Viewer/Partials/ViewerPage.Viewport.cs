@@ -147,6 +147,13 @@ public sealed partial class ViewerPage
             PdfSelectionCanvas.Width = maxW;
             PdfSelectionCanvas.Height = totalH;
         }
+
+        if (PdfAnnotationCanvas != null)
+        {
+            PdfAnnotationCanvas.Width = maxW;
+            PdfAnnotationCanvas.Height = totalH;
+            DrawPdfAnnotationOverlays();
+        }
     }
 
     private (double W, double H) GetRotatedPageSize(int i)
