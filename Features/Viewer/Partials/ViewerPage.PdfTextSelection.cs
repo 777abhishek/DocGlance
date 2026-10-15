@@ -33,6 +33,8 @@ public sealed partial class ViewerPage
     private int _pdfSelectionPage = -1;
     private int _pdfSelectionAnchor = -1;
     private int _pdfSelectionFocus = -1;
+    private string? _pdfSelectionTextCache;
+    private (PdfDocumentState State, int Page, int Start, int End, int Generation)? _pdfSelectionTextCacheKey;
     private bool _isPdfSelecting;
     private bool _pdfSelectionMoved;
     private bool _touchSelectionRequested;
@@ -117,6 +119,43 @@ public sealed partial class ViewerPage
         {
             _pdfTextMapsLoading.Remove(pageIndex);
         }
+    }
+
+    private async Task<string?> GetPdfTextSelectionAsync()
+    {
+        PdfDocumentState? state = _pdfState;
+        int page = _pdfSelectionPage;
+        int start = Math.Min(_pdfSelectionAnchor, _pdfSelectionFocus);
+        int end = Math.Max(_pdfSelectionAnchor, _pdfSelectionFocus) + 1;
+        if (state == null || page < 0 || start < 0 || end <= start)
+            return null;
+
+        int generation = state.Generation;
+        var key = (state, page, start, end, generation);
+        if (_pdfSelectionTextCacheKey == key)
+            return _pdfSelectionTextCache;
+
+        string text = await PdfTextService.GetTextRangeAsync(
+            state, page, start, end, _cts?.Token ?? default);
+        if (!ReferenceEquals(_pdfState, state) ||
+            state.Generation != generation ||
+            !HasPdfTextSelection ||
+            _pdfSelectionPage != page ||
+            Math.Min(_pdfSelectionAnchor, _pdfSelectionFocus) != start ||
+            Math.Max(_pdfSelectionAnchor, _pdfSelectionFocus) + 1 != end)
+            return null;
+
+        _pdfSelectionTextCache = text;
+        _pdfSelectionTextCacheKey = key;
+        return text;
+    }
+
+    private static void CopyPdfTextToClipboard(string text)
+    {
+        var package = new DataPackage();
+        package.SetText(text);
+        Clipboard.SetContent(package);
+        Clipboard.Flush();
     }
 
     private void TrimPdfTextPageMaps()
@@ -527,6 +566,8 @@ public sealed partial class ViewerPage
         _pdfSelectionPage = -1;
         _pdfSelectionAnchor = -1;
         _pdfSelectionFocus = -1;
+        _pdfSelectionTextCache = null;
+        _pdfSelectionTextCacheKey = null;
         ClearPdfTextSelectionOverlay();
     }
 
@@ -568,6 +609,28 @@ public sealed partial class ViewerPage
         if (rectangles.Count == 0)
             return;
 
+        string? selectedText;
+        try
+        {
+            selectedText = await GetPdfTextSelectionAsync();
+        }
+        catch (OperationCanceledException) when (_cts?.IsCancellationRequested == true)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("[PDFSelection] Could not extract the selected text.", ex);
+            ShowInfoBar("Could not read the selected text.", InfoBarSeverity.Error);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(selectedText) ||
+            !ReferenceEquals(_pdfState, state) ||
+            !HasPdfTextSelection ||
+            _pdfSelectionPage != page)
+            return;
+
         int deletableCount = 0;
         try
         {
@@ -595,6 +658,13 @@ public sealed partial class ViewerPage
         };
         copyItem.Click += async (_, _) => await CopyPdfTextSelectionAsync();
         menu.Items.Add(copyItem);
+        var translateItem = new MenuFlyoutItem
+        {
+            Text = "Translate selection",
+            Icon = new SymbolIcon(Symbol.Globe),
+        };
+        translateItem.Click += (_, _) => _ = ShowTranslationDialogAsync(selectedText);
+        menu.Items.Add(translateItem);
         menu.Items.Add(new MenuFlyoutSeparator());
         AddPdfAnnotationMenuItem(menu, "Highlight", PdfTextAnnotationKind.Highlight);
         AddPdfAnnotationMenuItem(menu, "Underline", PdfTextAnnotationKind.Underline);
@@ -622,25 +692,11 @@ public sealed partial class ViewerPage
 
     private async Task CopyPdfTextSelectionAsync()
     {
-        PdfDocumentState? state = _pdfState;
-        int page = _pdfSelectionPage;
-        int start = Math.Min(_pdfSelectionAnchor, _pdfSelectionFocus);
-        int end = Math.Max(_pdfSelectionAnchor, _pdfSelectionFocus) + 1;
-        if (state == null || page < 0 || start < 0 || end <= start)
-            return;
-
-        int generation = state.Generation;
         try
         {
-            string text = await PdfTextService.GetTextRangeAsync(
-                state, page, start, end, _cts?.Token ?? default);
-            if (text.Length == 0 || !ReferenceEquals(_pdfState, state) ||
-                state.Generation != generation)
-                return;
-
-            var package = new DataPackage();
-            package.SetText(text);
-            Clipboard.SetContent(package);
+            string? text = await GetPdfTextSelectionAsync();
+            if (!string.IsNullOrEmpty(text))
+                CopyPdfTextToClipboard(text);
         }
         catch (OperationCanceledException) when (_cts?.IsCancellationRequested == true)
         {

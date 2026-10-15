@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using DocGlance.Features.Viewer.Components;
 using System;
 
 namespace DocGlance.Features.Viewer;
@@ -56,6 +57,7 @@ public sealed partial class ViewerPage
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = XamlRoot,
         };
+        ViewerPopupStyle.Apply(dialog);
 
         await dialog.ShowAsync();
     }

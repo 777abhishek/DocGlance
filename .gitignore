@@ -38,3 +38,12 @@ appsettings.Development.json
 native/*_ffi/target/
 .agents
 docs
+!.agents/
+!.agents/tasks/
+.agents/tasks/*
+!.agents/tasks/offline-translator-research.md
+!.agents/tasks/offline-translator-plan.md
+!.agents/tasks/offline-translator-testing.md
+!docs/
+docs/*
+!docs/offline-translation.md

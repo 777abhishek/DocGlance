@@ -1,0 +1,20 @@
+[package]
+name = "translation_ffi"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "translation_ffi"
+crate-type = ["cdylib"]
+
+[dependencies]
+fxtranslate = { version = "0.5.0", default-features = false, features = ["fast", "download", "icu-segmenter"] }
+ruzstd = "0.7"
+sha2 = "0.10"
+whatlang = "0.16"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

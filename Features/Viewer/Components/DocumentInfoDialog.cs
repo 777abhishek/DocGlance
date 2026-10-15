@@ -66,6 +66,7 @@ internal static class DocumentInfoDialog
             XamlRoot        = root,
             MinWidth        = 500,
         };
+        ViewerPopupStyle.Apply(dialog);
 
         return dialog;
     }

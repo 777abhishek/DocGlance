@@ -4,6 +4,7 @@ using DocGlance.Services.Storage;
 using DocGlance.Core.Models;
 using DocGlance.Rendering.Document;
 using DocGlance.Rendering.Pdf;
+using DocGlance.Features.Viewer.Components;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -388,10 +389,18 @@ public sealed partial class ViewerPage
         var dialog = new ContentDialog
         {
             Title = $"Note - Page {item.PageNumber}",
-            Content = item.Contents,
+            Content = new TextBlock
+            {
+                Text = item.Contents,
+                TextWrapping = TextWrapping.Wrap,
+                IsTextSelectionEnabled = true,
+            },
             CloseButtonText = "Close",
             XamlRoot = XamlRoot,
+            MinWidth = 360,
+            MaxWidth = 480,
         };
+        ViewerPopupStyle.Apply(dialog);
         await dialog.ShowAsync();
     }
 

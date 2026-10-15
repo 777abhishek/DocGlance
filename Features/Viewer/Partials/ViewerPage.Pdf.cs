@@ -9,6 +9,7 @@ using DocGlance.Infrastructure.Logging;
 using DocGlance.Core.Models;
 using DocGlance.Rendering;
 using DocGlance.Rendering.Pdf;
+using DocGlance.Features.Viewer.Components;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -300,6 +301,7 @@ public sealed partial class ViewerPage
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = this.XamlRoot
         };
+        ViewerPopupStyle.Apply(dialog);
 
         var result = await dialog.ShowAsync();
         return result == ContentDialogResult.Primary ? passwordBox.Password : null;

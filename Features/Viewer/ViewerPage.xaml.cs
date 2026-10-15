@@ -58,6 +58,8 @@ public sealed partial class ViewerPage : Page
 
         // Initialize Office text selection (drag-to-select and copy)
         InitializeOfficeTextSelection();
+        PlainTextBlock.RightTapped += PlainTextBlock_RightTapped;
+        SpreadsheetViewerControl.TranslateRequested += text => _ = ShowTranslationDialogAsync(text);
 
         // Wire viewport-resize → reapply active fit mode + re-render (the
         // viewport may have grown — re-render pages.

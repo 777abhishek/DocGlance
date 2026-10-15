@@ -109,6 +109,10 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>gridcraft_ffi.dll</Link>
     </Content>
+    <Content Include="native\translation_ffi\target\release\translation_ffi.dll" Condition="Exists('native\translation_ffi\target\release\translation_ffi.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>translation_ffi.dll</Link>
+    </Content>
     <Content Include="native\pdfcraft_ffi\target\release\pdfcraft_ffi.dll" Condition="Exists('native\pdfcraft_ffi\target\release\pdfcraft_ffi.dll')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>pdfcraft_ffi.dll</Link>

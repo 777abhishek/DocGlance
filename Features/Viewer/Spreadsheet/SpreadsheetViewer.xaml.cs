@@ -94,6 +94,7 @@ public sealed partial class SpreadsheetViewer : UserControl
     public event EventHandler<double>? ZoomChanged;
     public event EventHandler? ManualZoomRequested;
     public event EventHandler<string>? SelectionError;
+    public event Action<string>? TranslateRequested;
 
     public double Zoom => _zoom;
     public int ActiveSheetIndex => _activeSheet;
@@ -1071,6 +1072,13 @@ public sealed partial class SpreadsheetViewer : UserControl
         };
         copyItem.Click += (_, _) => CopySelectionToClipboard();
         flyout.Items.Add(copyItem);
+        var translateItem = new MenuFlyoutItem
+        {
+            Text = "Translate selection",
+            Icon = new SymbolIcon(Symbol.Globe),
+        };
+        translateItem.Click += (_, _) => TranslateSelection();
+        flyout.Items.Add(translateItem);
         flyout.ShowAt(CellScroll, point);
         e.Handled = true;
     }
@@ -1082,27 +1090,12 @@ public sealed partial class SpreadsheetViewer : UserControl
 
         try
         {
-            var (firstRow, lastRow, firstCol, lastCol) = GetSelectionBounds();
-            long cellCount = (long)(lastRow - firstRow + 1) * (lastCol - firstCol + 1);
-            if (cellCount > 100_000)
-                throw new InvalidOperationException("The selected range is too large to copy at once.");
-
-            var text = new StringBuilder();
-            for (int row = firstRow; row <= lastRow; row++)
-            {
-                if (row > firstRow)
-                    text.AppendLine();
-                for (int col = firstCol; col <= lastCol; col++)
-                {
-                    if (col > firstCol)
-                        text.Append('\t');
-                    if (_cellMap != null && _cellMap.TryGetValue((row, col), out var cell))
-                        text.Append(cell.Value);
-                }
-            }
+            string? text = GetSelectionText();
+            if (string.IsNullOrEmpty(text))
+                return;
 
             var data = new DataPackage();
-            data.SetText(text.ToString());
+            data.SetText(text);
             Clipboard.SetContent(data);
             Clipboard.Flush();
         }
@@ -1111,6 +1104,51 @@ public sealed partial class SpreadsheetViewer : UserControl
             Logger.Error("[SpreadsheetSelection] Could not copy selected cells", ex);
             SelectionError?.Invoke(this, ex.Message);
         }
+    }
+
+    private void TranslateSelection()
+    {
+        if (!HasCellSelection || _data == null)
+            return;
+
+        try
+        {
+            string? text = GetSelectionText();
+            if (!string.IsNullOrWhiteSpace(text))
+                TranslateRequested?.Invoke(text);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("[SpreadsheetSelection] Could not extract text for translation", ex);
+            SelectionError?.Invoke(this, ex.Message);
+        }
+    }
+
+    private string? GetSelectionText()
+    {
+        if (!HasCellSelection || _data == null)
+            return null;
+
+        var (firstRow, lastRow, firstCol, lastCol) = GetSelectionBounds();
+        long cellCount = (long)(lastRow - firstRow + 1) * (lastCol - firstCol + 1);
+        if (cellCount > 100_000)
+            throw new InvalidOperationException("The selected range is too large to copy or translate at once.");
+
+        var text = new StringBuilder();
+        for (int row = firstRow; row <= lastRow; row++)
+        {
+            if (row > firstRow)
+                text.AppendLine();
+            for (int col = firstCol; col <= lastCol; col++)
+            {
+                if (col > firstCol)
+                    text.Append('\t');
+                if (_cellMap != null && _cellMap.TryGetValue((row, col), out var cell))
+                    text.Append(cell.Value);
+            }
+        }
+
+        return text.ToString();
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

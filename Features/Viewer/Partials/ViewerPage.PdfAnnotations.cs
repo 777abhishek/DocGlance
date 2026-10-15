@@ -265,6 +265,8 @@ public sealed partial class ViewerPage
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = XamlRoot,
         };
+        ViewerPopupStyle.Apply(dialog);
+        ViewerPopupStyle.ApplyCompactField(noteInput);
 
         if (await dialog.ShowAsync() != ContentDialogResult.Primary ||
             string.IsNullOrWhiteSpace(noteInput.Text) ||
@@ -310,6 +312,8 @@ public sealed partial class ViewerPage
                 DefaultButton = ContentDialogButton.Primary,
                 XamlRoot = XamlRoot,
             };
+            ViewerPopupStyle.Apply(dialog);
+            ViewerPopupStyle.ApplyCompactField(noteInput);
             if (await dialog.ShowAsync() != ContentDialogResult.Primary ||
                 string.IsNullOrWhiteSpace(noteInput.Text) ||
                 !ReferenceEquals(_pdfState, state))
@@ -354,6 +358,8 @@ public sealed partial class ViewerPage
                 DefaultButton = ContentDialogButton.Primary,
                 XamlRoot = XamlRoot,
             };
+            ViewerPopupStyle.Apply(dialog);
+            ViewerPopupStyle.ApplyCompactField(textInput);
             if (await dialog.ShowAsync() != ContentDialogResult.Primary ||
                 string.IsNullOrWhiteSpace(textInput.Text) ||
                 !ReferenceEquals(_pdfState, state))
@@ -847,6 +853,7 @@ public sealed partial class ViewerPage
             CloseButtonText = "OK",
             XamlRoot = XamlRoot,
         };
+        ViewerPopupStyle.Apply(dialog);
         await dialog.ShowAsync();
     }
 }
