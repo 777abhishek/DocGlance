@@ -53,6 +53,8 @@ public sealed partial class ViewerPage : Page
         InitializeComponent();
         InitializeViewerShortcuts();
 
+        InitializePdfTextSelection();
+
         // Initialize Office text selection (drag-to-select and copy)
         InitializeOfficeTextSelection();
 
@@ -79,6 +81,8 @@ public sealed partial class ViewerPage : Page
             ZoomLabel.Text = $"{Math.Round(_zoom * 100)}%";
             SyncToViewModel();
         };
+        SpreadsheetViewerControl.SelectionError += (_, message) =>
+            ShowInfoBar($"Could not copy selected cells: {message}", InfoBarSeverity.Error);
         SpreadsheetViewerControl.ManualZoomRequested += (_, _) => SetFitMode(FitMode.None);
 
         // Ctrl+Wheel zoom anchored at the cursor.
@@ -226,6 +230,8 @@ public sealed partial class ViewerPage : Page
         CleanupViewportRendering();
         ClearPptxCache();
         ClearDocxCache();
+        _pptxTextMaps.Clear();
+        ClearOfficeSelection();
         SpreadsheetViewerControl?.Cleanup();
         _spreadsheetDocument?.Dispose();
         _spreadsheetDocument = null;

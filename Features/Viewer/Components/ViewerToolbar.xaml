@@ -50,7 +50,7 @@
             IsChecked="True"
             Click="SidebarButton_Click"
             Margin="0,0,4,0"
-            ToolTipService.ToolTip="Sidebar (F9)">
+            ToolTipService.ToolTip="Sidebar">
             <FontIcon
                 FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
                 Glyph="&#xF030F;"
@@ -104,7 +104,7 @@
                 x:Name="FitWidthButton"
                 Style="{StaticResource ITB}"
                 Click="FitWidthButton_Click"
-                ToolTipService.ToolTip="Fit width (Ctrl+2)">
+                ToolTipService.ToolTip="Fit width">
                 <FontIcon
                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
                     Glyph="&#xF590;"
@@ -115,7 +115,7 @@
                 x:Name="FitPageButton"
                 Style="{StaticResource ITB}"
                 Click="FitPageButton_Click"
-                ToolTipService.ToolTip="Fit page (Ctrl+0)">
+                ToolTipService.ToolTip="Fit page">
                 <FontIcon
                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
                     Glyph="&#xF54D;"
@@ -143,7 +143,7 @@
             <Button
                 Style="{StaticResource IB}"
                 Click="RotateRightButton_Click"
-                ToolTipService.ToolTip="Rotate right (Ctrl+R)">
+                ToolTipService.ToolTip="Rotate right">
                 <FontIcon
                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
                     Glyph="&#xF188;"
@@ -163,7 +163,7 @@
                 Style="{StaticResource ITB}"
                 Visibility="Collapsed"
                 Click="WordWrapButton_Click"
-                ToolTipService.ToolTip="Word wrap (Alt+Z)">
+                ToolTipService.ToolTip="Word wrap">
                 <FontIcon Glyph="&#xEF64;" FontSize="20"/>
             </ToggleButton>
 
@@ -172,7 +172,7 @@
                 x:Name="FindButton"
                 Style="{StaticResource IB}"
                 Click="FindButton_Click"
-                ToolTipService.ToolTip="Find (Ctrl+F)">
+                ToolTipService.ToolTip="Find">
                 <FontIcon
                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
                     Glyph="&#xF690;"
@@ -206,7 +206,7 @@
                 x:Name="DocInfoButton"
                 Style="{StaticResource IB}"
                 Click="DocInfoButton_Click"
-                ToolTipService.ToolTip="Document info (Ctrl+I)">
+                ToolTipService.ToolTip="Document info">
                 <FontIcon
                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
                     Glyph="&#xF4A4;"
@@ -239,7 +239,7 @@
 
                         <MenuFlyoutItem
                             Text="Presentation mode"
-                            ToolTipService.ToolTip="F5: start from beginning · Shift+F5: start here · F11: toggle · Esc: exit"
+                            ToolTipService.ToolTip="Presentation mode"
                             Click="PresentationModeMenuItem_Click">
                             <MenuFlyoutItem.Icon>
                                 <FontIcon Glyph="&#xE740;" FontSize="20"/>

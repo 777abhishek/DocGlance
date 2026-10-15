@@ -6,6 +6,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Graphics.Canvas;
@@ -17,6 +18,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Windows.ApplicationModel.DataTransfer;
 using DocGlance.Infrastructure.Logging;
 using DocGlance.Rendering.Document;
 using Windows.Foundation;
@@ -56,6 +58,12 @@ public sealed partial class SpreadsheetViewer : UserControl
     private int _activeSheet = 0;
     private int _selectedRow = -1;
     private int _selectedCol = -1;
+    private int _selectionAnchorRow = -1;
+    private int _selectionAnchorCol = -1;
+    private int _selectionFocusRow = -1;
+    private int _selectionFocusCol = -1;
+    private bool _isSelectingRange;
+    private uint _selectionPointerId;
     private int _activeSearchRow = -1;
     private int _activeSearchCol = -1;
     private IReadOnlyList<SpreadsheetMatch> _allSearchMatches = Array.Empty<SpreadsheetMatch>();
@@ -85,6 +93,7 @@ public sealed partial class SpreadsheetViewer : UserControl
     public event EventHandler<int>? ActiveSheetChanged;
     public event EventHandler<double>? ZoomChanged;
     public event EventHandler? ManualZoomRequested;
+    public event EventHandler<string>? SelectionError;
 
     public double Zoom => _zoom;
     public int ActiveSheetIndex => _activeSheet;
@@ -127,8 +136,23 @@ public sealed partial class SpreadsheetViewer : UserControl
         _cellCanvas.IsHitTestVisible = false;
         CellOverlay.Children.Add(_cellCanvas);
         CellScroll.PointerPressed += CellCanvas_PointerPressed;
+        CellScroll.PointerMoved += CellCanvas_PointerMoved;
+        CellScroll.PointerReleased += CellCanvas_PointerReleased;
+        CellScroll.PointerCaptureLost += CellCanvas_PointerCaptureLost;
+        CellScroll.RightTapped += CellScroll_RightTapped;
         CellScroll.PointerWheelChanged += CellScroll_PointerWheelChanged;
         CellScroll.SizeChanged += (_, _) => ResizeCanvases();
+        var copyAccelerator = new KeyboardAccelerator
+        {
+            Key = Windows.System.VirtualKey.C,
+            Modifiers = Windows.System.VirtualKeyModifiers.Control,
+        };
+        copyAccelerator.Invoked += (_, args) =>
+        {
+            CopySelectionToClipboard();
+            args.Handled = true;
+        };
+        CellScroll.KeyboardAccelerators.Add(copyAccelerator);
 
         // Column header canvas
         _colHeaderCanvas = new CanvasControl { Height = 26, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
@@ -248,8 +272,7 @@ public sealed partial class SpreadsheetViewer : UserControl
         }
 
         // Select the cell
-        _selectedRow = row;
-        _selectedCol = col;
+        SetCellSelection(row, col, row, col);
 
         // Scroll to make the cell visible (with some padding)
         if (_colX.Length > col + 1 && _rowY.Length > row + 1)
@@ -378,6 +401,10 @@ public sealed partial class SpreadsheetViewer : UserControl
         _activeSheet = 0;
         _selectedRow = -1;
         _selectedCol = -1;
+        _selectionAnchorRow = -1;
+        _selectionAnchorCol = -1;
+        _selectionFocusRow = -1;
+        _selectionFocusCol = -1;
         _mergeMap.Clear();
         _covered.Clear();
         _colX = Array.Empty<double>();
@@ -722,7 +749,7 @@ public sealed partial class SpreadsheetViewer : UserControl
                 if (_covered.Contains((row, col))) continue;
 
                 var cr = CellRect(row, col);
-                bool isSelected = row == _selectedRow && col == _selectedCol;
+                bool isSelected = IsCellInSelection(row, col);
 
                 if (_cellMap != null && _cellMap.TryGetValue((row, col), out var cell) && cell.Bg != null
                     && TryParseColor(cell.Bg, out var bg))
@@ -763,6 +790,17 @@ public sealed partial class SpreadsheetViewer : UserControl
                 float y = (float)_rowY[row];
                 ds.DrawLine(colLeft, y, colRight, y, _gridLine, 0.5f);
             }
+        }
+
+        if (HasCellSelection)
+        {
+            var (selectionFirstRow, selectionLastRow, selectionFirstCol, selectionLastCol) = GetSelectionBounds();
+            var selectionRect = new Rect(
+                _colX[selectionFirstCol],
+                _rowY[selectionFirstRow],
+                _colX[selectionLastCol + 1] - _colX[selectionFirstCol],
+                _rowY[selectionLastRow + 1] - _rowY[selectionFirstRow]);
+            ds.DrawRectangle(ToR(selectionRect), Color.FromArgb(255, 0, 120, 215), 1.5f);
         }
 
         // ── Cell text ───────────────────────────────────────────────────────
@@ -927,7 +965,8 @@ public sealed partial class SpreadsheetViewer : UserControl
             float y = (float)_rowY[row];
             float h = (float)(_rowY[row + 1] - _rowY[row]);
 
-            if (row == _selectedRow)
+            if (HasCellSelection && row >= Math.Min(_selectionAnchorRow, _selectionFocusRow) &&
+                row <= Math.Max(_selectionAnchorRow, _selectionFocusRow))
                 ds.FillRectangle(0, y, 50, h, _headerSel);
 
             ds.DrawText((row + 1).ToString(), 25, y + h / 2, _headerText, fmt);
@@ -941,12 +980,133 @@ public sealed partial class SpreadsheetViewer : UserControl
 
     private void CellCanvas_PointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        // Position is viewport-relative (CellScroll origin = viewport top-left);
-        // add scroll offsets to reach sheet coordinates, then unzoom.
-        var pos  = e.GetCurrentPoint(CellScroll).Position;
-        _selectedCol = ColAt((pos.X + CellScroll.HorizontalOffset) / _zoom);
-        _selectedRow = RowAt((pos.Y + CellScroll.VerticalOffset) / _zoom);
+        if (!e.GetCurrentPoint(CellScroll).Properties.IsLeftButtonPressed)
+            return;
+
+        var (row, col) = GetCellAtPointer(e.GetCurrentPoint(CellScroll).Position);
+        SetCellSelection(row, col, row, col);
+
+        _isSelectingRange = true;
+        _selectionPointerId = e.Pointer.PointerId;
+        CellScroll.CapturePointer(e.Pointer);
+        e.Handled = true;
+    }
+
+    private void CellCanvas_PointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_isSelectingRange || e.Pointer.PointerId != _selectionPointerId)
+            return;
+
+        var (row, col) = GetCellAtPointer(e.GetCurrentPoint(CellScroll).Position);
+        SetCellSelection(_selectionAnchorRow, _selectionAnchorCol, row, col);
+        e.Handled = true;
+    }
+
+    private void CellCanvas_PointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_isSelectingRange || e.Pointer.PointerId != _selectionPointerId)
+            return;
+
+        var (row, col) = GetCellAtPointer(e.GetCurrentPoint(CellScroll).Position);
+        SetCellSelection(_selectionAnchorRow, _selectionAnchorCol, row, col);
+        _isSelectingRange = false;
+        CellScroll.ReleasePointerCapture(e.Pointer);
+        e.Handled = true;
+    }
+
+    private void CellCanvas_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        if (e.Pointer.PointerId == _selectionPointerId)
+            _isSelectingRange = false;
+    }
+
+    private (int row, int col) GetCellAtPointer(Point viewportPoint)
+    {
+        int col = ColAt((viewportPoint.X + CellScroll.HorizontalOffset) / _zoom);
+        int row = RowAt((viewportPoint.Y + CellScroll.VerticalOffset) / _zoom);
+        return (row, col);
+    }
+
+    private void SetCellSelection(int anchorRow, int anchorCol, int focusRow, int focusCol)
+    {
+        _selectionAnchorRow = anchorRow;
+        _selectionAnchorCol = anchorCol;
+        _selectionFocusRow = focusRow;
+        _selectionFocusCol = focusCol;
+        _selectedRow = focusRow;
+        _selectedCol = focusCol;
         Invalidate();
+    }
+
+    private bool HasCellSelection =>
+        _selectionAnchorRow >= 0 && _selectionAnchorCol >= 0 &&
+        _selectionFocusRow >= 0 && _selectionFocusCol >= 0 &&
+        _rowY.Length > 1 && _colX.Length > 1;
+
+    private bool IsCellInSelection(int row, int col) =>
+        HasCellSelection &&
+        row >= Math.Min(_selectionAnchorRow, _selectionFocusRow) &&
+        row <= Math.Max(_selectionAnchorRow, _selectionFocusRow) &&
+        col >= Math.Min(_selectionAnchorCol, _selectionFocusCol) &&
+        col <= Math.Max(_selectionAnchorCol, _selectionFocusCol);
+
+    private (int firstRow, int lastRow, int firstCol, int lastCol) GetSelectionBounds() =>
+        (Math.Min(_selectionAnchorRow, _selectionFocusRow),
+         Math.Max(_selectionAnchorRow, _selectionFocusRow),
+         Math.Min(_selectionAnchorCol, _selectionFocusCol),
+         Math.Max(_selectionAnchorCol, _selectionFocusCol));
+
+    private void CellScroll_RightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        Point point = e.GetPosition(CellScroll);
+        var (row, col) = GetCellAtPointer(point);
+        if (!IsCellInSelection(row, col))
+            SetCellSelection(row, col, row, col);
+
+        var flyout = new MenuFlyout();
+        var copyItem = new MenuFlyoutItem { Text = "Copy" };
+        copyItem.Click += (_, _) => CopySelectionToClipboard();
+        flyout.Items.Add(copyItem);
+        flyout.ShowAt(CellScroll);
+        e.Handled = true;
+    }
+
+    private void CopySelectionToClipboard()
+    {
+        if (!HasCellSelection || _data == null)
+            return;
+
+        try
+        {
+            var (firstRow, lastRow, firstCol, lastCol) = GetSelectionBounds();
+            long cellCount = (long)(lastRow - firstRow + 1) * (lastCol - firstCol + 1);
+            if (cellCount > 100_000)
+                throw new InvalidOperationException("The selected range is too large to copy at once.");
+
+            var text = new StringBuilder();
+            for (int row = firstRow; row <= lastRow; row++)
+            {
+                if (row > firstRow)
+                    text.AppendLine();
+                for (int col = firstCol; col <= lastCol; col++)
+                {
+                    if (col > firstCol)
+                        text.Append('\t');
+                    if (_cellMap != null && _cellMap.TryGetValue((row, col), out var cell))
+                        text.Append(cell.Value);
+                }
+            }
+
+            var data = new DataPackage();
+            data.SetText(text.ToString());
+            Clipboard.SetContent(data);
+            Clipboard.Flush();
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("[SpreadsheetSelection] Could not copy selected cells", ex);
+            SelectionError?.Invoke(this, ex.Message);
+        }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

@@ -116,6 +116,13 @@ fn slide_text<'a>(doc: &'a DcDocument, index: usize) -> Option<std::sync::MutexG
     Some(cache)
 }
 
+fn text_char_range(text: &str, start: usize, end: usize) -> Option<String> {
+    if start > end || end > text.chars().count() {
+        return None;
+    }
+    Some(text.chars().skip(start).take(end - start).collect())
+}
+
 fn rgba_to_premul_bgra_inplace(buf: &mut [u8]) {
     for px in buf.chunks_exact_mut(4) {
         let r = px[0];
@@ -361,6 +368,94 @@ pub extern "C" fn dc_extract_slide_text(
     })
 }
 
+/// Return the number of Unicode scalar values in the slide's laid-out text.
+#[no_mangle]
+pub extern "C" fn dc_get_slide_char_count(doc: *const DcDocument, index: u32) -> usize {
+    catch!(0, {
+        if doc.is_null() { return 0; }
+        let doc = unsafe { &*doc };
+        let Some(cache) = slide_text(doc, index as usize) else { return 0; };
+        cache.get(index as usize)
+            .and_then(|slide| slide.as_ref())
+            .map_or(0, |slide| slide.char_rects.len())
+    })
+}
+
+/// Copy one x/y/width/height tuple per laid-out Unicode scalar value.
+/// Empty geometry (such as paragraph separators) is represented by four zeroes.
+/// Returns the number of rectangles, or the required number when `buf` is null
+/// or the capacity is too small.
+#[no_mangle]
+pub extern "C" fn dc_get_slide_char_rects(
+    doc: *const DcDocument,
+    index: u32,
+    buf: *mut f64,
+    buf_capacity: usize,
+) -> usize {
+    catch!(0, {
+        if doc.is_null() { return 0; }
+        let doc = unsafe { &*doc };
+        let Some(cache) = slide_text(doc, index as usize) else { return 0; };
+        let Some(slide) = cache.get(index as usize).and_then(|slide| slide.as_ref()) else {
+            return 0;
+        };
+        let rect_count = slide.char_rects.len();
+        if rect_count == 0 {
+            return 0;
+        }
+        if buf.is_null() || buf_capacity < rect_count.saturating_mul(4) {
+            return rect_count;
+        }
+
+        let out = unsafe { slice::from_raw_parts_mut(buf, rect_count * 4) };
+        for (index, rect) in slide.char_rects.iter().enumerate() {
+            let offset = index * 4;
+            if let Some(rect) = rect {
+                out[offset] = rect.x;
+                out[offset + 1] = rect.y;
+                out[offset + 2] = rect.width;
+                out[offset + 3] = rect.height;
+            } else {
+                out[offset..offset + 4].fill(0.0);
+            }
+        }
+        rect_count
+    })
+}
+
+/// Copy a half-open Unicode-scalar range from the slide as UTF-8.
+/// Returns bytes written, or the required byte capacity if the buffer is null
+/// or too small.
+#[no_mangle]
+pub extern "C" fn dc_get_slide_text_range(
+    doc: *const DcDocument,
+    index: u32,
+    start: u32,
+    end: u32,
+    buf: *mut u8,
+    buf_len: usize,
+) -> usize {
+    catch!(0, {
+        if doc.is_null() { return 0; }
+        let doc = unsafe { &*doc };
+        let Some(cache) = slide_text(doc, index as usize) else { return 0; };
+        let Some(slide) = cache.get(index as usize).and_then(|slide| slide.as_ref()) else {
+            return 0;
+        };
+        let Some(text) = text_char_range(&slide.text, start as usize, end as usize) else {
+            return 0;
+        };
+        let bytes = text.as_bytes();
+        if buf.is_null() || buf_len < bytes.len() {
+            return bytes.len();
+        }
+        if !bytes.is_empty() {
+            unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf, bytes.len()); }
+        }
+        bytes.len()
+    })
+}
+
 /// Search for `query` text across all slides.
 /// Returns semicolon-separated match rectangles:
 /// "slideIndex,charIndex,length,x,y,width,height;..."
@@ -451,7 +546,7 @@ pub extern "C" fn dc_free_document(doc: *mut DcDocument) {
 
 #[cfg(test)]
 mod tests {
-    use super::find_matches;
+    use super::{find_matches, text_char_range};
 
     #[test]
     fn finds_overlapping_matches() {
@@ -471,5 +566,10 @@ mod tests {
     #[test]
     fn case_insensitive_expanding_lowercase_keeps_source_character_offsets() {
         assert_eq!(find_matches("İX", "x", false), vec![(1, 1)]);
+    }
+
+    #[test]
+    fn text_ranges_use_unicode_scalar_indexes() {
+        assert_eq!(text_char_range("Aé🦀Z", 1, 3).as_deref(), Some("é🦀"));
     }
 }

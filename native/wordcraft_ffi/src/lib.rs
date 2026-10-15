@@ -519,3 +519,377 @@ pub extern "C" fn wc_free_pdf_buffer(buf: WcPdfBuffer) {
         drop(Vec::from_raw_parts(buf.data, buf.len, buf.len));
     }
 }
+
+// ── Text Selection APIs ───────────────────────────────────────────────────────
+
+/// Text position in document for text selection.
+/// Represents a position between characters (like a text cursor).
+/// For Word documents, offset is a page-relative UTF-8 byte offset.
+#[repr(C)]
+pub struct WcTextPosition {
+    pub page: u32,       // Page index where this position appears
+    pub offset: u32,     // Character offset within the page (simplified)
+    pub reserved1: u32,  // Reserved for future use (story index)
+    pub reserved2: u32,  // Reserved for future use (path length)
+}
+
+impl WcTextPosition {
+    #[allow(dead_code)]
+    fn null() -> Self {
+        WcTextPosition {
+            page: u32::MAX,
+            offset: 0,
+            reserved1: 0,
+            reserved2: 0,
+        }
+    }
+}
+
+/// Hit test: find the approximate text position for a given point on a page.
+/// 
+/// Returns true if text was found near the point, false otherwise.
+/// The position is written to out_pos as a page-relative UTF-8 byte offset.
+/// 
+/// Coordinates are in PDF points relative to the page's top-left corner.
+/// 
+/// Uses WordCraft's page layout to map the point to the nearest body-text caret.
+#[no_mangle]
+pub extern "C" fn wc_hit_test(
+    doc: *const WcDocument,
+    page_index: u32,
+    x: f64,
+    y: f64,
+    out_pos: *mut WcTextPosition,
+) -> bool {
+    catch!(false, {
+        if doc.is_null() || out_pos.is_null() {
+            return false;
+        }
+        
+        let doc = unsafe { &*doc };
+        let page_index = page_index as usize;
+        
+        if page_index >= doc.layout.pages.len() {
+            return false;
+        }
+        
+        let Some(pos) = doc.layout.hit(page_index, x as f32, y as f32, StoryRef::Body) else {
+            return false;
+        };
+
+        let page = &doc.layout.pages[page_index];
+        let mut current_offset = 0u32;
+        for item in &page.items {
+            if let Placed::Lines { story, path, para, l0, l1, .. } = item {
+                for li in *l0..*l1 {
+                    let Some(line) = para.lines.get(li) else {
+                        continue;
+                    };
+
+                    let line_len = line.stop.saturating_sub(line.start) as u32;
+                    if *story == pos.story
+                        && *path == pos.path
+                        && line.start <= pos.off
+                        && pos.off <= line.stop
+                    {
+                        let out = unsafe { &mut *out_pos };
+                        out.page = page_index as u32;
+                        out.offset = current_offset.saturating_add(
+                            (pos.off - line.start) as u32,
+                        );
+                        out.reserved1 = 0;
+                        out.reserved2 = 0;
+                        return true;
+                    }
+
+                    current_offset = current_offset.saturating_add(line_len);
+                }
+            }
+        }
+
+        false
+    })
+}
+
+/// Get selection rectangles for a text range within a single page.
+/// 
+/// Offsets are UTF-8 byte offsets from the beginning of the page's laid-out text.
+/// 
+/// Returns the number of floats written to buffer (or required if buffer is too small).
+/// Each rectangle is 4 floats: x, y, width, height (in PDF points).
+/// 
+/// Buffer layout: [x0, y0, w0, h0, x1, y1, w1, h1, ...]
+/// 
+/// Note: This is a best-effort implementation. For precise selection, the calling
+/// code should use the actual Pos (story/path/offset) from WordCraft's document model.
+#[no_mangle]
+pub extern "C" fn wc_get_selection_rects(
+    doc: *const WcDocument,
+    page_index: u32,
+    start_offset: u32,
+    end_offset: u32,
+    buf: *mut f32,
+    buf_capacity: usize, // Total number of floats, not rectangles
+) -> usize {
+    catch!(0, {
+        if doc.is_null() {
+            return 0;
+        }
+        
+        let doc = unsafe { &*doc };
+        let page_index = page_index as usize;
+        
+        if page_index >= doc.layout.pages.len() {
+            return 0;
+        }
+        
+        // Normalize offsets
+        let start = start_offset.min(end_offset) as usize;
+        let end = start_offset.max(end_offset) as usize;
+        
+        if start == end {
+            return 0;
+        }
+        
+        let page = &doc.layout.pages[page_index];
+        
+        // Build a mapping of page-relative offsets to document Pos
+        // by iterating through all text on the page
+        let mut offset_to_pos = Vec::new();
+        
+        for item in &page.items {
+            if let Placed::Lines { story, path, para, l0, l1, .. } = item {
+                let Some(_p) = doc.doc.para(*story, path) else {
+                    continue;
+                };
+                
+                for li in *l0..*l1 {
+                    let Some(line) = para.lines.get(li) else {
+                        continue;
+                    };
+                    
+                    // Map each character in this line
+                    for char_off in line.start..line.stop {
+                        offset_to_pos.push(Pos {
+                            story: *story,
+                            path: path.clone(),
+                            off: char_off,
+                        });
+                    }
+                }
+            }
+        }
+        
+        // Get start and end Pos
+        let Some(start_pos) = offset_to_pos.get(start) else {
+            return 0;
+        };
+        let Some(mut end_pos) = offset_to_pos.get(end.saturating_sub(1)).cloned() else {
+            return 0;
+        };
+        end_pos.off = end_pos.off.saturating_add(1);
+        
+        // Use WordCraft's selection_rects to get the actual geometry
+        let rects = doc.layout.selection_rects(&doc.doc, start_pos, &end_pos, 0);
+        
+        // Filter to only this page and collect rectangles
+        let page_rects: Vec<_> = rects
+            .into_iter()
+            .filter(|(pi, _)| *pi == page_index)
+            .map(|(_, r)| (r.x, r.y, r.w, r.h))
+            .collect();
+        
+        let rect_count = page_rects.len();
+        
+        // If buffer is null or too small, just return required size
+        if buf.is_null() || buf_capacity < rect_count * 4 {
+            return rect_count * 4; // Return required float count
+        }
+        
+        // Write rectangles to buffer
+        let buf_slice = unsafe { slice::from_raw_parts_mut(buf, rect_count * 4) };
+        
+        for (i, (x, y, w, h)) in page_rects.iter().enumerate() {
+            buf_slice[i * 4] = *x;
+            buf_slice[i * 4 + 1] = *y;
+            buf_slice[i * 4 + 2] = *w;
+            buf_slice[i * 4 + 3] = *h;
+        }
+        
+        rect_count * 4 // Return number of floats written
+    })
+}
+
+/// Get the page's laid-out text length in UTF-8 bytes.
+#[no_mangle]
+pub extern "C" fn wc_get_page_char_count(
+    doc: *const WcDocument,
+    page_index: u32,
+) -> u32 {
+    catch!(0, {
+        if doc.is_null() {
+            return 0;
+        }
+        
+        let doc = unsafe { &*doc };
+        let page_index = page_index as usize;
+        
+        if page_index >= doc.layout.pages.len() {
+            return 0;
+        }
+        
+        let page = &doc.layout.pages[page_index];
+        let mut char_count = 0u32;
+        
+        for item in &page.items {
+            if let Placed::Lines { story, path, para, l0, l1, .. } = item {
+                let Some(_p) = doc.doc.para(*story, path) else {
+                    continue;
+                };
+                
+                for li in *l0..*l1 {
+                    let Some(line) = para.lines.get(li) else {
+                        continue;
+                    };
+                    
+                    let line_chars = line.stop.saturating_sub(line.start) as u32;
+                    char_count = char_count.saturating_add(line_chars);
+                }
+            }
+        }
+        
+        char_count
+    })
+}
+
+/// Extract text between two UTF-8 byte offsets on a page.
+/// This is useful for getting the selected text to put on the clipboard.
+/// 
+/// Returns the number of bytes written (or required if buffer is too small).
+/// The text is UTF-8 encoded and NOT null-terminated.
+#[no_mangle]
+pub extern "C" fn wc_get_text_range(
+    doc: *const WcDocument,
+    page_index: u32,
+    start_offset: u32,
+    end_offset: u32,
+    buf: *mut u8,
+    buf_len: usize,
+) -> usize {
+    catch!(0, {
+        if doc.is_null() {
+            return 0;
+        }
+        
+        let doc = unsafe { &*doc };
+        let page_index = page_index as usize;
+        
+        if page_index >= doc.layout.pages.len() {
+            return 0;
+        }
+        
+        let page = &doc.layout.pages[page_index];
+        let start = start_offset.min(end_offset) as usize;
+        let end = start_offset.max(end_offset) as usize;
+        
+        let mut text = String::new();
+        let mut current_offset = 0usize;
+        
+        for item in &page.items {
+            if let Placed::Lines { story, path, para, l0, l1, .. } = item {
+                let Some(p) = doc.doc.para(*story, path) else {
+                    continue;
+                };
+                
+                for li in *l0..*l1 {
+                    let Some(line) = para.lines.get(li) else {
+                        continue;
+                    };
+                    
+                    let line_start = current_offset;
+                    let line_end = current_offset + line.stop.saturating_sub(line.start);
+                    
+                    // Check if this line overlaps with selection range
+                    if line_end > start && line_start < end {
+                        if let Some(line_text) = p.text.get(line.start..line.stop) {
+                            // Calculate overlap
+                            let extract_start = if line_start >= start { 0 } else { start - line_start };
+                            let extract_end = if line_end <= end { 
+                                line_text.len() 
+                            } else { 
+                                line_text.len().saturating_sub(line_end - end)
+                            };
+                            
+                            if let Some(extract) = line_text.get(extract_start..extract_end) {
+                                text.push_str(extract);
+                            }
+                        }
+                        
+                        // Add newline between lines (but not after the last one)
+                        if line_end < end {
+                            text.push('\n');
+                        }
+                    }
+                    
+                    current_offset = line_end;
+                    
+                    if current_offset >= end {
+                        break;
+                    }
+                }
+                
+                if current_offset >= end {
+                    break;
+                }
+            }
+        }
+        
+        let bytes = text.as_bytes();
+        
+        // If buffer is null or too small, return required size
+        if buf.is_null() || buf_len < bytes.len() {
+            return bytes.len();
+        }
+        
+        let copy_len = bytes.len().min(buf_len);
+        unsafe {
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf, copy_len);
+        }
+        
+        copy_len
+    })
+}
+
+#[cfg(test)]
+mod text_selection_tests {
+    use super::*;
+
+    #[test]
+    fn text_position_null_initializes_correctly() {
+        let pos = WcTextPosition::null();
+        assert_eq!(pos.page, u32::MAX);
+        assert_eq!(pos.offset, 0);
+        assert_eq!(pos.reserved1, 0);
+        assert_eq!(pos.reserved2, 0);
+    }
+
+    #[test]
+    fn hit_test_returns_false_for_null_doc() {
+        let mut pos = WcTextPosition::null();
+        let result = wc_hit_test(std::ptr::null(), 0, 0.0, 0.0, &mut pos);
+        assert!(!result);
+    }
+
+    #[test]
+    fn get_selection_rects_returns_zero_for_null_doc() {
+        let result = wc_get_selection_rects(
+            std::ptr::null(),
+            0,
+            0,
+            10,
+            std::ptr::null_mut(),
+            0,
+        );
+        assert_eq!(result, 0);
+    }
+}

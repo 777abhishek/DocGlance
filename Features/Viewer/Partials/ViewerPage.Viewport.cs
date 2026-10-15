@@ -77,6 +77,7 @@ public sealed partial class ViewerPage
 
         DocumentScrollViewer.ViewChanged -= OnViewportViewChanged;
         DocumentScrollViewer.ViewChanged += OnViewportViewChanged;
+        EnsurePdfTextPageMap(0);
 
         RenderPagesAsync().SafeFireAndForget("PdfViewportRender");
     }
@@ -88,6 +89,7 @@ public sealed partial class ViewerPage
         // throw ObjectDisposedException if we disposed it out from under them.
         _renderCts?.Cancel();
         _renderCts = null;
+        ClearPdfTextSelectionState();
         _viewportState = null;
         _lastRenderZoom = -1f;
         _pageTopCache = null;
@@ -139,6 +141,12 @@ public sealed partial class ViewerPage
             SearchHighlightCanvas.Width  = maxW;
             SearchHighlightCanvas.Height = totalH;
         }
+
+        if (PdfSelectionCanvas != null)
+        {
+            PdfSelectionCanvas.Width = maxW;
+            PdfSelectionCanvas.Height = totalH;
+        }
     }
 
     private (double W, double H) GetRotatedPageSize(int i)
@@ -168,6 +176,7 @@ public sealed partial class ViewerPage
             _viewportState.ScrollYPt        = (DocumentScrollViewer.VerticalOffset / zoom) * LpToPt;
 
             UpdateCurrentPageFromScroll();
+            EnsurePdfTextPageMap(Math.Clamp(_viewportState.CurrentPageIndex, 0, _pdfState.PageCount - 1));
 
             if (!e.IsIntermediate)
             {
@@ -199,6 +208,7 @@ public sealed partial class ViewerPage
             double bottomLp = topLp + h * PtToLp;
             if (readingY <= bottomLp || i == _pdfState.PageCount - 1)
             {
+                EnsurePdfTextPageMap(i);
                 int newPage = i + 1;
                 if (newPage != _page)
                 {

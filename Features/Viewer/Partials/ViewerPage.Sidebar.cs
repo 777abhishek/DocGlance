@@ -104,7 +104,10 @@ public sealed partial class ViewerPage
             Thumbnails[index].IsSelected = true;
 
         if (_pdfState != null)
+        {
+            EnsurePdfTextPageMap(index);
             _ = PrefetchThumbnailsAroundAsync(index, _pdfState, CancellationToken.None);
+        }
 
         SyncThumbnailSelection(index);
     }

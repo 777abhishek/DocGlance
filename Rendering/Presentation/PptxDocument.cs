@@ -1,4 +1,5 @@
 using Microsoft.UI.Xaml.Media.Imaging;
+using DocGlance.Core.Models;
 using DocGlance.Rendering;
 using System;
 using System.Collections.Generic;
@@ -99,6 +100,83 @@ public sealed class PptxDocument : IDisposable
                 return (w, h);
             }
         }
+    }
+
+    public PdfPageTextMap GetSlideTextMap(int index)
+    {
+        lock (_nativeGate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            ValidateSlideIndex(index);
+            nuint count = DeckCraftNative.dc_get_slide_char_count(_handle, (uint)index);
+            if (count > 1_000_000 || count > int.MaxValue / 4)
+                throw new InvalidOperationException("PPTX slide text geometry exceeds the supported size.");
+
+            var rects = new PdfSearchRect[(int)count];
+            if (rects.Length == 0)
+                return new PdfPageTextMap(index, rects);
+
+            var buffer = new double[rects.Length * 4];
+            unsafe
+            {
+                fixed (double* ptr = buffer)
+                {
+                    nuint written = DeckCraftNative.dc_get_slide_char_rects(
+                        _handle, (uint)index, ptr, (nuint)buffer.Length);
+                    if (written != count)
+                        throw new InvalidOperationException("PPTX slide geometry changed while being read.");
+                }
+            }
+
+            for (int i = 0; i < rects.Length; i++)
+            {
+                int offset = i * 4;
+                rects[i] = new PdfSearchRect(
+                    buffer[offset], buffer[offset + 1], buffer[offset + 2], buffer[offset + 3]);
+            }
+            return new PdfPageTextMap(index, rects);
+        }
+    }
+
+    public string GetSlideTextRange(int index, int start, int endExclusive)
+    {
+        lock (_nativeGate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            ValidateSlideIndex(index);
+            nuint count = DeckCraftNative.dc_get_slide_char_count(_handle, (uint)index);
+            if (start < 0 || endExclusive < start || (nuint)endExclusive > count)
+                throw new ArgumentOutOfRangeException(nameof(start), "The text range is outside the slide.");
+            if (start == endExclusive)
+                return string.Empty;
+
+            unsafe
+            {
+                nuint required = DeckCraftNative.dc_get_slide_text_range(
+                    _handle, (uint)index, (uint)start, (uint)endExclusive, null, 0);
+                if (required > 64 * 1024 * 1024 || required > int.MaxValue)
+                    throw new InvalidOperationException("PPTX selected text exceeds the supported size.");
+                if (required == 0)
+                    return string.Empty;
+
+                var buffer = new byte[(int)required];
+                fixed (byte* ptr = buffer)
+                {
+                    nuint written = DeckCraftNative.dc_get_slide_text_range(
+                        _handle, (uint)index, (uint)start, (uint)endExclusive,
+                        ptr, (nuint)buffer.Length);
+                    if (written != required)
+                        throw new InvalidOperationException("PPTX selected text changed while being read.");
+                }
+                return Encoding.UTF8.GetString(buffer);
+            }
+        }
+    }
+
+    private void ValidateSlideIndex(int index)
+    {
+        if ((uint)index >= DeckCraftNative.dc_slide_count(_handle))
+            throw new ArgumentOutOfRangeException(nameof(index));
     }
 
     /// <summary>

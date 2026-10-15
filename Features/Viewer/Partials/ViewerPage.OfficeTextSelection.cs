@@ -1,451 +1,416 @@
-// ViewerPage.OfficeTextSelection.cs — Text selection and copy for DOCX, PPTX, XLSX
-// Uses existing FFI search APIs to get character rectangles for drag-to-select and copy
-
+using DocGlance.Core.Models;
+using DocGlance.Infrastructure.Logging;
+using DocGlance.Rendering.Document;
+using DocGlance.Rendering.Presentation;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
-using DocGlance.Infrastructure.Logging;
-using DocGlance.Rendering.Document;
-using DocGlance.Rendering.Presentation;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
+using Windows.System;
+using Windows.UI;
 
 namespace DocGlance.Features.Viewer;
 
 public sealed partial class ViewerPage
 {
-    // ── Selection state ────────────────────────────────────────────────────────
-    private Point? _selectionStartPoint;
-    private Point? _selectionEndPoint;
-    private bool _isSelecting;
     private readonly List<Rectangle> _selectionOverlays = new();
     private string? _selectedText;
+    private OfficeTextPosition? _officeSelectionAnchor;
+    private OfficeTextPosition? _officeSelectionFocus;
+    private bool _isSelectingOfficeText;
+    private uint _officeSelectionPointerId;
 
-    // ── Selection initialization ───────────────────────────────────────────────
-    
+    private readonly record struct OfficeTextPosition(int PageIndex, int Offset);
+
     private void InitializeOfficeTextSelection()
     {
-        // Attach handlers to the DocumentScrollViewer content (where rendered pages live)
-        if (DocumentScrollViewer?.Content is Panel contentPanel)
-        {
-            contentPanel.PointerPressed += OnOfficeContentPointerPressed;
-            contentPanel.PointerMoved += OnOfficeContentPointerMoved;
-            contentPanel.PointerReleased += OnOfficeContentPointerReleased;
-            contentPanel.PointerCaptureLost += OnOfficeContentPointerCaptureLost;
-        }
-    }
+        if (DocumentScrollViewer.Content is not Panel contentPanel)
+            return;
 
-    // ── Pointer handlers ───────────────────────────────────────────────────────
+        contentPanel.PointerPressed += OnOfficeContentPointerPressed;
+        contentPanel.PointerMoved += OnOfficeContentPointerMoved;
+        contentPanel.PointerReleased += OnOfficeContentPointerReleased;
+        contentPanel.PointerCaptureLost += OnOfficeContentPointerCaptureLost;
+        contentPanel.RightTapped += OnOfficeContentRightTapped;
+
+        var copyAccelerator = new KeyboardAccelerator
+        {
+            Key = VirtualKey.C,
+            Modifiers = VirtualKeyModifiers.Control,
+        };
+        copyAccelerator.Invoked += (_, args) =>
+        {
+            if (string.IsNullOrEmpty(_selectedText) ||
+                (_docxDocument == null && _pptxDocument == null))
+                return;
+
+            CopyOfficeTextToClipboard();
+            args.Handled = true;
+        };
+        DocumentScrollViewer.KeyboardAccelerators.Add(copyAccelerator);
+    }
 
     private void OnOfficeContentPointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        // Only handle left button for text selection
-        if (!e.GetCurrentPoint(sender as UIElement).Properties.IsLeftButtonPressed)
+        if (_docxDocument == null && _pptxDocument == null)
+            return;
+        if (sender is not UIElement element ||
+            !e.GetCurrentPoint(element).Properties.IsLeftButtonPressed)
             return;
 
-        // Only enable selection in Office documents (not PDF, not text files)
-        if (_pptxDocument == null && _docxDocument == null && _spreadsheetDocument == null)
+        Point point = e.GetCurrentPoint(PdfViewportCanvas).Position;
+        if (!IsPointInsideOfficePage(point))
             return;
-
-        var point = e.GetCurrentPoint(sender as UIElement).Position;
-        _selectionStartPoint = point;
-        _selectionEndPoint = point;
-        _isSelecting = true;
-        _selectedText = null;
+        if (!TryGetOfficeTextPosition(point, out OfficeTextPosition position))
+            return;
 
         ClearOfficeSelection();
-
-        if (sender is UIElement element)
-            element.CapturePointer(e.Pointer);
-
+        _selectedText = null;
+        _officeSelectionAnchor = position;
+        _officeSelectionFocus = position;
+        _isSelectingOfficeText = true;
+        _officeSelectionPointerId = e.Pointer.PointerId;
+        element.CapturePointer(e.Pointer);
         e.Handled = true;
     }
 
     private void OnOfficeContentPointerMoved(object sender, PointerRoutedEventArgs e)
     {
-        if (!_isSelecting || _selectionStartPoint == null)
+        if (!_isSelectingOfficeText || e.Pointer.PointerId != _officeSelectionPointerId)
             return;
 
-        _selectionEndPoint = e.GetCurrentPoint(sender as UIElement).Position;
-        UpdateOfficeSelectionOverlay();
+        Point point = e.GetCurrentPoint(PdfViewportCanvas).Position;
+        if (TryGetOfficeTextPosition(point, out OfficeTextPosition position))
+        {
+            _officeSelectionFocus = position;
+            UpdateOfficeDragOverlay();
+        }
     }
 
     private void OnOfficeContentPointerReleased(object sender, PointerRoutedEventArgs e)
     {
-        if (!_isSelecting)
+        if (!_isSelectingOfficeText || e.Pointer.PointerId != _officeSelectionPointerId)
             return;
-
-        _isSelecting = false;
-        _selectionEndPoint = e.GetCurrentPoint(sender as UIElement).Position;
 
         if (sender is UIElement element)
             element.ReleasePointerCapture(e.Pointer);
 
-        // Finalize selection and extract text
-        FinalizeOfficeSelection();
+        Point point = e.GetCurrentPoint(PdfViewportCanvas).Position;
+        if (TryGetOfficeTextPosition(point, out OfficeTextPosition position))
+            _officeSelectionFocus = position;
+
+        _isSelectingOfficeText = false;
+        FinalizeOfficeTextSelection();
         e.Handled = true;
     }
 
     private void OnOfficeContentPointerCaptureLost(object sender, PointerRoutedEventArgs e)
     {
-        if (_isSelecting)
-        {
-            _isSelecting = false;
-            Logger.Log("[OfficeSelection] Pointer capture lost");
-        }
+        if (_isSelectingOfficeText && e.Pointer.PointerId == _officeSelectionPointerId)
+            _isSelectingOfficeText = false;
     }
 
-    // ── Selection overlay ──────────────────────────────────────────────────────
-
-    private void UpdateOfficeSelectionOverlay()
+    private bool TryGetOfficeTextPosition(Point canvasPoint, out OfficeTextPosition position)
     {
-        if (_selectionStartPoint == null || _selectionEndPoint == null)
+        const double PtToLp = 96.0 / 72.0;
+
+        if (_docxDocument != null)
+        {
+            int pageIndex = FindDocxPage(canvasPoint.Y);
+            if (pageIndex < 0)
+            {
+                position = default;
+                return false;
+            }
+
+            double pageY = (canvasPoint.Y - GetDocxPageTopLp(pageIndex)) / PtToLp;
+            var hit = _docxDocument.HitTest(pageIndex, canvasPoint.X / PtToLp, pageY);
+            if (hit is not { } docxHit)
+            {
+                position = default;
+                return false;
+            }
+
+            position = new OfficeTextPosition(docxHit.PageIndex, docxHit.Offset);
+            return true;
+        }
+
+        if (_pptxDocument != null && _pptxDocument.SlideCount > 0)
+        {
+            var (_, heightPt) = _pptxDocument.GetSlideSize(0);
+            double slideHeightLp = heightPt * PtToLp;
+            double stride = slideHeightLp + 12;
+            int slideIndex = Math.Clamp((int)Math.Floor((canvasPoint.Y - 20) / stride), 0, _pptxDocument.SlideCount - 1);
+            double slideTop = 20 + slideIndex * stride;
+            var map = GetPptxTextMap(slideIndex);
+            int offset = map.HitTest(canvasPoint.X / PtToLp, (canvasPoint.Y - slideTop) / PtToLp);
+            if (offset < 0)
+            {
+                position = default;
+                return false;
+            }
+
+            position = new OfficeTextPosition(slideIndex, offset);
+            return true;
+        }
+
+        position = default;
+        return false;
+    }
+
+    private bool IsPointInsideOfficePage(Point canvasPoint)
+    {
+        const double PtToLp = 96.0 / 72.0;
+        if (_docxDocument != null)
+        {
+            int pageIndex = FindDocxPage(canvasPoint.Y);
+            return pageIndex >= 0 &&
+                canvasPoint.Y >= GetDocxPageTopLp(pageIndex) &&
+                canvasPoint.Y <= GetDocxPageTopLp(pageIndex) + _docxPageHeightLp[pageIndex];
+        }
+
+        if (_pptxDocument != null && _pptxDocument.SlideCount > 0)
+        {
+            var (_, heightPt) = _pptxDocument.GetSlideSize(0);
+            double slideHeight = heightPt * PtToLp;
+            double stride = slideHeight + 12;
+            int slideIndex = (int)Math.Floor((canvasPoint.Y - 20) / stride);
+            if ((uint)slideIndex >= (uint)_pptxDocument.SlideCount)
+                return false;
+            double top = 20 + slideIndex * stride;
+            return canvasPoint.Y >= top && canvasPoint.Y <= top + slideHeight;
+        }
+        return false;
+    }
+
+    private int FindDocxPage(double canvasY)
+    {
+        if (_docxDocument == null)
+            return -1;
+
+        int nearestPage = -1;
+        double nearestDistance = double.MaxValue;
+        for (int i = 0; i < _docxPageTopLp.Length; i++)
+        {
+            double top = _docxPageTopLp[i];
+            double bottom = top + _docxPageHeightLp[i];
+            if (canvasY >= top && canvasY <= bottom)
+                return i;
+
+            double distance = canvasY < top ? top - canvasY : canvasY - bottom;
+            if (distance < nearestDistance)
+            {
+                nearestDistance = distance;
+                nearestPage = i;
+            }
+        }
+        return nearestPage;
+    }
+
+    private readonly Dictionary<int, PdfPageTextMap> _pptxTextMaps = new();
+
+    private PdfPageTextMap GetPptxTextMap(int slideIndex)
+    {
+        if (_pptxDocument == null)
+            throw new InvalidOperationException("No presentation is open.");
+        if (!_pptxTextMaps.TryGetValue(slideIndex, out var map))
+        {
+            if (_pptxTextMaps.Count >= 8)
+                _pptxTextMaps.Remove(_pptxTextMaps.Keys.First());
+            map = _pptxDocument.GetSlideTextMap(slideIndex);
+            _pptxTextMaps.Add(slideIndex, map);
+        }
+        return map;
+    }
+
+    private void UpdateOfficeDragOverlay()
+    {
+        ClearOfficeSelection();
+        if (_officeSelectionAnchor is not { } anchor || _officeSelectionFocus is not { } focus)
             return;
 
-        ClearOfficeSelection();
+        var (start, end) = CompareOfficePositions(anchor, focus) <= 0
+            ? (anchor, focus)
+            : (focus, anchor);
 
-        // Draw a temporary selection rectangle while dragging
-        var rect = GetSelectionRectangle(_selectionStartPoint.Value, _selectionEndPoint.Value);
-        if (rect.Width > 2 && rect.Height > 2)
+        for (int page = start.PageIndex; page <= end.PageIndex; page++)
         {
-            var overlay = new Rectangle
-            {
-                Fill = new SolidColorBrush(Colors.LightBlue) { Opacity = 0.3 },
-                Stroke = new SolidColorBrush(Colors.Blue) { Opacity = 0.5 },
-                StrokeThickness = 1,
-                Width = rect.Width,
-                Height = rect.Height
-            };
+            int offsetCount = _docxDocument != null
+                ? _docxDocument.GetPageTextOffsetCount(page)
+                : GetPptxTextMap(page).GlyphCount;
+            int rangeStart = page == start.PageIndex ? start.Offset : 0;
+            int rangeEnd = page == end.PageIndex ? end.Offset : offsetCount;
+            rangeStart = Math.Clamp(rangeStart, 0, offsetCount);
+            rangeEnd = Math.Clamp(rangeEnd, rangeStart, offsetCount);
+            if (rangeStart == rangeEnd)
+                continue;
 
-            Canvas.SetLeft(overlay, rect.X);
-            Canvas.SetTop(overlay, rect.Y);
-
-            if (PdfViewportCanvas != null)
+            if (_docxDocument != null)
             {
-                PdfViewportCanvas.Children.Add(overlay);
-                _selectionOverlays.Add(overlay);
+                foreach (var rect in _docxDocument.GetSelectionRects(page, rangeStart, rangeEnd))
+                    AddDocxSelectionOverlay(rect);
+            }
+            else
+            {
+                foreach (var rect in GetPptxTextMap(page).GetSelectionRects(rangeStart, rangeEnd))
+                    AddPptxSelectionOverlay(page, rect);
             }
         }
     }
 
-    private Windows.Foundation.Rect GetSelectionRectangle(Point start, Point end)
+    private void FinalizeOfficeTextSelection()
     {
-        double x = Math.Min(start.X, end.X);
-        double y = Math.Min(start.Y, end.Y);
-        double width = Math.Abs(end.X - start.X);
-        double height = Math.Abs(end.Y - start.Y);
-        return new Windows.Foundation.Rect(x, y, width, height);
+        if (_officeSelectionAnchor is not { } anchor || _officeSelectionFocus is not { } focus)
+            return;
+
+        try
+        {
+            var (start, end) = CompareOfficePositions(anchor, focus) <= 0
+                ? (anchor, focus)
+                : (focus, anchor);
+            if (start == end)
+            {
+                ClearOfficeSelection();
+                _selectedText = null;
+                return;
+            }
+
+            ClearOfficeSelection();
+            var text = new StringBuilder();
+            for (int page = start.PageIndex; page <= end.PageIndex; page++)
+            {
+                int offsetCount = _docxDocument != null
+                    ? _docxDocument.GetPageTextOffsetCount(page)
+                    : GetPptxTextMap(page).GlyphCount;
+                int rangeStart = page == start.PageIndex ? start.Offset : 0;
+                int rangeEnd = page == end.PageIndex ? end.Offset : offsetCount;
+                rangeStart = Math.Clamp(rangeStart, 0, offsetCount);
+                rangeEnd = Math.Clamp(rangeEnd, rangeStart, offsetCount);
+                if (page == start.PageIndex && page == end.PageIndex && rangeStart == rangeEnd)
+                    continue;
+
+                string pageText = _docxDocument != null
+                    ? _docxDocument.GetTextRange(page, rangeStart, rangeEnd)
+                    : _pptxDocument!.GetSlideTextRange(page, rangeStart, rangeEnd);
+                if (page > start.PageIndex && text.Length > 0)
+                    text.AppendLine();
+                text.Append(pageText);
+
+                if (_docxDocument != null)
+                {
+                    foreach (var rect in _docxDocument.GetSelectionRects(page, rangeStart, rangeEnd))
+                        AddDocxSelectionOverlay(rect);
+                }
+                else
+                {
+                    foreach (var rect in GetPptxTextMap(page).GetSelectionRects(rangeStart, rangeEnd))
+                        AddPptxSelectionOverlay(page, rect);
+                }
+            }
+
+            _selectedText = text.ToString();
+            if (!string.IsNullOrEmpty(_selectedText))
+                CopyOfficeTextToClipboard();
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("[OfficeSelection] Failed to extract selection", ex);
+            ClearOfficeSelection();
+            ShowInfoBar($"Could not select document text: {ex.Message}", InfoBarSeverity.Error);
+        }
+    }
+
+    private static int CompareOfficePositions(OfficeTextPosition left, OfficeTextPosition right)
+    {
+        int pageComparison = left.PageIndex.CompareTo(right.PageIndex);
+        return pageComparison != 0 ? pageComparison : left.Offset.CompareTo(right.Offset);
+    }
+
+    private void AddDocxSelectionOverlay(DocxDocument.DocxMatch rect)
+    {
+        const double PtToLp = 96.0 / 72.0;
+        AddOfficeSelectionOverlay(new Rect(
+            rect.X * PtToLp,
+            GetDocxPageTopLp(rect.PageIndex) + rect.Y * PtToLp,
+            rect.Width * PtToLp,
+            rect.Height * PtToLp));
+    }
+
+    private void AddPptxSelectionOverlay(int slideIndex, PdfSearchRect rect)
+    {
+        const double PtToLp = 96.0 / 72.0;
+        var (_, heightPt) = _pptxDocument!.GetSlideSize(slideIndex);
+        double slideTop = 20 + slideIndex * (heightPt * PtToLp + 12);
+        AddOfficeSelectionOverlay(new Rect(
+            rect.X * PtToLp,
+            slideTop + rect.Y * PtToLp,
+            rect.Width * PtToLp,
+            rect.Height * PtToLp));
+    }
+
+    private void AddOfficeSelectionOverlay(Rect rect)
+    {
+        if (rect.Width <= 0 || rect.Height <= 0)
+            return;
+
+        var overlay = new Rectangle
+        {
+            Fill = new SolidColorBrush(Color.FromArgb(105, 0, 120, 215)),
+            Width = rect.Width,
+            Height = rect.Height,
+            IsHitTestVisible = false,
+        };
+        Canvas.SetLeft(overlay, rect.X);
+        Canvas.SetTop(overlay, rect.Y);
+        Canvas.SetZIndex(overlay, 15);
+        PdfViewportCanvas.Children.Add(overlay);
+        _selectionOverlays.Add(overlay);
     }
 
     private void ClearOfficeSelection()
     {
-        if (PdfViewportCanvas != null)
-        {
-            foreach (var overlay in _selectionOverlays)
-                PdfViewportCanvas.Children.Remove(overlay);
-        }
+        foreach (var overlay in _selectionOverlays)
+            PdfViewportCanvas.Children.Remove(overlay);
         _selectionOverlays.Clear();
     }
 
-    // ── Selection extraction ───────────────────────────────────────────────────
-
-    private void FinalizeOfficeSelection()
+    private void OnOfficeContentRightTapped(object sender, RightTappedRoutedEventArgs e)
     {
-        if (_selectionStartPoint == null || _selectionEndPoint == null)
+        if (string.IsNullOrEmpty(_selectedText) ||
+            (_docxDocument == null && _pptxDocument == null))
             return;
 
-        var selectionRect = GetSelectionRectangle(_selectionStartPoint.Value, _selectionEndPoint.Value);
+        var flyout = new MenuFlyout();
+        var copyItem = new MenuFlyoutItem { Text = "Copy" };
+        copyItem.Click += (_, _) => CopyOfficeTextToClipboard();
+        flyout.Items.Add(copyItem);
+        flyout.ShowAt(PdfViewportCanvas, e.GetPosition(PdfViewportCanvas));
+        e.Handled = true;
+    }
 
-        // Minimum drag distance to trigger selection (avoid accidental clicks)
-        if (selectionRect.Width < 5 && selectionRect.Height < 5)
-        {
-            ClearOfficeSelection();
+    private void CopyOfficeTextToClipboard()
+    {
+        if (string.IsNullOrEmpty(_selectedText))
             return;
-        }
-
         try
         {
-            if (_pptxDocument != null)
-                ExtractPptxSelection(selectionRect);
-            else if (_docxDocument != null)
-                ExtractDocxSelection(selectionRect);
-            else if (_spreadsheetDocument != null)
-                ExtractSpreadsheetSelection(selectionRect);
-        }
-        catch (Exception ex)
-        {
-            Logger.Log($"[OfficeSelection] Error: {ex.Message}");
-        }
-    }
-
-    // ── PowerPoint selection ──────────────────────────────────────────────────
-
-    private void ExtractPptxSelection(Windows.Foundation.Rect selectionRect)
-    {
-        if (_pptxDocument == null) return;
-
-        // Get the current slide index (1-based page to 0-based index)
-        int slideIndex = _page - 1;
-        if (slideIndex < 0 || slideIndex >= _pptxDocument.SlideCount)
-            return;
-
-        // Search for a dummy character to force FFI to return all character rectangles
-        // We use the search infrastructure to get character positions
-        var allMatches = _pptxDocument.SearchText(" ", caseSensitive: false);
-
-        var selectedChars = new List<(int charIndex, int length, string text)>();
-
-        // Filter matches that intersect with selection rectangle
-        foreach (var match in allMatches.Where(m => m.SlideIndex == slideIndex))
-        {
-            foreach (var rect in match.Rects)
-            {
-                // Transform rectangle from slide coordinates to screen coordinates
-                var screenRect = TransformPptxRectToScreen(rect, slideIndex);
-
-                if (RectanglesIntersect(selectionRect, screenRect))
-                {
-                    // Extract text at this character position
-                    // For simplicity, we'll get the full slide text and extract the range
-                    selectedChars.Add((match.CharIndex, match.Length, string.Empty));
-                }
-            }
-        }
-
-        if (selectedChars.Count > 0)
-        {
-            // Get full slide text
-            string slideText = GetPptxSlideText(slideIndex);
-            _selectedText = ExtractTextFromCharIndices(slideText, selectedChars);
-
-            if (!string.IsNullOrEmpty(_selectedText))
-            {
-                CopyToClipboard(_selectedText);
-                HighlightSelection(selectedChars, slideIndex, isPptx: true);
-            }
-        }
-    }
-
-    private string GetPptxSlideText(int slideIndex)
-    {
-        if (_pptxDocument == null) return string.Empty;
-
-        try
-        {
-            // Use existing GetSlideTitle or implement full text extraction
-            return _pptxDocument.GetSlideTitle(slideIndex);
-        }
-        catch
-        {
-            return string.Empty;
-        }
-    }
-
-    private Windows.Foundation.Rect TransformPptxRectToScreen(PptxSearchRect rect, int slideIndex)
-    {
-        // Transform from slide coordinate system to screen coordinates
-        const double PtToLp = 96.0 / 72.0;
-        const double PageGapLp = 12.0;
-
-        var (slideWidthPt, slideHeightPt) = _pptxDocument!.GetSlideSize(slideIndex);
-        double slideHeightLp = slideHeightPt * PtToLp;
-
-        // Calculate Y offset for this slide
-        double yOffset = slideIndex * (slideHeightLp + PageGapLp) + PageGapLp;
-
-        // Apply zoom
-        double scale = _zoom;
-
-        return new Windows.Foundation.Rect(
-            rect.X * PtToLp * scale,
-            (yOffset + rect.Y * PtToLp) * scale,
-            rect.Width * PtToLp * scale,
-            rect.Height * PtToLp * scale
-        );
-    }
-
-    // ── Word selection ─────────────────────────────────────────────────────────
-
-    private void ExtractDocxSelection(Windows.Foundation.Rect selectionRect)
-    {
-        if (_docxDocument == null) return;
-
-        // Similar approach: use search to get all character rectangles
-        var allMatches = _docxDocument.SearchText(" ", caseSensitive: false);
-
-        var selectedChars = new List<(int pageIndex, double x, double y)>();
-
-        foreach (var match in allMatches)
-        {
-            foreach (var rect in match.Rects)
-            {
-                var screenRect = TransformDocxRectToScreen(rect.PageIndex, rect.X, rect.Y, rect.Width, rect.Height);
-
-                if (RectanglesIntersect(selectionRect, screenRect))
-                {
-                    selectedChars.Add((rect.PageIndex, rect.X, rect.Y));
-                }
-            }
-        }
-
-        if (selectedChars.Count > 0)
-        {
-            // Get text from the selected page(s)
-            var pageIndices = selectedChars.Select(c => c.pageIndex).Distinct().OrderBy(p => p);
-            var textBuilder = new StringBuilder();
-
-            foreach (int pageIndex in pageIndices)
-            {
-                string pageText = _docxDocument.ExtractPageText(pageIndex);
-                textBuilder.AppendLine(pageText);
-            }
-
-            _selectedText = textBuilder.ToString().Trim();
-
-            if (!string.IsNullOrEmpty(_selectedText))
-            {
-                CopyToClipboard(_selectedText);
-                HighlightDocxSelection(selectedChars);
-            }
-        }
-    }
-
-    private Windows.Foundation.Rect TransformDocxRectToScreen(int pageIndex, double x, double y, double width, double height)
-    {
-        const double PtToLp = 96.0 / 72.0;
-
-        // Get the top position of this page
-        double pageTopLp = GetDocxPageTopLp(pageIndex);
-
-        // Apply zoom
-        double scale = _zoom;
-
-        return new Windows.Foundation.Rect(
-            x * PtToLp * scale,
-            (pageTopLp + y * PtToLp) * scale,
-            width * PtToLp * scale,
-            height * PtToLp * scale
-        );
-    }
-
-    // ── Excel selection ────────────────────────────────────────────────────────
-
-    private void ExtractSpreadsheetSelection(Windows.Foundation.Rect selectionRect)
-    {
-        if (_spreadsheetDocument == null) return;
-
-        // For spreadsheets, selection works at cell level
-        // Get the current sheet
-        int sheetIndex = SpreadsheetViewerControl.ActiveSheetIndex;
-        string sheetText = _spreadsheetDocument.ExtractSheetText(sheetIndex);
-
-        // For now, copy the full sheet text (cell-level selection is more complex)
-        // TODO: Implement cell-based selection using visual coordinates
-        _selectedText = sheetText;
-
-        if (!string.IsNullOrEmpty(_selectedText))
-        {
-            CopyToClipboard(_selectedText);
-            Logger.Log($"[OfficeSelection] Copied spreadsheet text: {_selectedText.Length} chars");
-        }
-    }
-
-    // ── Helper methods ─────────────────────────────────────────────────────────
-
-    private bool RectanglesIntersect(Windows.Foundation.Rect r1, Windows.Foundation.Rect r2)
-    {
-        return !(r1.Right < r2.Left ||
-                 r1.Left > r2.Right ||
-                 r1.Bottom < r2.Top ||
-                 r1.Top > r2.Bottom);
-    }
-
-    private string ExtractTextFromCharIndices(string fullText, List<(int charIndex, int length, string text)> chars)
-    {
-        if (chars.Count == 0) return string.Empty;
-
-        // Sort by character index
-        var sorted = chars.OrderBy(c => c.charIndex).ToList();
-
-        // Merge overlapping or adjacent ranges
-        var ranges = new List<(int start, int end)>();
-        int currentStart = sorted[0].charIndex;
-        int currentEnd = sorted[0].charIndex + sorted[0].length;
-
-        for (int i = 1; i < sorted.Count; i++)
-        {
-            int start = sorted[i].charIndex;
-            int end = start + sorted[i].length;
-
-            if (start <= currentEnd + 1)
-            {
-                // Merge
-                currentEnd = Math.Max(currentEnd, end);
-            }
-            else
-            {
-                ranges.Add((currentStart, currentEnd));
-                currentStart = start;
-                currentEnd = end;
-            }
-        }
-        ranges.Add((currentStart, currentEnd));
-
-        // Extract text
-        var result = new StringBuilder();
-        foreach (var (start, end) in ranges)
-        {
-            int length = end - start;
-            if (start >= 0 && start < fullText.Length)
-            {
-                int actualLength = Math.Min(length, fullText.Length - start);
-                result.Append(fullText.Substring(start, actualLength));
-            }
-        }
-
-        return result.ToString();
-    }
-
-    private void HighlightSelection(List<(int charIndex, int length, string text)> chars, int slideIndex, bool isPptx)
-    {
-        // Visual feedback: highlight the selected text
-        ClearOfficeSelection();
-
-        // TODO: Draw individual character rectangles
-        // For now, we just keep the drag rectangle
-        Logger.Log($"[OfficeSelection] Selected {chars.Count} character ranges");
-    }
-
-    private void HighlightDocxSelection(List<(int pageIndex, double x, double y)> chars)
-    {
-        ClearOfficeSelection();
-        Logger.Log($"[OfficeSelection] Selected {chars.Count} characters from Word document");
-    }
-
-    private void CopyToClipboard(string text)
-    {
-        try
-        {
-            var dataPackage = new DataPackage();
-            dataPackage.SetText(text);
-            Clipboard.SetContent(dataPackage);
+            var data = new DataPackage();
+            data.SetText(_selectedText);
+            Clipboard.SetContent(data);
             Clipboard.Flush();
-
-            Logger.Log($"[OfficeSelection] Copied to clipboard: {text.Length} chars");
-            
-            // Optional: Show a toast notification
-            // ShowInfoBar("Text copied to clipboard", InfoBarSeverity.Success);
         }
         catch (Exception ex)
         {
-            Logger.Log($"[OfficeSelection] Clipboard error: {ex.Message}");
+            Logger.Error("[OfficeSelection] Could not copy selection", ex);
+            ShowInfoBar($"Could not copy selected text: {ex.Message}", InfoBarSeverity.Error);
         }
     }
 }

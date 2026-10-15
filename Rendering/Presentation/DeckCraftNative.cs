@@ -116,6 +116,27 @@ internal static partial class DeckCraftNative
         byte* buf,
         nuint bufLen);
 
+    [LibraryImport(Dll)]
+    internal static partial nuint dc_get_slide_char_count(
+        DcDocumentHandle doc,
+        uint index);
+
+    [LibraryImport(Dll)]
+    internal static unsafe partial nuint dc_get_slide_char_rects(
+        DcDocumentHandle doc,
+        uint index,
+        double* buf,
+        nuint bufCapacity);
+
+    [LibraryImport(Dll)]
+    internal static unsafe partial nuint dc_get_slide_text_range(
+        DcDocumentHandle doc,
+        uint index,
+        uint start,
+        uint end,
+        byte* buf,
+        nuint bufLen);
+
     /// <summary>
     /// Search for text across all slides.
     /// Returns semicolon-separated matches: "slideIndex,charIndex,length;..."

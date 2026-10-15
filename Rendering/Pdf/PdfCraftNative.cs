@@ -74,6 +74,31 @@ internal static class PdfCraftNative
         IntPtr doc, uint index, IntPtr buffer, nuint bufferLen);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern uint pc_get_page_char_count(IntPtr doc, uint pageIndex);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern nuint pc_get_page_glyph_rects(
+        IntPtr doc, uint pageIndex, IntPtr buffer, nuint bufferCapacity);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern nuint pc_get_text_range(
+        IntPtr doc, uint pageIndex, uint startOffset, uint endOffset,
+        IntPtr buffer, nuint bufferLen);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern PcPdfBuffer pc_add_text_annotation(
+        IntPtr doc, uint pageIndex, uint kind, IntPtr rects, nuint rectsLen,
+        IntPtr contents, nuint contentsLen);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern uint pc_count_removable_annotations(
+        IntPtr doc, uint pageIndex, IntPtr rects, nuint rectsLen);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern PcPdfBuffer pc_delete_text_annotations(
+        IntPtr doc, uint pageIndex, IntPtr rects, nuint rectsLen);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     internal static extern nuint pc_search_text(
         IntPtr doc, IntPtr query, nuint queryLen, [MarshalAs(UnmanagedType.U1)] bool caseSensitive,
         IntPtr buffer, nuint bufferLen);

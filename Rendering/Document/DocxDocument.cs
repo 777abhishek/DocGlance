@@ -164,6 +164,122 @@ public sealed class DocxDocument : IDisposable
         }
     }
 
+    public readonly record struct DocxTextPosition(int PageIndex, int Offset);
+
+    public int GetPageTextOffsetCount(int pageIndex)
+    {
+        lock (_nativeGate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            ValidatePageIndex(pageIndex);
+            return checked((int)WordCraftNative.wc_get_page_char_count(_handle, (uint)pageIndex));
+        }
+    }
+
+    public DocxTextPosition? HitTest(int pageIndex, double xPt, double yPt)
+    {
+        lock (_nativeGate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            ValidatePageIndex(pageIndex);
+            unsafe
+            {
+                WordCraftNative.WcTextPosition position = default;
+                if (!WordCraftNative.wc_hit_test(
+                        _handle, (uint)pageIndex, xPt, yPt, &position))
+                    return null;
+                return new DocxTextPosition((int)position.Page, checked((int)position.Offset));
+            }
+        }
+    }
+
+    public IReadOnlyList<DocxMatch> GetSelectionRects(int pageIndex, int startOffset, int endOffset)
+    {
+        lock (_nativeGate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            ValidatePageIndex(pageIndex);
+            int offsetCount = checked((int)WordCraftNative.wc_get_page_char_count(_handle, (uint)pageIndex));
+            ValidateTextRange(startOffset, endOffset, offsetCount);
+            if (startOffset == endOffset)
+                return Array.Empty<DocxMatch>();
+
+            unsafe
+            {
+                nuint required = WordCraftNative.wc_get_selection_rects(
+                    _handle, (uint)pageIndex, (uint)startOffset, (uint)endOffset, null, 0);
+                if (required == 0)
+                    return Array.Empty<DocxMatch>();
+                if (required > 4_000_000 || required > int.MaxValue || required % 4 != 0)
+                    throw new InvalidOperationException("DOCX selection geometry exceeds the supported size.");
+
+                var buffer = new float[(int)required];
+                fixed (float* ptr = buffer)
+                {
+                    nuint written = WordCraftNative.wc_get_selection_rects(
+                        _handle, (uint)pageIndex, (uint)startOffset, (uint)endOffset,
+                        ptr, (nuint)buffer.Length);
+                    if (written != required)
+                        throw new InvalidOperationException("DOCX selection geometry changed while being read.");
+                }
+
+                var rects = new List<DocxMatch>(buffer.Length / 4);
+                for (int i = 0; i < buffer.Length; i += 4)
+                {
+                    if (buffer[i + 2] > 0 && buffer[i + 3] > 0)
+                        rects.Add(new DocxMatch(pageIndex, buffer[i], buffer[i + 1], buffer[i + 2], buffer[i + 3]));
+                }
+                return rects;
+            }
+        }
+    }
+
+    public string GetTextRange(int pageIndex, int startOffset, int endOffset)
+    {
+        lock (_nativeGate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            ValidatePageIndex(pageIndex);
+            int offsetCount = checked((int)WordCraftNative.wc_get_page_char_count(_handle, (uint)pageIndex));
+            ValidateTextRange(startOffset, endOffset, offsetCount);
+            if (startOffset == endOffset)
+                return string.Empty;
+
+            unsafe
+            {
+                nuint required = WordCraftNative.wc_get_text_range(
+                    _handle, (uint)pageIndex, (uint)startOffset, (uint)endOffset, null, 0);
+                if (required == 0)
+                    return string.Empty;
+                if (required > 64 * 1024 * 1024 || required > int.MaxValue)
+                    throw new InvalidOperationException("DOCX selected text exceeds the supported size.");
+
+                var buffer = new byte[(int)required];
+                fixed (byte* ptr = buffer)
+                {
+                    nuint written = WordCraftNative.wc_get_text_range(
+                        _handle, (uint)pageIndex, (uint)startOffset, (uint)endOffset,
+                        ptr, (nuint)buffer.Length);
+                    if (written != required)
+                        throw new InvalidOperationException("DOCX selected text changed while being read.");
+                }
+                return Encoding.UTF8.GetString(buffer);
+            }
+        }
+    }
+
+    private void ValidatePageIndex(int pageIndex)
+    {
+        if ((uint)pageIndex >= WordCraftNative.wc_page_count(_handle))
+            throw new ArgumentOutOfRangeException(nameof(pageIndex));
+    }
+
+    private static void ValidateTextRange(int startOffset, int endOffset, int offsetCount)
+    {
+        if (startOffset < 0 || endOffset < startOffset || endOffset > offsetCount)
+            throw new ArgumentOutOfRangeException(nameof(startOffset), "The text range is outside the page.");
+    }
+
     public record DocxMatch(int PageIndex, double X, double Y, double Width, double Height);
 
     public sealed record DocxSearchMatch(int MatchIndex, IReadOnlyList<DocxMatch> Rects);

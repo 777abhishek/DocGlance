@@ -306,6 +306,10 @@
                         <!-- Canvas for search highlight overlays -->
                         <Canvas x:Name="SearchHighlightCanvas"
                             IsHitTestVisible="False"/>
+
+                        <!-- Selection is independent from search highlights and never intercepts input. -->
+                        <Canvas x:Name="PdfSelectionCanvas"
+                            IsHitTestVisible="False"/>
                     </Canvas>
                 </ScrollViewer>
 
@@ -501,23 +505,23 @@
                             Width="30" Height="30" Padding="0" CornerRadius="6"
                             Background="Transparent" BorderThickness="0"
                             Click="MatchCaseButton_Click"
-                            ToolTipService.ToolTip="Match case (Alt+C)">
+                            ToolTipService.ToolTip="Match case">
                             <TextBlock Text="Aa" FontSize="11" FontWeight="SemiBold"
                                 VerticalAlignment="Center" HorizontalAlignment="Center"/>
                         </ToggleButton>
                         <Button Width="30" Height="30" Padding="0" CornerRadius="6"
                             Background="Transparent"
-                            Click="FindPrev_Click" ToolTipService.ToolTip="Previous (Shift+Enter)">
+                            Click="FindPrev_Click" ToolTipService.ToolTip="Previous">
                             <FontIcon Glyph="&#xE70E;" FontSize="11"/>
                         </Button>
                         <Button Width="30" Height="30" Padding="0" CornerRadius="6"
                             Background="Transparent"
-                            Click="FindNext_Click" ToolTipService.ToolTip="Next (Enter)">
+                            Click="FindNext_Click" ToolTipService.ToolTip="Next">
                             <FontIcon Glyph="&#xE70D;" FontSize="11"/>
                         </Button>
                         <Button Width="30" Height="30" Padding="0" CornerRadius="6"
                             Background="Transparent"
-                            Click="FindClose_Click" ToolTipService.ToolTip="Close (Esc)">
+                            Click="FindClose_Click" ToolTipService.ToolTip="Close">
                             <FontIcon Glyph="&#xE711;" FontSize="11"/>
                         </Button>
                     </StackPanel>
@@ -533,7 +537,7 @@
                     <StackPanel Orientation="Horizontal" Spacing="0" VerticalAlignment="Center">
                         <Button Style="{StaticResource PillButtonStyle}"
                             Click="ZoomOutButton_Click"
-                            ToolTipService.ToolTip="Zoom out (Ctrl+-)">
+                            ToolTipService.ToolTip="Zoom out">
                             <FontIcon Glyph="&#xE738;" FontSize="13"/>
                         </Button>
                         <Button x:Name="ZoomLabelButton"
@@ -559,7 +563,7 @@
                         </Button>
                         <Button Style="{StaticResource PillButtonStyle}"
                             Click="ZoomInButton_Click"
-                            ToolTipService.ToolTip="Zoom in (Ctrl+Shift+=)">
+                            ToolTipService.ToolTip="Zoom in">
                             <FontIcon Glyph="&#xE710;" FontSize="13"/>
                         </Button>
                     </StackPanel>

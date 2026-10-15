@@ -44,6 +44,7 @@ public sealed partial class ViewerPage
     private void Rotate(double delta)
     {
         _rotation = (_rotation + delta + 360.0) % 360.0;
+        ClearPdfTextSelection();
         ViewModel.Rotation = _rotation;
 
         // VIEWPORT ARCHITECTURE: rotation swaps page axes (90°/270°), so the

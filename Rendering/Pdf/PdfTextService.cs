@@ -12,6 +12,130 @@ namespace DocGlance.Rendering.Pdf;
 /// <summary>Searches PDF text through the PdfCraft native API.</summary>
 public static class PdfTextService
 {
+    public static Task<PdfPageTextMap> GetPageTextMapAsync(
+        PdfDocumentState state,
+        int pageIndex,
+        CancellationToken cancellationToken = default)
+    {
+        if (state == null)
+            throw new ArgumentNullException(nameof(state));
+        if ((uint)pageIndex >= (uint)state.PageCount)
+            throw new ArgumentOutOfRangeException(nameof(pageIndex));
+        if (state.ManagedPdfDocument != null)
+            throw new NotSupportedException("Text selection is unavailable for password-protected PDFs.");
+
+        return Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var (handle, lease) = state.BeginNativeCall();
+            if (lease == null)
+                throw new ObjectDisposedException(nameof(PdfDocumentState));
+
+            try
+            {
+                uint glyphCount = PdfCraftNative.pc_get_page_char_count(handle, (uint)pageIndex);
+                if (glyphCount > int.MaxValue / 4)
+                    throw new InvalidOperationException("The PDF page contains too many text glyphs.");
+
+                int floatCount = checked((int)glyphCount * 4);
+                if (floatCount == 0)
+                    return new PdfPageTextMap(pageIndex, Array.Empty<PdfSearchRect>());
+
+                int byteCount = checked(floatCount * sizeof(float));
+                IntPtr outputPtr = Marshal.AllocHGlobal(byteCount);
+                try
+                {
+                    nuint written = PdfCraftNative.pc_get_page_glyph_rects(
+                        handle, (uint)pageIndex, outputPtr, (nuint)floatCount);
+                    if (written != (nuint)floatCount)
+                        throw new InvalidOperationException(
+                            $"PDF text geometry changed while loading page {pageIndex + 1}.");
+
+                    float[] values = new float[floatCount];
+                    Marshal.Copy(outputPtr, values, 0, values.Length);
+                    var rects = new PdfSearchRect[(int)glyphCount];
+                    for (int i = 0; i < rects.Length; i++)
+                    {
+                        rects[i] = new PdfSearchRect(
+                            values[i * 4],
+                            values[i * 4 + 1],
+                            values[i * 4 + 2],
+                            values[i * 4 + 3]);
+                    }
+                    return new PdfPageTextMap(pageIndex, rects);
+                }
+                finally
+                {
+                    Marshal.FreeHGlobal(outputPtr);
+                }
+            }
+            finally
+            {
+                lease.Dispose();
+            }
+        }, cancellationToken);
+    }
+
+    public static Task<string> GetTextRangeAsync(
+        PdfDocumentState state,
+        int pageIndex,
+        int start,
+        int endExclusive,
+        CancellationToken cancellationToken = default)
+    {
+        if (state == null)
+            throw new ArgumentNullException(nameof(state));
+        if ((uint)pageIndex >= (uint)state.PageCount)
+            throw new ArgumentOutOfRangeException(nameof(pageIndex));
+        if (start < 0 || endExclusive < start)
+            throw new ArgumentOutOfRangeException(nameof(start));
+        if (state.ManagedPdfDocument != null)
+            throw new NotSupportedException("Text copying is unavailable for password-protected PDFs.");
+        if (start == endExclusive)
+            return Task.FromResult(string.Empty);
+
+        return Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var (handle, lease) = state.BeginNativeCall();
+            if (lease == null)
+                throw new ObjectDisposedException(nameof(PdfDocumentState));
+
+            try
+            {
+                nuint required = PdfCraftNative.pc_get_text_range(
+                    handle, (uint)pageIndex, (uint)start, (uint)endExclusive,
+                    IntPtr.Zero, 0);
+                if (required == 0)
+                    return string.Empty;
+                if (required > int.MaxValue)
+                    throw new InvalidOperationException("The selected PDF text is too large to copy.");
+
+                IntPtr outputPtr = Marshal.AllocHGlobal((int)required);
+                try
+                {
+                    nuint written = PdfCraftNative.pc_get_text_range(
+                        handle, (uint)pageIndex, (uint)start, (uint)endExclusive,
+                        outputPtr, required);
+                    if (written != required)
+                        throw new InvalidOperationException("The selected PDF text changed while copying.");
+
+                    byte[] bytes = new byte[(int)written];
+                    Marshal.Copy(outputPtr, bytes, 0, bytes.Length);
+                    return Encoding.UTF8.GetString(bytes);
+                }
+                finally
+                {
+                    Marshal.FreeHGlobal(outputPtr);
+                }
+            }
+            finally
+            {
+                lease.Dispose();
+            }
+        }, cancellationToken);
+    }
+
     public static async Task<IReadOnlyList<PdfSearchResult>> SearchAsync(
         PdfDocumentState state,
         string query,

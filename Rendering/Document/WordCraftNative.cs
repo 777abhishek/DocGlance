@@ -53,6 +53,15 @@ internal static partial class WordCraftNative
         public nuint Len;       // == Width * Height * 4
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct WcTextPosition
+    {
+        public uint Page;
+        public uint Offset;
+        public uint Reserved1;
+        public uint Reserved2;
+    }
+
     // ── Imports ───────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -116,6 +125,38 @@ internal static partial class WordCraftNative
         [MarshalAs(UnmanagedType.U1)] bool caseSensitive,
         byte* buf,
         nuint bufLen);
+
+    [LibraryImport(Dll)]
+    [return: MarshalAs(UnmanagedType.U1)]
+    internal static unsafe partial bool wc_hit_test(
+        WcDocumentHandle doc,
+        uint pageIndex,
+        double x,
+        double y,
+        WcTextPosition* position);
+
+    [LibraryImport(Dll)]
+    internal static partial uint wc_get_page_char_count(
+        WcDocumentHandle doc,
+        uint pageIndex);
+
+    [LibraryImport(Dll)]
+    internal static unsafe partial nuint wc_get_selection_rects(
+        WcDocumentHandle doc,
+        uint pageIndex,
+        uint startOffset,
+        uint endOffset,
+        float* buffer,
+        nuint bufferCapacity);
+
+    [LibraryImport(Dll)]
+    internal static unsafe partial nuint wc_get_text_range(
+        WcDocumentHandle doc,
+        uint pageIndex,
+        uint startOffset,
+        uint endOffset,
+        byte* buffer,
+        nuint bufferLen);
 
     /// <summary>
     /// Free pixel buffer returned by wc_render_page.

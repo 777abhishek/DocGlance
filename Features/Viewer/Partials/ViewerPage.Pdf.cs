@@ -65,6 +65,11 @@ public sealed partial class ViewerPage
         _spreadsheetSearchCts?.Cancel();
         _spreadsheetSearchGeneration++;
         ClearSpreadsheetSearch();
+        ClearOfficeSelection();
+        _selectedText = null;
+        _officeSelectionAnchor = null;
+        _officeSelectionFocus = null;
+        _pptxTextMaps.Clear();
         SpreadsheetViewerControl.Cleanup();
         _spreadsheetDocument?.Dispose();
         _spreadsheetDocument = null;
@@ -500,6 +505,7 @@ public sealed partial class ViewerPage
 
             // Clear any existing PPTX slides
             ClearPptxCache();
+            _pptxTextMaps.Clear();
             
             if (!DocGlance.Rendering.Presentation.DeckCraftNative.IsAvailable)
             {
@@ -1062,6 +1068,7 @@ public sealed partial class ViewerPage
 
             DocumentScrollViewer.ViewChanged -= OnDocxViewportChanged;
             ClearDocxCache();
+            _pptxTextMaps.Clear();
             _docxDocument?.Dispose();
             _docxDocument = await DocGlance.Rendering.Document.DocxDocument.OpenAsync(filePath, ct);
 
