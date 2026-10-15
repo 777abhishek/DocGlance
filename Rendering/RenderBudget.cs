@@ -72,7 +72,7 @@ internal static class RenderBudget
         // For high-DPI (150% = 144 DPI): 144/72 = 2.0
         
         // Base calculation: convert display DPI to scale factor (1:1 with screen pixels)
-        double s = zoom * (96.0 / 72.0) * rasterizationScale;
+        double s = zoom * (96.0 / 72.0) * rasterizationScale * TextOversample;
         
         // Budget is the cap only - no quantization, no minimum floor
         double bytes = PixelBytes(widthPt, heightPt, s);

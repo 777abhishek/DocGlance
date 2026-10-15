@@ -1040,6 +1040,7 @@ public sealed partial class ViewerPage
     // ══════════════════════════════════════════════════════════════════════════
 
     private readonly Dictionary<int, Image> _docxPageCache = new();
+    private readonly Dictionary<int, double> _docxPageScale = new();
     private double[] _docxPageTopLp = Array.Empty<double>();
     private double[] _docxPageWidthLp = Array.Empty<double>();
     private double[] _docxPageHeightLp = Array.Empty<double>();
@@ -1294,7 +1295,6 @@ public sealed partial class ViewerPage
 
         try
         {
-            const double PtToLp = 96.0 / 72.0;
             var (firstPage, lastPage) = GetVisibleDocxPageRange();
             if (firstPage < 0) return;
 
@@ -1310,15 +1310,17 @@ public sealed partial class ViewerPage
                 double h = _docxPageHeightLp[i];
                 double y = GetDocxPageTopLp(i);
 
-                if (i >= renderStart && i <= renderEnd && !_docxPageCache.ContainsKey(i))
+                if (i >= renderStart && i <= renderEnd)
                 {
-                    // Render above the display's pixel density for crisp text,
-                    // while capping resolution to keep page memory bounded.
-                    double renderScale = Math.Clamp(
-                        Math.Max(1.5, _zoom * DisplayScale * PtToLp * 1.25),
-                        1.5,
-                        6.0);
-                    
+                    var (widthPt, heightPt) = _docxDocument.GetPageSize(i);
+                    double renderScale = RenderBudget.OfficeScale(
+                        _zoom, DisplayScale, widthPt, heightPt);
+                    bool needsRender = !_docxPageCache.ContainsKey(i) ||
+                        !_docxPageScale.TryGetValue(i, out double cachedScale) ||
+                        RenderBudget.NeedsRerenderScale(cachedScale, renderScale);
+                    if (!needsRender)
+                        continue;
+
                     var bmp = await _docxDocument.RenderPageAsync(i, renderScale, ct);
                     if (bmp == null) continue;
 
@@ -1328,20 +1330,28 @@ public sealed partial class ViewerPage
                         Width = w,
                         Height = h,
                         Stretch = Microsoft.UI.Xaml.Media.Stretch.Fill,
+                        UseLayoutRounding = true,
                     };
 
                     Microsoft.UI.Xaml.Controls.Canvas.SetLeft(image, 0);
                     Microsoft.UI.Xaml.Controls.Canvas.SetTop(image, y);
                     Canvas.SetZIndex(image, 0);
 
+                    if (_docxPageCache.TryGetValue(i, out var oldImage))
+                    {
+                        PdfViewportCanvas.Children.Remove(oldImage);
+                        if (oldImage.Source is WriteableBitmap oldBitmap)
+                            oldImage.Source = null;
+                    }
                     PdfViewportCanvas.Children.Add(image);
                     _docxPageCache[i] = image;
+                    _docxPageScale[i] = renderScale;
                 }
             }
 
-            // Remove pages far from viewport
+            // The rendered range already includes one page of look-ahead on each side.
             var toRemove = _docxPageCache.Keys.Where(idx =>
-                idx < renderStart - 2 || idx > renderEnd + 2).ToList();
+                idx < renderStart || idx > renderEnd).ToList();
 
             foreach (int idx in toRemove)
             {
@@ -1351,6 +1361,7 @@ public sealed partial class ViewerPage
                     if (img.Source is WriteableBitmap bmp)
                         img.Source = null;
                     _docxPageCache.Remove(idx);
+                    _docxPageScale.Remove(idx);
                 }
             }
         }
@@ -1377,6 +1388,7 @@ public sealed partial class ViewerPage
                 img.Source = null;
         }
         _docxPageCache.Clear();
+        _docxPageScale.Clear();
     }
 
     private async Task LoadDocxThumbnailsAsync()

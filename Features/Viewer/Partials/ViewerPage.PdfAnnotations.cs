@@ -29,7 +29,18 @@ public sealed partial class ViewerPage
         string label,
         PdfTextAnnotationKind kind)
     {
-        var item = new MenuFlyoutItem { Text = label };
+        var icon = kind switch
+        {
+            PdfTextAnnotationKind.Highlight => Symbol.Highlight,
+            PdfTextAnnotationKind.Underline => Symbol.Font,
+            PdfTextAnnotationKind.Strikeout => Symbol.Remove,
+            _ => Symbol.Edit,
+        };
+        var item = new MenuFlyoutItem
+        {
+            Text = label,
+            Icon = new SymbolIcon(icon),
+        };
         item.Click += async (_, _) => await AddPdfMarkupAsync(kind);
         menu.Items.Add(item);
     }

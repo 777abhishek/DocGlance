@@ -389,7 +389,11 @@ public sealed partial class ViewerPage
             return;
 
         var flyout = new MenuFlyout();
-        var copyItem = new MenuFlyoutItem { Text = "Copy" };
+        var copyItem = new MenuFlyoutItem
+        {
+            Text = "Copy",
+            Icon = new SymbolIcon(Symbol.Copy),
+        };
         copyItem.Click += (_, _) => CopyOfficeTextToClipboard();
         flyout.Items.Add(copyItem);
         flyout.ShowAt(PdfViewportCanvas, e.GetPosition(PdfViewportCanvas));

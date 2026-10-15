@@ -247,13 +247,14 @@
                         </MenuFlyoutItem>
 
                         <MenuFlyoutItem
-                            Text="Keyboard shortcuts"
-                            Click="KeyboardShortcutsMenuItem_Click">
+                            Text="Bookmark this page"
+                            Click="BookmarkMenuItem_Click">
                             <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE765;" FontSize="20"/>
+                                <FontIcon Glyph="&#xE718;" FontSize="20"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 
+                        <MenuFlyoutSeparator/>
                         <MenuFlyoutItem
                             Text="Print"
                             Click="PrintMenuItem_Click">
@@ -274,10 +275,11 @@
                             Text="Copy file path"
                             Click="CopyPathMenuItem_Click">
                             <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE8C8;" FontSize="20"/>
+                                <FontIcon Glyph="&#xE71B;" FontSize="20"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 
+                        <MenuFlyoutSeparator/>
                         <MenuFlyoutItem
                             Text="Open with default app"
                             Click="OpenExternalButton_Click">
@@ -300,11 +302,12 @@
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 
+                        <MenuFlyoutSeparator/>
                         <MenuFlyoutItem
-                            Text="Bookmark this page"
-                            Click="BookmarkMenuItem_Click">
+                            Text="Document tools"
+                            Click="ToolsMenuItem_Click">
                             <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE718;" FontSize="20"/>
+                                <FontIcon Glyph="&#xE90F;" FontSize="20"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 
@@ -317,10 +320,10 @@
                         </MenuFlyoutItem>
 
                         <MenuFlyoutItem
-                            Text="Document Tools"
-                            Click="ToolsMenuItem_Click">
+                            Text="Keyboard shortcuts"
+                            Click="KeyboardShortcutsMenuItem_Click">
                             <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE90F;" FontSize="20"/>
+                                <FontIcon Glyph="&#xE765;" FontSize="20"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 

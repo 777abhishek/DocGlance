@@ -538,7 +538,11 @@ public sealed partial class ViewerPage
         AddPdfAnnotationMenuItem(menu, "Highlight", PdfTextAnnotationKind.Highlight);
         AddPdfAnnotationMenuItem(menu, "Underline", PdfTextAnnotationKind.Underline);
         AddPdfAnnotationMenuItem(menu, "Strikeout", PdfTextAnnotationKind.Strikeout);
-        var noteItem = new MenuFlyoutItem { Text = "Add note" };
+        var noteItem = new MenuFlyoutItem
+        {
+            Text = "Add note",
+            Icon = new SymbolIcon(Symbol.Comment),
+        };
         noteItem.Click += async (_, _) => await AddPdfNoteAsync();
         menu.Items.Add(noteItem);
         if (deletableCount > 0)

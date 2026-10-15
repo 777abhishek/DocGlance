@@ -1064,10 +1064,14 @@ public sealed partial class SpreadsheetViewer : UserControl
             SetCellSelection(row, col, row, col);
 
         var flyout = new MenuFlyout();
-        var copyItem = new MenuFlyoutItem { Text = "Copy" };
+        var copyItem = new MenuFlyoutItem
+        {
+            Text = "Copy",
+            Icon = new SymbolIcon(Symbol.Copy),
+        };
         copyItem.Click += (_, _) => CopySelectionToClipboard();
         flyout.Items.Add(copyItem);
-        flyout.ShowAt(CellScroll);
+        flyout.ShowAt(CellScroll, point);
         e.Handled = true;
     }
 
