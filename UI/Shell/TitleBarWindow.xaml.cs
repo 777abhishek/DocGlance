@@ -48,6 +48,8 @@ public sealed partial class TitleBarWindow : Window
     private bool _homePageInitialized;
     private bool _homePageInitializationQueued;
     private bool _isPresentationMode;
+    private bool _windowCloseFlushInProgress;
+    private bool _allowWindowClose;
     private Visibility _tabsVisibilityBeforePresentation;
     private Visibility _updateBannerVisibilityBeforePresentation;
 
@@ -321,15 +323,19 @@ public sealed partial class TitleBarWindow : Window
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBarDragArea);
         Title = "DocGlance";
-        
+        AppWindow.Closing += AppWindow_Closing;
 
         // Track active window
-        Activated += (s, e) =>
+        Activated += async (s, e) =>
         {
             if (e.WindowActivationState != WindowActivationState.Deactivated)
             {
                 Current = this;
+                return;
             }
+
+            foreach (var (viewer, _) in _tabData.Values.ToArray())
+                await viewer.FlushPendingPdfAnnotationsAsync();
         };
         
         // Save session and release the custom backdrop controller when the window closes.
@@ -360,6 +366,36 @@ public sealed partial class TitleBarWindow : Window
         if (Content is FrameworkElement root)
         {
             root.ActualThemeChanged += (s, e) => ConfigureTitleBarTheme();
+        }
+
+    }
+
+    private async void AppWindow_Closing(
+        object sender,
+        Microsoft.UI.Windowing.AppWindowClosingEventArgs e)
+    {
+        if (_allowWindowClose)
+            return;
+
+        e.Cancel = true;
+        if (_windowCloseFlushInProgress)
+            return;
+
+        _windowCloseFlushInProgress = true;
+        try
+        {
+            foreach (var (viewer, _) in _tabData.Values.ToArray())
+            {
+                if (!await viewer.FlushPendingPdfAnnotationsAsync())
+                    return;
+            }
+
+            _allowWindowClose = true;
+            Close();
+        }
+        finally
+        {
+            _windowCloseFlushInProgress = false;
         }
     }
 
@@ -682,13 +718,17 @@ public sealed partial class TitleBarWindow : Window
         }
     }
 
-    private void Tabs_TabCloseRequested(TabView sender, TabViewTabCloseRequestedEventArgs args)
+    private async void Tabs_TabCloseRequested(TabView sender, TabViewTabCloseRequestedEventArgs args)
     {
-        CloseTab(args.Tab);
+        await CloseTabAsync(args.Tab);
     }
 
-    private void CloseTab(TabViewItem tab)
+    private async Task CloseTabAsync(TabViewItem tab)
     {
+        if (_tabData.TryGetValue(tab, out var documentData) &&
+            !await documentData.viewer.FlushPendingPdfAnnotationsAsync())
+            return;
+
         // Handle closing Home tab — recreate it to ensure window always has one tab
         bool wasHomeTab = ReferenceEquals(tab, _homeTab);
         
@@ -775,7 +815,7 @@ public sealed partial class TitleBarWindow : Window
         _tearOutDoc    = data.doc;
     }
 
-    private void Tabs_TabTearOutRequested(
+    private async void Tabs_TabTearOutRequested(
         TabView sender, TabViewTabTearOutRequestedEventArgs args)
     {
         // The SDK has already removed the tab from this TabView.
@@ -812,6 +852,13 @@ public sealed partial class TitleBarWindow : Window
         // Clean up viewer state for the document tab that left this window.
         if (_tabData.TryGetValue(tab, out var data))
         {
+            if (!await data.viewer.FlushPendingPdfAnnotationsAsync())
+            {
+                Tabs.TabItems.Add(tab);
+                Tabs.SelectedItem = tab;
+                newWindow?.Close();
+                return;
+            }
             data.viewer.CancelLoad();
             _tabData.Remove(tab);
         }

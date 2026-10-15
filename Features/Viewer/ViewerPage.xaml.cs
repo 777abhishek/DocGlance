@@ -52,6 +52,7 @@ public sealed partial class ViewerPage : Page
     {
         InitializeComponent();
         InitializeViewerShortcuts();
+        Toolbar.PdfToolSelected += Toolbar_PdfToolSelected;
 
         InitializePdfTextSelection();
 

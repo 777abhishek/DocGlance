@@ -153,6 +153,135 @@
 
         <!-- Right-side actions -->
         <StackPanel
+            x:Name="PdfMarkupTools"
+            Grid.Column="4"
+            Orientation="Horizontal"
+            Spacing="2"
+            HorizontalAlignment="Center"
+            Visibility="Collapsed">
+
+            <ToggleButton
+                x:Name="PenToolButton"
+                Style="{StaticResource ITB}"
+                Click="PenToolButton_Click"
+                ToolTipService.ToolTip="Freehand pen">
+                <FontIcon Glyph="&#xE76D;" FontSize="19"/>
+            </ToggleButton>
+
+            <ToggleButton
+                x:Name="MarkupToolButton"
+                Style="{StaticResource ITB}"
+                Click="MarkupToolButton_Click"
+                ToolTipService.ToolTip="Drag across text to highlight">
+                <FontIcon Glyph="&#xE7E6;" FontSize="20"/>
+            </ToggleButton>
+
+            <ToggleButton
+                x:Name="EraserToolButton"
+                Style="{StaticResource ITB}"
+                Click="EraserToolButton_Click"
+                ToolTipService.ToolTip="Erase annotations">
+                <FontIcon Glyph="&#xE75C;" FontSize="19"/>
+            </ToggleButton>
+
+            <ToggleButton
+                x:Name="NoteToolButton"
+                Style="{StaticResource ITB}"
+                Click="NoteToolButton_Click"
+                ToolTipService.ToolTip="Add a note">
+                <FontIcon Glyph="&#xE8F2;" FontSize="19"/>
+            </ToggleButton>
+
+            <ToggleButton
+                x:Name="TextToolButton"
+                Style="{StaticResource ITB}"
+                Click="TextToolButton_Click"
+                ToolTipService.ToolTip="Add a text box">
+                <FontIcon Glyph="&#xE8D2;" FontSize="19"/>
+            </ToggleButton>
+
+            <ToggleButton
+                x:Name="SignatureToolButton"
+                Style="{StaticResource ITB}"
+                Click="SignatureToolButton_Click"
+                ToolTipService.ToolTip="Draw a signature">
+                <FontIcon Glyph="&#xE8A7;" FontSize="19"/>
+            </ToggleButton>
+
+            <ToggleButton
+                x:Name="ImageToolButton"
+                Style="{StaticResource ITB}"
+                Click="ImageToolButton_Click"
+                ToolTipService.ToolTip="Insert an image">
+                <FontIcon Glyph="&#xE91B;" FontSize="19"/>
+            </ToggleButton>
+
+            <Button
+                x:Name="UndoAnnotationButton"
+                Style="{StaticResource IB}"
+                Click="UndoAnnotationButton_Click"
+                IsEnabled="False"
+                ToolTipService.ToolTip="Undo annotation">
+                <FontIcon Glyph="&#xE7A7;" FontSize="19"/>
+            </Button>
+
+            <Button
+                x:Name="RedoAnnotationButton"
+                Style="{StaticResource IB}"
+                Click="RedoAnnotationButton_Click"
+                IsEnabled="False"
+                ToolTipService.ToolTip="Redo annotation">
+                <FontIcon Glyph="&#xE7A6;" FontSize="19"/>
+            </Button>
+
+            <Button
+                Style="{StaticResource IB}"
+                ToolTipService.ToolTip="Markup settings">
+                <FontIcon Glyph="&#xE713;" FontSize="18"/>
+                <Button.Flyout>
+                    <Flyout Placement="Bottom">
+                        <StackPanel Spacing="10" MinWidth="220" Padding="8">
+                            <TextBlock Text="Markup style" FontWeight="SemiBold"/>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <RadioButton
+                                    x:Name="HighlightStyleButton"
+                                    Content="Highlight"
+                                    IsChecked="True"
+                                    Tag="0"
+                                    Checked="MarkupStyle_Checked"/>
+                                <RadioButton
+                                    Content="Underline"
+                                    Tag="1"
+                                    Checked="MarkupStyle_Checked"/>
+                                <RadioButton
+                                    Content="Strikeout"
+                                    Tag="2"
+                                    Checked="MarkupStyle_Checked"/>
+                            </StackPanel>
+                            <TextBlock Text="Color" FontWeight="SemiBold"/>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Width="28" Height="28" Padding="0" Background="#FFFFDC28" Click="MarkupColor_Click" Tag="FFFFDC28" ToolTipService.ToolTip="Yellow"/>
+                                <Button Width="28" Height="28" Padding="0" Background="#FFFF5C5C" Click="MarkupColor_Click" Tag="FFFF5C5C" ToolTipService.ToolTip="Red"/>
+                                <Button Width="28" Height="28" Padding="0" Background="#FF52C7A5" Click="MarkupColor_Click" Tag="FF52C7A5" ToolTipService.ToolTip="Green"/>
+                                <Button Width="28" Height="28" Padding="0" Background="#FF60A5FA" Click="MarkupColor_Click" Tag="FF60A5FA" ToolTipService.ToolTip="Blue"/>
+                                <Button Width="28" Height="28" Padding="0" Background="#FFE879F9" Click="MarkupColor_Click" Tag="FFE879F9" ToolTipService.ToolTip="Pink"/>
+                            </StackPanel>
+                            <TextBlock Text="Opacity" FontWeight="SemiBold"/>
+                            <Slider
+                                x:Name="MarkupOpacitySlider"
+                                Minimum="10"
+                                Maximum="100"
+                                Value="35"
+                                StepFrequency="5"
+                                ValueChanged="MarkupOpacitySlider_ValueChanged"/>
+                        </StackPanel>
+                    </Flyout>
+                </Button.Flyout>
+            </Button>
+        </StackPanel>
+
+        <!-- Right-side actions -->
+        <StackPanel
             Grid.Column="5"
             Orientation="Horizontal"
             Spacing="2">

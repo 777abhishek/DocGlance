@@ -4,6 +4,8 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using DocGlance.Services.Storage;
+using DocGlance.Rendering.Pdf;
+using DocGlance.Features.Viewer.Components;
 using System;
 using System.IO;
 using Windows.ApplicationModel.DataTransfer;
@@ -40,6 +42,33 @@ public sealed partial class ViewerPage
     }
 
     private void Toolbar_RotateRequested(object? sender, double delta) => Rotate(delta);
+
+    private void Toolbar_PdfToolSelected(PdfAnnotationTool? tool)
+    {
+        if (_pdfState?.ManagedPdfDocument != null)
+        {
+            Toolbar.SetSelectedPdfTool(null);
+            return;
+        }
+        _activePdfAnnotationTool = tool;
+        _pdfMarkupToolActive = tool == PdfAnnotationTool.Markup;
+        if (tool != PdfAnnotationTool.Markup)
+            ClearPdfTextSelection();
+    }
+
+    private void Toolbar_MarkupSettingsChanged(object? sender, EventArgs e)
+    {
+        _pdfMarkupColorArgb = Toolbar.MarkupColorArgb;
+        _pdfMarkupOpacity = Toolbar.MarkupOpacity;
+        _pdfMarkupKind = (PdfTextAnnotationKind)Math.Min(
+            Toolbar.MarkupKind, (uint)PdfTextAnnotationKind.Strikeout);
+    }
+
+    private void Toolbar_UndoAnnotationRequested(object? sender, EventArgs e) =>
+        _ = RestorePdfAnnotationHistoryAsync(undo: true);
+
+    private void Toolbar_RedoAnnotationRequested(object? sender, EventArgs e) =>
+        _ = RestorePdfAnnotationHistoryAsync(undo: false);
 
     private void Rotate(double delta)
     {

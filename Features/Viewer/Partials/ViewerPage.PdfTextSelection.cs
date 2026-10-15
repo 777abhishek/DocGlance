@@ -1,6 +1,7 @@
 using DocGlance.Core.Models;
 using DocGlance.Infrastructure.Logging;
 using DocGlance.Rendering.Pdf;
+using DocGlance.Features.Viewer.Components;
 using Microsoft.UI;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
@@ -146,6 +147,45 @@ public sealed partial class ViewerPage
         if (page < 0)
             return;
 
+        if (_activePdfAnnotationTool is PdfAnnotationTool.Note or PdfAnnotationTool.Text)
+        {
+            if (e.Pointer.PointerDeviceType == PointerDeviceType.Touch ||
+                e.GetCurrentPoint(PdfViewportCanvas).Properties.IsLeftButtonPressed)
+            {
+                var (x, y) = ToPdfTextPoint(page, point);
+                if (_activePdfAnnotationTool == PdfAnnotationTool.Note)
+                    _ = AddPdfNoteAtAsync(page, x, y);
+                else
+                    _ = AddPdfTextAtAsync(page, x, y);
+                e.Handled = true;
+            }
+            return;
+        }
+
+        if (_activePdfAnnotationTool == PdfAnnotationTool.Image)
+        {
+            if (e.Pointer.PointerDeviceType == PointerDeviceType.Touch ||
+                e.GetCurrentPoint(PdfViewportCanvas).Properties.IsLeftButtonPressed)
+            {
+                var (x, y) = ToPdfTextPoint(page, point);
+                _ = AddPdfImageAtAsync(page, x, y);
+                e.Handled = true;
+            }
+            return;
+        }
+
+        if (_activePdfAnnotationTool is PdfAnnotationTool.Pen or
+            PdfAnnotationTool.Signature or PdfAnnotationTool.Eraser)
+        {
+            if (e.Pointer.PointerDeviceType == PointerDeviceType.Touch ||
+                e.GetCurrentPoint(PdfViewportCanvas).Properties.IsLeftButtonPressed)
+            {
+                StartPdfInkStroke(e.Pointer, page, point);
+                e.Handled = true;
+            }
+            return;
+        }
+
         if (e.Pointer.PointerDeviceType == PointerDeviceType.Touch)
         {
             if (_pdfTextPageMaps.TryGetValue(page, out var map) &&
@@ -196,6 +236,13 @@ public sealed partial class ViewerPage
     {
         Point point = e.GetCurrentPoint(PdfViewportCanvas).Position;
 
+        if (_pdfInkPointer?.PointerId == e.Pointer.PointerId)
+        {
+            UpdatePdfInkStroke(point);
+            e.Handled = true;
+            return;
+        }
+
         if (_pendingMousePointer?.PointerId == e.Pointer.PointerId)
         {
             _pendingMouseEnd = point;
@@ -226,6 +273,14 @@ public sealed partial class ViewerPage
     private void PdfTextCanvas_PointerReleased(object sender, PointerRoutedEventArgs e)
     {
         Point point = e.GetCurrentPoint(PdfViewportCanvas).Position;
+        if (_pdfInkPointer?.PointerId == e.Pointer.PointerId)
+        {
+            UpdatePdfInkStroke(point);
+            FinishPdfInkStroke(cancelled: false);
+            e.Handled = true;
+            return;
+        }
+
         if (_pendingMousePointer?.PointerId == e.Pointer.PointerId)
         {
             _pendingMouseEnd = point;
@@ -256,6 +311,8 @@ public sealed partial class ViewerPage
 
     private void PdfTextCanvas_PointerCanceled(object sender, PointerRoutedEventArgs e)
     {
+        if (_pdfInkPointer?.PointerId == e.Pointer.PointerId)
+            FinishPdfInkStroke(cancelled: true);
         if (_pendingMousePointer?.PointerId == e.Pointer.PointerId)
             ResetPendingMouseSelection();
         if (_touchPointer?.PointerId == e.Pointer.PointerId)
@@ -270,6 +327,8 @@ public sealed partial class ViewerPage
 
     private void PdfTextCanvas_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
     {
+        if (_pdfInkPointer?.PointerId == e.Pointer.PointerId)
+            FinishPdfInkStroke(cancelled: true);
         if (_pendingMousePointer?.PointerId == e.Pointer.PointerId && !_pendingMouseReleased)
             ResetPendingMouseSelection();
         if (_isPdfSelecting && _activePdfPointer?.PointerId == e.Pointer.PointerId)
@@ -492,6 +551,8 @@ public sealed partial class ViewerPage
         }
 
         DrawPdfTextSelection();
+        if (_pdfMarkupToolActive && HasPdfTextSelection)
+            _ = AddPdfMarkupAsync(_pdfMarkupKind);
     }
 
     private async void PdfTextCanvas_RightTapped(object sender, RightTappedRoutedEventArgs e)
@@ -592,6 +653,8 @@ public sealed partial class ViewerPage
 
     private void ClearPdfTextSelectionState()
     {
+        if (_pdfInkPointer != null)
+            FinishPdfInkStroke(cancelled: true);
         _pdfTextMapGeneration++;
         _pdfTextPageMaps.Clear();
         _pdfTextMapsLoading.Clear();

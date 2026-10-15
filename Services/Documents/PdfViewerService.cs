@@ -118,6 +118,41 @@ public sealed class PdfViewerService : IPdfViewerService, IDisposable
         }
     }
 
+    public async Task<PdfLoadResult> ReplaceDocumentFromPathAsync(
+        string filePath,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var openResult = await PdfRenderer.OpenDocumentAsync(filePath, ct);
+            if (ct.IsCancellationRequested)
+            {
+                openResult.Document?.Dispose();
+                return PdfLoadResult.Error("Operation cancelled");
+            }
+
+            if (!openResult.Ok || openResult.Document == null)
+                return PdfLoadResult.Error(openResult.Error ?? "Cannot replace PDF document");
+
+            var previousDocument = _document;
+            _document = openResult.Document;
+            _pageCount = openResult.Document.PageCount;
+            CancelPrefetch();
+            previousDocument?.Dispose();
+
+            return PdfLoadResult.Ok(_document, _pageCount);
+        }
+        catch (OperationCanceledException)
+        {
+            return PdfLoadResult.Error("Operation cancelled");
+        }
+        catch (Exception ex)
+        {
+            Logger.Write(LogLevel.Error, "Event=PdfReplaceFailed", ex);
+            return PdfLoadResult.Error($"Failed to replace PDF: {ex.Message}");
+        }
+    }
+
     public void CloseDocument()
     {
         // Cancel only — a render task may still hold a token from this CTS.

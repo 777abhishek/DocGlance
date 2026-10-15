@@ -88,7 +88,17 @@ internal static class PdfCraftNative
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     internal static extern PcPdfBuffer pc_add_text_annotation(
         IntPtr doc, uint pageIndex, uint kind, IntPtr rects, nuint rectsLen,
-        IntPtr contents, nuint contentsLen);
+        IntPtr contents, nuint contentsLen, IntPtr color, float opacity);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern PcPdfBuffer pc_add_ink_annotation(
+        IntPtr doc, uint pageIndex, IntPtr points, nuint pointsLen,
+        IntPtr color, float opacity, float width);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern PcPdfBuffer pc_add_image_annotation(
+        IntPtr doc, uint pageIndex, IntPtr rect, nuint rectLen,
+        IntPtr jpeg, nuint jpegLen, uint pixelWidth, uint pixelHeight);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     internal static extern PcPdfBuffer pc_get_document_outline(IntPtr doc);

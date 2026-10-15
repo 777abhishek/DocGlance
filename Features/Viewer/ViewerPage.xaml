@@ -99,6 +99,9 @@
             BookmarkRequested="BookmarkMenuItem_Click"
             SettingsRequested="SettingsMenuItem_Click"
             WordWrapRequested="WordWrapButton_Click"
+            MarkupSettingsChanged="Toolbar_MarkupSettingsChanged"
+            UndoAnnotationRequested="Toolbar_UndoAnnotationRequested"
+            RedoAnnotationRequested="Toolbar_RedoAnnotationRequested"
             GoToPageRequested="Toolbar_GoToPageRequested" />
 
         <!-- ── BODY ── -->

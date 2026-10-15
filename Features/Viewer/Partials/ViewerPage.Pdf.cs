@@ -52,6 +52,10 @@ public sealed partial class ViewerPage
 
     private async Task LoadDocumentCoreAsync(DocumentItem doc)
     {
+        if (!await FlushPendingPdfAnnotationsAsync())
+            throw new InvalidOperationException(
+                "The previous PDF still has unsaved annotation changes. Save them before opening another document.");
+
         // Correlated trace for this open attempt: every log entry inside can be tied
         // back via OperationId; duration and outcome are recorded on dispose.
         using var openOp = Logger.BeginOperation("OpenDocument", ("FilePath", doc.FilePath));
@@ -59,6 +63,7 @@ public sealed partial class ViewerPage
             $"OpenDocument {System.IO.Path.GetExtension(doc.FilePath ?? string.Empty)}");
 
         _doc = doc;
+        ClearPdfAnnotationHistory();
         _cts?.Cancel();
 
         _searchCts?.Cancel();
@@ -94,6 +99,8 @@ public sealed partial class ViewerPage
         OutlineTree.RootNodes.Clear();
         SetPdfAnnotations(Array.Empty<PdfTextAnnotation>());
         PdfAnnotationCanvas.Children.Clear();
+        Toolbar.PdfMarkupToolsVisibility = Visibility.Collapsed;
+        Toolbar.SetMarkupToolActive(false);
 
         _rotation = 0;
         _fitMode  = FitMode.None;
@@ -177,6 +184,9 @@ public sealed partial class ViewerPage
             }
 
             Infrastructure.Logging.Logger.Log($"[PDF] Document loaded: {_total} pages");
+            Toolbar.PdfMarkupToolsVisibility = _pdfState.ManagedPdfDocument == null
+                ? Visibility.Visible
+                : Visibility.Collapsed;
             await LoadPdfNavigationDataAsync(_pdfState, ct);
 
             Toolbar.UpdatePageInfo(_page, _total);

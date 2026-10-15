@@ -15,13 +15,20 @@ public enum PdfTextAnnotationKind : uint
     Underline,
     Strikeout,
     Note,
+    Ink,
+    FreeText,
+    Image,
 }
 
 public sealed record PdfTextAnnotation(
     int PageIndex,
     PdfTextAnnotationKind Kind,
     string Contents,
-    IReadOnlyList<PdfSearchRect> Rectangles);
+    IReadOnlyList<PdfSearchRect> Rectangles,
+    uint ColorArgb,
+    float Opacity,
+    float Width,
+    IReadOnlyList<(double X, double Y)> Points);
 
 /// <summary>Creates and removes persistent PDF annotations through PdfCraft.</summary>
 public static class PdfAnnotationService
@@ -66,13 +73,24 @@ public static class PdfAnnotationService
         PdfTextAnnotationKind kind,
         IReadOnlyList<PdfSearchRect> rectangles,
         string contents,
+        uint colorArgb = 0xFFFFDC28,
+        float opacity = 0.35f,
         CancellationToken cancellationToken = default)
     {
         Validate(state, pageIndex, rectangles);
-        if (kind == PdfTextAnnotationKind.Note && string.IsNullOrWhiteSpace(contents))
-            throw new ArgumentException("A note cannot be empty.", nameof(contents));
+        if ((kind is PdfTextAnnotationKind.Note or PdfTextAnnotationKind.FreeText) &&
+            string.IsNullOrWhiteSpace(contents))
+            throw new ArgumentException("An annotation cannot be empty.", nameof(contents));
+        if (!float.IsFinite(opacity) || opacity is < 0 or > 1)
+            throw new ArgumentOutOfRangeException(nameof(opacity));
 
         var rectValues = ToFloatArray(rectangles);
+        var colorValues = new[]
+        {
+            ((colorArgb >> 16) & 0xff) / 255f,
+            ((colorArgb >> 8) & 0xff) / 255f,
+            (colorArgb & 0xff) / 255f,
+        };
         var contentBytes = Encoding.UTF8.GetBytes(contents);
         if (contentBytes.Length > MaximumContentsBytes)
             throw new ArgumentException("Annotation text cannot exceed 1 MB.", nameof(contents));
@@ -85,12 +103,12 @@ public static class PdfAnnotationService
 
             try
             {
-                return InvokeWithBuffers(rectValues, contentBytes, (rectPointer, contentPointer) =>
+                return InvokeWithBuffers(rectValues, contentBytes, colorValues, (rectPointer, contentPointer, colorPointer) =>
                 {
                     var buffer = PdfCraftNative.pc_add_text_annotation(
                         handle, (uint)pageIndex, (uint)kind,
                         rectPointer, (nuint)rectValues.Length,
-                        contentPointer, (nuint)contentBytes.Length);
+                        contentPointer, (nuint)contentBytes.Length, colorPointer, opacity);
                     return CopyAndFree(buffer, "PdfCraft could not add the PDF annotation.");
                 });
             }
@@ -128,6 +146,111 @@ public static class PdfAnnotationService
                         throw new InvalidOperationException("The page contains too many annotations.");
                     return (int)count;
                 });
+            }
+
+            finally
+            {
+                lease.Dispose();
+            }
+        }, cancellationToken);
+    }
+
+    public static Task<byte[]> AddInkAsync(
+        PdfDocumentState state,
+        int pageIndex,
+        IReadOnlyList<(double X, double Y)> points,
+        uint colorArgb,
+        float opacity,
+        float width,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(points);
+        if ((uint)pageIndex >= (uint)state.PageCount)
+            throw new ArgumentOutOfRangeException(nameof(pageIndex));
+        if (state.ManagedPdfDocument != null)
+            throw new NotSupportedException("PDF annotations are unavailable for password-protected PDFs.");
+        if (points.Count is < 2 or > 8192)
+            throw new ArgumentOutOfRangeException(nameof(points));
+        if (!float.IsFinite(opacity) || opacity is < 0 or > 1)
+            throw new ArgumentOutOfRangeException(nameof(opacity));
+        if (!float.IsFinite(width) || width is < 0.25f or > 72f)
+            throw new ArgumentOutOfRangeException(nameof(width));
+
+        var pointValues = new float[checked(points.Count * 2)];
+        for (int i = 0; i < points.Count; i++)
+        {
+            if (!double.IsFinite(points[i].X) || !double.IsFinite(points[i].Y))
+                throw new ArgumentException("Ink coordinates must be finite.", nameof(points));
+            pointValues[i * 2] = checked((float)points[i].X);
+            pointValues[i * 2 + 1] = checked((float)points[i].Y);
+        }
+        var colorValues = new[]
+        {
+            ((colorArgb >> 16) & 0xff) / 255f,
+            ((colorArgb >> 8) & 0xff) / 255f,
+            (colorArgb & 0xff) / 255f,
+        };
+
+        return Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var (handle, lease) = state.BeginNativeCall();
+            if (lease == null)
+                throw new ObjectDisposedException(nameof(PdfDocumentState));
+            try
+            {
+                return InvokeWithBuffers(pointValues, Array.Empty<byte>(), colorValues,
+                    (pointPointer, _, colorPointer) =>
+                    {
+                        var buffer = PdfCraftNative.pc_add_ink_annotation(
+                            handle, (uint)pageIndex, pointPointer, (nuint)pointValues.Length,
+                            colorPointer, opacity, width);
+                        return CopyAndFree(buffer, "PdfCraft could not add the ink annotation.");
+                    });
+            }
+            finally
+            {
+                lease.Dispose();
+            }
+        }, cancellationToken);
+    }
+
+    public static Task<byte[]> AddImageAsync(
+        PdfDocumentState state,
+        int pageIndex,
+        PdfSearchRect placement,
+        byte[] jpegBytes,
+        uint pixelWidth,
+        uint pixelHeight,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(jpegBytes);
+        Validate(state, pageIndex, new[] { placement });
+        if (jpegBytes.Length is 0 or > 20 * 1024 * 1024)
+            throw new ArgumentOutOfRangeException(nameof(jpegBytes));
+        if (pixelWidth is 0 or > 8192 || pixelHeight is 0 or > 8192 ||
+            (ulong)pixelWidth * pixelHeight > 50_000_000)
+            throw new ArgumentOutOfRangeException(nameof(pixelWidth));
+
+        var rectValues = ToFloatArray(new[] { placement });
+        return Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var (handle, lease) = state.BeginNativeCall();
+            if (lease == null)
+                throw new ObjectDisposedException(nameof(PdfDocumentState));
+            try
+            {
+                return InvokeWithBuffers(rectValues, jpegBytes, Array.Empty<float>(),
+                    (rectPointer, jpegPointer, _) =>
+                    {
+                        var buffer = PdfCraftNative.pc_add_image_annotation(
+                            handle, (uint)pageIndex, rectPointer, (nuint)rectValues.Length,
+                            jpegPointer, (nuint)jpegBytes.Length, pixelWidth, pixelHeight);
+                        return CopyAndFree(buffer, "PdfCraft could not add the image annotation.");
+                    });
             }
             finally
             {
@@ -203,23 +326,38 @@ public static class PdfAnnotationService
         float[] rectValues,
         byte[] contentBytes,
         Func<IntPtr, IntPtr, T> action)
+        => InvokeWithBuffers(rectValues, contentBytes, Array.Empty<float>(),
+            (rectPointer, contentPointer, _) => action(rectPointer, contentPointer));
+
+    private static T InvokeWithBuffers<T>(
+        float[] rectValues,
+        byte[] contentBytes,
+        float[] colorValues,
+        Func<IntPtr, IntPtr, IntPtr, T> action)
     {
         IntPtr rectPointer = Marshal.AllocHGlobal(checked(rectValues.Length * sizeof(float)));
         IntPtr contentPointer = IntPtr.Zero;
+        IntPtr colorPointer = colorValues.Length == 0
+            ? IntPtr.Zero
+            : Marshal.AllocHGlobal(checked(colorValues.Length * sizeof(float)));
         try
         {
             Marshal.Copy(rectValues, 0, rectPointer, rectValues.Length);
+            if (colorPointer != IntPtr.Zero)
+                Marshal.Copy(colorValues, 0, colorPointer, colorValues.Length);
             if (contentBytes.Length > 0)
             {
                 contentPointer = Marshal.AllocHGlobal(contentBytes.Length);
                 Marshal.Copy(contentBytes, 0, contentPointer, contentBytes.Length);
             }
-            return action(rectPointer, contentPointer);
+            return action(rectPointer, contentPointer, colorPointer);
         }
         finally
         {
             if (contentPointer != IntPtr.Zero)
                 Marshal.FreeHGlobal(contentPointer);
+            if (colorPointer != IntPtr.Zero)
+                Marshal.FreeHGlobal(colorPointer);
             Marshal.FreeHGlobal(rectPointer);
         }
     }
@@ -320,7 +458,7 @@ public static class PdfAnnotationService
             uint page = reader.ReadUInt32();
             uint kind = reader.ReadUInt32();
             uint contentsLength = reader.ReadUInt32();
-            if (page >= pageCount || kind > (uint)PdfTextAnnotationKind.Note ||
+            if (page >= pageCount || kind > (uint)PdfTextAnnotationKind.Image ||
                 contentsLength > MaximumContentsBytes)
                 throw new InvalidDataException("PDF annotation entry is invalid.");
             byte[] contents = reader.ReadBytes((int)contentsLength);
@@ -343,11 +481,43 @@ public static class PdfAnnotationService
                     throw new InvalidDataException("PDF annotation geometry is invalid.");
                 rectangles[rect] = new PdfSearchRect(x, y, width, height);
             }
+            var color = new byte[3];
+            for (int component = 0; component < color.Length; component++)
+            {
+                float value = reader.ReadSingle();
+                if (!float.IsFinite(value) || value is < 0 or > 1)
+                    throw new InvalidDataException("PDF annotation color is invalid.");
+                color[component] = (byte)Math.Round(value * 255);
+            }
+            float opacity = reader.ReadSingle();
+            if (!float.IsFinite(opacity) || opacity is < 0 or > 1)
+                throw new InvalidDataException("PDF annotation opacity is invalid.");
+            float annotationWidth = reader.ReadSingle();
+            if (!float.IsFinite(annotationWidth) || annotationWidth < 0)
+                throw new InvalidDataException("PDF annotation width is invalid.");
+            uint pointCount = reader.ReadUInt32();
+            if (pointCount > 8192 ||
+                ((PdfTextAnnotationKind)kind == PdfTextAnnotationKind.Ink && pointCount < 2) ||
+                ((PdfTextAnnotationKind)kind != PdfTextAnnotationKind.Ink && pointCount != 0))
+                throw new InvalidDataException("PDF ink geometry is invalid.");
+            var points = new (double X, double Y)[(int)pointCount];
+            for (int point = 0; point < points.Length; point++)
+            {
+                double x = reader.ReadSingle();
+                double y = reader.ReadSingle();
+                if (!double.IsFinite(x) || !double.IsFinite(y))
+                    throw new InvalidDataException("PDF ink point is invalid.");
+                points[point] = (x, y);
+            }
             annotations.Add(new PdfTextAnnotation(
                 (int)page,
                 (PdfTextAnnotationKind)kind,
                 Encoding.UTF8.GetString(contents),
-                rectangles));
+                rectangles,
+                0xFF000000u | (uint)(color[0] << 16) | (uint)(color[1] << 8) | color[2],
+                opacity,
+                annotationWidth,
+                points));
         }
 
         if (reader.BaseStream.Position != reader.BaseStream.Length)

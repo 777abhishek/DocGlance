@@ -31,6 +31,15 @@ public interface IPdfViewerService
         byte[] bytes,
         CancellationToken ct = default);
 
+    /// <summary>
+    /// Replaces the active PDF state without invalidating rendered-page bookkeeping.
+    /// Use when the PDF changes only through annotation updates and cached page images
+    /// remain valid.
+    /// </summary>
+    Task<PdfLoadResult> ReplaceDocumentFromPathAsync(
+        string filePath,
+        CancellationToken ct = default);
+
     /// <summary>Closes the document and releases all resources.</summary>
     void CloseDocument();
 

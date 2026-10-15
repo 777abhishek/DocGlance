@@ -7,6 +7,17 @@ using DocGlance.Infrastructure.Logging;
 
 namespace DocGlance.Features.Viewer.Components;
 
+public enum PdfAnnotationTool
+{
+    Markup,
+    Pen,
+    Eraser,
+    Note,
+    Text,
+    Signature,
+    Image,
+}
+
 public sealed partial class ViewerToolbar : UserControl
 {
     public event EventHandler? SidebarToggled;
@@ -25,6 +36,10 @@ public sealed partial class ViewerToolbar : UserControl
     public event EventHandler? BookmarkRequested;
     public event EventHandler? SettingsRequested;
     public event EventHandler? WordWrapRequested;
+    public event Action<PdfAnnotationTool?>? PdfToolSelected;
+    public event EventHandler? MarkupSettingsChanged;
+    public event EventHandler? UndoAnnotationRequested;
+    public event EventHandler? RedoAnnotationRequested;
     
     // Page navigation
     public event EventHandler<int>? GoToPageRequested;
@@ -80,6 +95,44 @@ public sealed partial class ViewerToolbar : UserControl
 
     public ViewerToolbar() => InitializeComponent();
 
+    public uint MarkupColorArgb { get; private set; } = 0xFFFFDC28;
+    public float MarkupOpacity => (float)(MarkupOpacitySlider.Value / 100.0);
+    public uint MarkupKind { get; private set; }
+    public Visibility PdfMarkupToolsVisibility
+    {
+        get => PdfMarkupTools.Visibility;
+        set => PdfMarkupTools.Visibility = value;
+    }
+
+    public bool IsMarkupToolActive => MarkupToolButton.IsChecked == true;
+    public PdfAnnotationTool? SelectedPdfTool { get; private set; }
+
+    public void SetMarkupToolActive(bool active)
+    {
+        SetSelectedPdfTool(active ? PdfAnnotationTool.Markup : null);
+    }
+
+    public void SetSelectedPdfTool(PdfAnnotationTool? tool)
+    {
+        if (SelectedPdfTool == tool)
+            return;
+        SelectedPdfTool = tool;
+        MarkupToolButton.IsChecked = tool == PdfAnnotationTool.Markup;
+        PenToolButton.IsChecked = tool == PdfAnnotationTool.Pen;
+        EraserToolButton.IsChecked = tool == PdfAnnotationTool.Eraser;
+        NoteToolButton.IsChecked = tool == PdfAnnotationTool.Note;
+        TextToolButton.IsChecked = tool == PdfAnnotationTool.Text;
+        SignatureToolButton.IsChecked = tool == PdfAnnotationTool.Signature;
+        ImageToolButton.IsChecked = tool == PdfAnnotationTool.Image;
+        PdfToolSelected?.Invoke(tool);
+    }
+
+    public void SetAnnotationHistoryAvailability(bool canUndo, bool canRedo)
+    {
+        UndoAnnotationButton.IsEnabled = canUndo;
+        RedoAnnotationButton.IsEnabled = canRedo;
+    }
+
     public void UpdatePageInfo(int current, int total)
     {
         PageNumberBox.Text = current.ToString();
@@ -117,6 +170,73 @@ public sealed partial class ViewerToolbar : UserControl
         window.OpenToolsPage();
     }
     private void WordWrapButton_Click(object sender, RoutedEventArgs e) => WordWrapRequested?.Invoke(this, EventArgs.Empty);
+
+    private void MarkupToolButton_Click(object sender, RoutedEventArgs e) =>
+        SetSelectedPdfTool(MarkupToolButton.IsChecked == true
+            ? PdfAnnotationTool.Markup
+            : null);
+
+    private void PenToolButton_Click(object sender, RoutedEventArgs e) =>
+        SetSelectedPdfTool(PenToolButton.IsChecked == true
+            ? PdfAnnotationTool.Pen
+            : null);
+
+    private void EraserToolButton_Click(object sender, RoutedEventArgs e) =>
+        SetSelectedPdfTool(EraserToolButton.IsChecked == true
+            ? PdfAnnotationTool.Eraser
+            : null);
+
+    private void NoteToolButton_Click(object sender, RoutedEventArgs e) =>
+        SetSelectedPdfTool(NoteToolButton.IsChecked == true
+            ? PdfAnnotationTool.Note
+            : null);
+
+    private void TextToolButton_Click(object sender, RoutedEventArgs e) =>
+        SetSelectedPdfTool(TextToolButton.IsChecked == true
+            ? PdfAnnotationTool.Text
+            : null);
+
+    private void SignatureToolButton_Click(object sender, RoutedEventArgs e) =>
+        SetSelectedPdfTool(SignatureToolButton.IsChecked == true
+            ? PdfAnnotationTool.Signature
+            : null);
+
+    private void ImageToolButton_Click(object sender, RoutedEventArgs e) =>
+        SetSelectedPdfTool(ImageToolButton.IsChecked == true
+            ? PdfAnnotationTool.Image
+            : null);
+
+    private void UndoAnnotationButton_Click(object sender, RoutedEventArgs e) =>
+        UndoAnnotationRequested?.Invoke(this, EventArgs.Empty);
+
+    private void RedoAnnotationButton_Click(object sender, RoutedEventArgs e) =>
+        RedoAnnotationRequested?.Invoke(this, EventArgs.Empty);
+
+    private void MarkupStyle_Checked(object sender, RoutedEventArgs e)
+    {
+        if (sender is RadioButton { Tag: string tag } &&
+            uint.TryParse(tag, out uint kind))
+        {
+            MarkupKind = kind;
+            MarkupSettingsChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    private void MarkupColor_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string value } &&
+            uint.TryParse(value, System.Globalization.NumberStyles.HexNumber,
+                System.Globalization.CultureInfo.InvariantCulture, out uint argb))
+        {
+            MarkupColorArgb = argb;
+            MarkupSettingsChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    private void MarkupOpacitySlider_ValueChanged(
+        object sender,
+        Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e) =>
+        MarkupSettingsChanged?.Invoke(this, EventArgs.Empty);
     
     private void PageNumber_Tapped(object sender, TappedRoutedEventArgs e)
     {
