@@ -15,6 +15,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading;
 using System.Threading.Tasks;
+using Windows.Foundation;
 
 namespace DocGlance.Features.Viewer.Formats.Pdf;
 
@@ -157,6 +158,22 @@ public sealed partial class PdfViewer
         var (w, h) = DocumentState!.GetPageSize(i);
         int rot = ((int)Math.Round(PdfRotation) % 360 + 360) % 360;
         return (rot == 90 || rot == 270) ? (h, w) : (w, h);
+    }
+
+    internal Rect TransformPageRect(
+        int pageIndex,
+        double xPt,
+        double yPt,
+        double widthPt,
+        double heightPt)
+    {
+        const double ptToLp = 96.0 / 72.0;
+        var (widthPtRaw, heightPtRaw) = DocumentState!.GetPageSize(pageIndex);
+        return PageRotation.RotateRect(
+            new Rect(xPt * ptToLp, yPt * ptToLp, widthPt * ptToLp, heightPt * ptToLp),
+            widthPtRaw * ptToLp,
+            heightPtRaw * ptToLp,
+            PdfRotation);
     }
 
     // ── Scroll / zoom handler ─────────────────────────────────────────────────
@@ -429,9 +446,10 @@ public sealed partial class PdfViewer
                 return;
             }
 
-            var (ptW, ptH) = GetRotatedPageSize(pageIndex);
+            var (ptW, ptH) = pdfState.GetPageSize(pageIndex);
+            var (displayWidthPt, displayHeightPt) = GetRotatedPageSize(pageIndex);
             float zoom = ViewportState?.ZoomFactor ?? 1f;
-            dpi = RenderBudget.PdfPageDpi(zoom, display, ptW, ptH);
+            dpi = RenderBudget.PdfPageDpi(zoom, display, displayWidthPt, displayHeightPt);
             if (_pdfPageCache.ContainsKey(pageIndex) &&
                 _pdfPageDpi.TryGetValue(pageIndex, out float cachedDpi) &&
                 !RenderBudget.NeedsRerender(cachedDpi, dpi))
@@ -441,6 +459,9 @@ public sealed partial class PdfViewer
 
             double pageW = ptW * PtToLp;
             double pageH = ptH * PtToLp;
+            var (pageDisplayWidthPt, pageDisplayHeightPt) = GetRotatedPageSize(pageIndex);
+            double displayWidth = pageDisplayWidthPt * PtToLp;
+            double displayHeight = pageDisplayHeightPt * PtToLp;
             double pageY = GetPageTopLp(pageIndex);   // O(1) via cached array
 
             // For crisp high-DPI rendering, calculate render size from DPI (which already includes display scale)
@@ -525,6 +546,8 @@ public sealed partial class PdfViewer
                         Stretch = Microsoft.UI.Xaml.Media.Stretch.Fill,
                         Width   = pageW,
                         Height  = pageH,
+                        RenderTransformOrigin = new Windows.Foundation.Point(0.5, 0.5),
+                        RenderTransform = new Microsoft.UI.Xaml.Media.RotateTransform { Angle = PdfRotation },
                         Opacity = 0.0
                     };
                     
@@ -533,8 +556,8 @@ public sealed partial class PdfViewer
                         Duration = TimeSpan.FromMilliseconds(167)
                     };
                     
-                    Canvas.SetLeft(img, 0);
-                    Canvas.SetTop(img, pageY);
+                    Canvas.SetLeft(img, (displayWidth - pageW) / 2);
+                    Canvas.SetTop(img, pageY + (displayHeight - pageH) / 2);
                     
                     int insertAt = Math.Max(0, PdfViewportCanvas.Children.Count - 1);
                     if (SearchHighlightCanvas != null)
@@ -547,7 +570,10 @@ public sealed partial class PdfViewer
                     // Update existing image with new size and position for zoom
                     img.Width = pageW;
                     img.Height = pageH;
-                    Canvas.SetTop(img, pageY);
+                    img.RenderTransformOrigin = new Windows.Foundation.Point(0.5, 0.5);
+                    img.RenderTransform = new Microsoft.UI.Xaml.Media.RotateTransform { Angle = PdfRotation };
+                    Canvas.SetLeft(img, (displayWidth - pageW) / 2);
+                    Canvas.SetTop(img, pageY + (displayHeight - pageH) / 2);
                 }
 
                 img.Source = bitmap;

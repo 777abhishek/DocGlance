@@ -3,6 +3,7 @@ using DocGlance.Features.Viewer.Contracts;
 using DocGlance.Features.Viewer.Formats.Fallback;
 using DocGlance.Features.Viewer.Formats.Docx;
 using DocGlance.Features.Viewer.Formats.Pdf;
+using DocGlance.Features.Viewer.Formats.Pptx;
 using DocGlance.Features.Viewer.Formats.Spreadsheet;
 using DocGlance.Features.Viewer.Formats.Text;
 
@@ -55,6 +56,20 @@ public sealed class DocumentViewerRegistryTests
 
         registry.Resolve(".docx").Should().BeSameAs(docx);
         registry.Resolve(@"C:\documents\sample.doc").Should().BeSameAs(docx);
+    }
+
+    [Fact]
+    public void Resolve_UsesPptxFactoryForPresentationDocuments()
+    {
+        var pptx = new PptxViewerFactory();
+        var registry = new DocumentViewerRegistry(
+            new IDocumentViewerFactory[] { pptx },
+            new FallbackViewerFactory());
+
+        registry.Resolve(".pptx").Should().BeSameAs(pptx);
+        registry.Resolve(@"C:\documents\sample.PPT").Should().BeSameAs(pptx);
+        registry.Resolve(".pptm").Should().BeSameAs(pptx);
+        registry.Resolve(".ppsx").Should().BeSameAs(pptx);
     }
 
     [Fact]

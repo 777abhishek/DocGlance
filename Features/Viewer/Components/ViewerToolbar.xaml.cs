@@ -80,6 +80,12 @@ public sealed partial class ViewerToolbar : UserControl
         set => FitPageButton.Visibility = value;
     }
 
+    public Visibility RotationButtonsVisibility
+    {
+        get => RotationPanel.Visibility;
+        set => RotationPanel.Visibility = value;
+    }
+
     // ── WordWrapButton proxies ────────────────────────────────────────────────
     public bool IsWordWrapChecked
     {

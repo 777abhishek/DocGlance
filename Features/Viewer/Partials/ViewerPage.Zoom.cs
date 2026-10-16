@@ -86,17 +86,16 @@ public sealed partial class ViewerPage
             return;
         }
 
-        // PPTX: same — ScrollViewer scales the pre-sized canvas
-        if (_pptxDocument != null)
-        {
-            DocumentScrollViewer.ChangeView(null, null, (float)_zoom, disableAnimation: false);
-            return;
-        }
-
-        // DOCX uses the same page-sized canvas and ScrollViewer scaling as PPTX.
+        // DOCX and PPTX viewers own zoom behavior.
         if (_docxDocument != null)
         {
             DocxViewerControl.SetZoom(_zoom);
+            return;
+        }
+
+        if (_pptxDocument != null)
+        {
+            PptxViewerControl.SetZoom(_zoom);
             return;
         }
 
@@ -125,27 +124,9 @@ public sealed partial class ViewerPage
             return;
         }
         
-        // Handle PPTX
         if (_pptxDocument != null)
         {
-            const double PtToLp = 96.0 / 72.0;
-            var (ptW, _) = _pptxDocument.GetSlideSize(0);
-            if (ptW <= 0) return;
-
-            // Convert to layout pixels
-            double widthLp = ptW * PtToLp;
-
-            // Available width in viewport
-            const double sidePad = 28.0;
-            double avail = DocumentScrollViewer.ViewportWidth - sidePad * 2;
-            if (avail <= 0) return;
-
-            // Calculate zoom to fit width
-            double targetZoom = avail / widthLp;
-            
-            DocGlance.Infrastructure.Logging.Logger.Log($"ApplyFitWidth PPTX: widthLp={widthLp}, avail={avail}, targetZoom={targetZoom}");
-            
-            SetZoom(targetZoom);
+            PptxViewerControl.ApplyFitMode();
             return;
         }
 
@@ -153,9 +134,11 @@ public sealed partial class ViewerPage
         if (_docxDocument != null)
         {
             const double PtToLp = 96.0 / 72.0;
-            var (ptW, _) = _docxDocument.GetPageSize(0);
+            var (ptW, ptH) = _docxDocument.GetPageSize(0);
             if (ptW <= 0) return;
 
+            if (_rotation % 180 != 0)
+                (ptW, ptH) = (ptH, ptW);
             double widthLp = ptW * PtToLp;
             const double sidePad = 28.0;
             double avail = DocumentScrollViewer.ViewportWidth - sidePad * 2;
@@ -184,30 +167,9 @@ public sealed partial class ViewerPage
             return;
         }
         
-        // Handle PPTX
         if (_pptxDocument != null)
         {
-            const double PtToLp = 96.0 / 72.0;
-            var (ptW, ptH) = _pptxDocument.GetSlideSize(0);
-            if (ptW <= 0 || ptH <= 0) return;
-
-            // Convert to layout pixels
-            double widthLp = ptW * PtToLp;
-            double heightLp = ptH * PtToLp;
-
-            // Available space
-            const double sidePad = 28.0;
-            const double topPad  = 16.0;
-            double aw = DocumentScrollViewer.ViewportWidth  - sidePad * 2;
-            double ah = DocumentScrollViewer.ViewportHeight - topPad  * 2;
-            if (aw <= 0 || ah <= 0) return;
-
-            // Fit both dimensions
-            double targetZoom = Math.Min(aw / widthLp, ah / heightLp);
-            
-            DocGlance.Infrastructure.Logging.Logger.Log($"ApplyFitPage PPTX: widthLp={widthLp}, heightLp={heightLp}, aw={aw}, ah={ah}, targetZoom={targetZoom}");
-            
-            SetZoom(targetZoom);
+            PptxViewerControl.ApplyFitMode();
             return;
         }
 
@@ -219,6 +181,8 @@ public sealed partial class ViewerPage
 
             double widthLp = ptW * PtToLp;
             double heightLp = ptH * PtToLp;
+            if (_rotation % 180 != 0)
+                (widthLp, heightLp) = (heightLp, widthLp);
             const double sidePad = 28.0;
             const double topPad = 16.0;
             double availableWidth = DocumentScrollViewer.ViewportWidth - sidePad * 2;

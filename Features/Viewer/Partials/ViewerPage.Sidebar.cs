@@ -53,60 +53,6 @@ public sealed partial class ViewerPage
             UpdateNotesVisibility();
     }
 
-    private async Task LoadPptxOutlineAsync(CancellationToken cancellationToken)
-    {
-        var document = _pptxDocument;
-        if (document == null)
-        {
-            SetOutlineItems(Array.Empty<OutlineItem>());
-            return;
-        }
-
-        try
-        {
-            var items = await Task.Run(() =>
-            {
-                var outline = new List<OutlineItem>(document.SlideCount);
-                for (int slide = 0; slide < document.SlideCount; slide++)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    string title;
-                    try
-                    {
-                        title = document.GetSlideTitle(slide).Trim();
-                        if (title.Length == 0)
-                        {
-                            var textMap = document.GetSlideTextMap(slide);
-                            title = document.GetSlideTextRange(slide, 0, Math.Min(textMap.GlyphCount, 256))
-                                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                                .Select(line => line.Trim())
-                                .FirstOrDefault(line => line.Length > 0) ?? $"Slide {slide + 1}";
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Infrastructure.Logging.Logger.Error($"[Sidebar] Could not read title for slide {slide + 1}", ex);
-                        title = $"Slide {slide + 1}";
-                    }
-                    outline.Add(new OutlineItem { Title = title, Page = slide + 1, Level = 0 });
-                }
-                return outline;
-            }, cancellationToken);
-            if (ReferenceEquals(_pptxDocument, document) && !cancellationToken.IsCancellationRequested)
-                SetOutlineItems(items);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            Infrastructure.Logging.Logger.Error("[Sidebar] Could not load presentation slide titles", ex);
-            if (ReferenceEquals(_pptxDocument, document))
-                SetOutlineItems(Array.Empty<OutlineItem>());
-        }
-    }
-
     internal void GoToPage(int n)
     {
         ScrollToPage(n);
@@ -121,22 +67,10 @@ public sealed partial class ViewerPage
         pageNumber = Math.Clamp(pageNumber, 1, _total);
         UpdateCurrentPage(pageNumber);
 
-        // PPTX: render the requested slide
+        // PPTX: navigate in layout coordinates owned by the viewer.
         if (_pptxDocument != null)
         {
-            const double PptxPtToLp = 96.0 / 72.0;
-            const double PptxPageGapLp = 12.0;
-            const double VerticalPaddingLp = 20.0;
-            var (_, slideHeightPt) = _pptxDocument.GetSlideSize(0);
-            double slideHeightLp = slideHeightPt * PptxPtToLp;
-            double pptxOffsetLp = VerticalPaddingLp +
-                (pageNumber - 1) * (slideHeightLp + PptxPageGapLp);
-
-            DocumentScrollViewer.ChangeView(
-                null,
-                pptxOffsetLp * DocumentScrollViewer.ZoomFactor,
-                null,
-                disableAnimation: true);
+            PptxViewerControl.NavigateToPage(pageNumber);
             return;
         }
 

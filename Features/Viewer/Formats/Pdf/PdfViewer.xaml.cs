@@ -16,11 +16,13 @@ using DocGlance.Core.Enums;
 using DocGlance.Features.Viewer.Components;
 using DocGlance.Rendering.Pdf.Models;
 using DocGlance.Rendering.Pdf;
+using DocGlance.Infrastructure.Logging;
+using Windows.Foundation;
 using Windows.UI;
 
 namespace DocGlance.Features.Viewer.Formats.Pdf;
 
-public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZoom, ISupportsSearch, ISupportsThumbnails, ISupportsOutline
+public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZoom, ISupportsSearch, ISupportsThumbnails, ISupportsOutline, ISupportsRotation
 {
     private IPdfViewerService _pdfService = new PdfViewerService();
     private FitMode _currentFitMode = FitMode.None;
@@ -72,6 +74,7 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
     internal PdfTextAnnotationKind MarkupKind { get; private set; } = PdfTextAnnotationKind.Highlight;
     internal bool IsMarkupToolActive => ActiveAnnotationTool == PdfAnnotationTool.Markup;
     internal double PdfRotation { get; set; }
+    public double CurrentRotation => PdfRotation;
     internal PdfViewportState? ViewportState { get; set; }
 
     internal PdfDocumentState? DocumentState
@@ -247,20 +250,21 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
             rectangles.Count == 0)
             return;
 
-        const double pointToLayoutPixel = 96.0 / 72.0;
         double pageTop = GetPageTopLp(pageIndex);
         var fill = new SolidColorBrush(Color.FromArgb(105, 0, 120, 215));
         foreach (PdfSearchRect rect in rectangles)
         {
+            Rect transformed = TransformPageRect(
+                pageIndex, rect.X, rect.Y, rect.Width, rect.Height);
             var overlay = new Rectangle
             {
-                Width = rect.Width * pointToLayoutPixel,
-                Height = rect.Height * pointToLayoutPixel,
+                Width = transformed.Width,
+                Height = transformed.Height,
                 Fill = fill,
                 IsHitTestVisible = false,
             };
-            Canvas.SetLeft(overlay, rect.X * pointToLayoutPixel);
-            Canvas.SetTop(overlay, pageTop + rect.Y * pointToLayoutPixel);
+            Canvas.SetLeft(overlay, transformed.X);
+            Canvas.SetTop(overlay, pageTop + transformed.Y);
             PdfSelectionCanvas.Children.Add(overlay);
             _selectionOverlays.Add(overlay);
         }
@@ -288,10 +292,12 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
             double pageTop = GetPageTopLp(annotation.PageIndex);
             foreach (PdfSearchRect rect in annotation.Rectangles)
             {
-                double x = rect.X * pointToLayoutPixel;
-                double y = pageTop + rect.Y * pointToLayoutPixel;
-                double width = rect.Width * pointToLayoutPixel;
-                double height = rect.Height * pointToLayoutPixel;
+                Rect transformed = TransformPageRect(
+                    annotation.PageIndex, rect.X, rect.Y, rect.Width, rect.Height);
+                double x = transformed.X;
+                double y = pageTop + transformed.Y;
+                double width = transformed.Width;
+                double height = transformed.Height;
                 if (width <= 0 || height <= 0)
                     continue;
 
@@ -312,10 +318,17 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
                         StrokeEndLineCap = PenLineCap.Round,
                         IsHitTestVisible = false,
                     };
+                    var (inkPageWidthPt, inkPageHeightPt) =
+                        DocumentState.GetPageSize(annotation.PageIndex);
                     foreach (var point in annotation.Points)
-                        stroke.Points.Add(new Windows.Foundation.Point(
-                            point.X * pointToLayoutPixel,
-                            pageTop + point.Y * pointToLayoutPixel));
+                    {
+                        Point rotatedPoint = PageRotation.RotatePoint(
+                            new Point(point.X * (96.0 / 72.0), point.Y * (96.0 / 72.0)),
+                            inkPageWidthPt * (96.0 / 72.0),
+                            inkPageHeightPt * (96.0 / 72.0),
+                            PdfRotation);
+                        stroke.Points.Add(new Point(rotatedPoint.X, pageTop + rotatedPoint.Y));
+                    }
                     PdfAnnotationCanvas.Children.Add(stroke);
                     break;
                 }
@@ -326,46 +339,69 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
                     {
                         Glyph = "\uE70B",
                         FontSize = 13,
+                        Width = 16,
+                        Height = 16,
                         Foreground = new SolidColorBrush(Color.FromArgb(255, 180, 120, 0)),
+                        RenderTransformOrigin = new Point(0.5, 0.5),
+                        RenderTransform = new RotateTransform { Angle = PdfRotation },
                     };
-                    Canvas.SetLeft(noteIcon, x);
-                    Canvas.SetTop(noteIcon, y);
+                    Canvas.SetLeft(noteIcon, x + (width - 16) / 2);
+                    Canvas.SetTop(noteIcon, y + (height - 16) / 2);
                     PdfAnnotationCanvas.Children.Add(noteIcon);
                     continue;
                 }
 
                 if (annotation.Kind == PdfTextAnnotationKind.FreeText)
                 {
+                    double textWidth = rect.Width * pointToLayoutPixel;
+                    double textHeight = rect.Height * pointToLayoutPixel;
                     var text = new TextBlock
                     {
                         Text = annotation.Contents,
-                        Width = width,
-                        Height = height,
+                        Width = textWidth,
+                        Height = textHeight,
                         TextWrapping = TextWrapping.Wrap,
                         Foreground = new SolidColorBrush(color),
                         IsHitTestVisible = false,
+                        RenderTransformOrigin = new Point(0.5, 0.5),
+                        RenderTransform = new RotateTransform { Angle = PdfRotation },
                     };
-                    Canvas.SetLeft(text, x);
-                    Canvas.SetTop(text, y);
+                    Canvas.SetLeft(text, x + (width - textWidth) / 2);
+                    Canvas.SetTop(text, y + (height - textHeight) / 2);
                     PdfAnnotationCanvas.Children.Add(text);
                     continue;
                 }
 
-                double lineHeight = Math.Clamp(height * 0.09, 1.25, 2.5);
+                double lineHeight = Math.Clamp(rect.Height * pointToLayoutPixel * 0.09, 1.25, 2.5);
+                double originalWidth = rect.Width * pointToLayoutPixel;
+                double originalHeight = rect.Height * pointToLayoutPixel;
+                double originalY = rect.Y * pointToLayoutPixel;
+                Rect markRect = annotation.Kind switch
+                {
+                    PdfTextAnnotationKind.Underline =>
+                        new Rect(rect.X * pointToLayoutPixel, originalY + originalHeight - lineHeight,
+                            originalWidth, lineHeight),
+                    PdfTextAnnotationKind.Strikeout =>
+                        new Rect(rect.X * pointToLayoutPixel, originalY + (originalHeight - lineHeight) / 2,
+                            originalWidth, lineHeight),
+                    _ => new Rect(rect.X * pointToLayoutPixel, originalY, originalWidth, originalHeight),
+                };
+                var (pageWidthPt, pageHeightPt) =
+                    DocumentState.GetPageSize(annotation.PageIndex);
+                markRect = PageRotation.RotateRect(
+                    markRect,
+                    pageWidthPt * pointToLayoutPixel,
+                    pageHeightPt * pointToLayoutPixel,
+                    PdfRotation);
                 var mark = new Rectangle
                 {
-                    Width = width,
-                    Height = annotation.Kind == PdfTextAnnotationKind.Highlight ? height : lineHeight,
+                    Width = markRect.Width,
+                    Height = markRect.Height,
                     IsHitTestVisible = false,
                     Fill = new SolidColorBrush(color),
                 };
-                Canvas.SetLeft(mark, x);
-                Canvas.SetTop(mark, annotation.Kind switch
-                {
-                    PdfTextAnnotationKind.Underline => y + height - lineHeight,
-                    PdfTextAnnotationKind.Strikeout => y + (height - lineHeight) / 2,
-                    _ => y,
-                });
+                Canvas.SetLeft(mark, markRect.X);
+                Canvas.SetTop(mark, pageTop + markRect.Y);
                 PdfAnnotationCanvas.Children.Add(mark);
             }
         }
@@ -483,6 +519,36 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
 
     public void SetFitMode(FitMode mode) => _currentFitMode = mode;
 
+    public void SetRotation(double angle)
+    {
+        double rotation = PageRotation.Normalize(angle);
+        if (Math.Abs(rotation - PdfRotation) < 0.001)
+            return;
+
+        PdfRotation = rotation;
+        foreach (PageThumbnailItem thumbnail in _thumbnails)
+            thumbnail.RotationAngle = rotation;
+        if (DocumentState == null)
+            return;
+
+        CancelPendingRenders();
+        int currentPage = ViewportState?.CurrentPageIndex ?? 0;
+        ClearTextSelection();
+        UpdateCanvasSize();
+        ClearPdfPageCache();
+        RefreshHighlights();
+        if (ViewportState != null)
+        {
+            DocumentScrollViewer.UpdateLayout();
+            DocumentScrollViewer.ChangeView(
+                null,
+                GetPageTopLp(currentPage) * DocumentScrollViewer.ZoomFactor,
+                null,
+                disableAnimation: true);
+            RenderPagesAsync().SafeFireAndForget("PdfRotationRender");
+        }
+    }
+
     internal void ApplyFitWidth()
     {
         if (DocumentState == null || ViewportState == null)
@@ -570,7 +636,13 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
 
         PdfSearchResult hit = _pdfSearchResults[index];
         double pageTopLp = GetPageOffsetInDocument(hit.PageIndex) * (96.0 / 72.0);
-        double hitTopLp = hit.Rects.Count > 0 ? hit.Rects[0].Y * (96.0 / 72.0) : 0;
+        double hitTopLp = 0;
+        if (hit.Rects.Count > 0)
+        {
+            PdfSearchRect rect = hit.Rects[0];
+            Rect rotated = TransformPageRect(hit.PageIndex, rect.X, rect.Y, rect.Width, rect.Height);
+            hitTopLp = rotated.Y - pageTopLp;
+        }
         double targetOffset = Math.Max(
             0,
             (pageTopLp + hitTopLp) * CurrentZoom - DocumentScrollViewer.ViewportHeight / 2);
@@ -592,21 +664,27 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
         if (DocumentState == null || ViewportState == null || _pdfSearchResults.Count == 0)
             return;
 
-        var visiblePages = ViewportState.GetVisiblePages(DocumentState);
+        double zoom = Math.Max(0.01, DocumentScrollViewer.ZoomFactor);
+        (int firstVisible, int lastVisible) = GetVisiblePageRange(
+            DocumentScrollViewer.VerticalOffset / zoom,
+            DocumentScrollViewer.ViewportHeight / zoom,
+            bufferPages: 0);
         for (int resultIndex = 0; resultIndex < _pdfSearchResults.Count; resultIndex++)
         {
             PdfSearchResult result = _pdfSearchResults[resultIndex];
-            if (!visiblePages.Any(page => page.PageIndex == result.PageIndex))
+            if (result.PageIndex < firstVisible || result.PageIndex > lastVisible)
                 continue;
 
             bool active = resultIndex == _activeSearchIndex;
-            double pageOffsetY = GetPageOffsetInDocument(result.PageIndex);
+            double pageOffsetY = GetPageTopLp(result.PageIndex);
             foreach (PdfSearchRect rect in result.Rects)
             {
+                Rect rotated = TransformPageRect(
+                    result.PageIndex, rect.X, rect.Y, rect.Width, rect.Height);
                 var highlight = new Border
                 {
-                    Width = Math.Max(2, rect.Width * (96.0 / 72.0)),
-                    Height = Math.Max(2, rect.Height * (96.0 / 72.0)),
+                    Width = Math.Max(2, rotated.Width),
+                    Height = Math.Max(2, rotated.Height),
                     CornerRadius = new CornerRadius(2),
                     Background = new SolidColorBrush(active
                         ? Color.FromArgb(145, 255, 105, 97)
@@ -617,8 +695,8 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
                     BorderThickness = new Thickness(active ? 1 : 0.5),
                     IsHitTestVisible = false,
                 };
-                Canvas.SetLeft(highlight, rect.X * (96.0 / 72.0));
-                Canvas.SetTop(highlight, (pageOffsetY + rect.Y) * (96.0 / 72.0));
+                Canvas.SetLeft(highlight, rotated.X);
+                Canvas.SetTop(highlight, pageOffsetY + rotated.Y);
                 Canvas.SetZIndex(highlight, 10);
                 SearchHighlightCanvas.Children.Add(highlight);
             }
@@ -634,7 +712,7 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
         double offset = 0;
         for (int i = 0; i < pageIndex && i < DocumentState.PageCount; i++)
         {
-            var (_, pageHeight) = DocumentState.GetPageSize(i);
+            var (_, pageHeight) = GetRotatedPageSize(i);
             offset += pageHeight + pageGapPt;
         }
         return offset;
@@ -657,6 +735,7 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
             throw new InvalidOperationException(result.ErrorMessage ?? "Cannot open PDF.");
 
         DocumentState = result.Document;
+        PdfRotation = 0;
         CreateThumbnailItems(result.Document);
     }
 
@@ -673,6 +752,7 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
                 PageLabel = $"{pageIndex + 1}",
                 BoxHeight = thumbnailLogicalWidth * pageHeight / Math.Max(1.0, pageWidth),
                 IsSelected = pageIndex == 0,
+                RotationAngle = PdfRotation,
             });
         }
     }

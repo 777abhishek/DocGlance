@@ -7,6 +7,7 @@ using Microsoft.UI.Xaml.Input;
 using DocGlance.Services.Storage;
 using DocGlance.Rendering.Pdf;
 using DocGlance.Features.Viewer.Components;
+using DocGlance.Features.Viewer.Contracts;
 using System;
 using System.IO;
 using Windows.ApplicationModel.DataTransfer;
@@ -70,18 +71,17 @@ public sealed partial class ViewerPage
 
     private void Rotate(double delta)
     {
-        _rotation = (_rotation + delta + 360.0) % 360.0;
-        PdfViewerControl.PdfRotation = _rotation;
-        ClearPdfTextSelection();
-        ViewModel.Rotation = _rotation;
+        if (_activeViewer is not ISupportsRotation rotationViewer)
+            return;
 
-        // VIEWPORT ARCHITECTURE: rotation swaps page axes (90°/270°), so the
-        // canvas extent changes and the region must be re-rendered.
-        if (_pdfState != null && _viewportState != null)
-        {
-            UpdateCanvasSize();
-            _ = RenderPagesAsync();
-        }
+        _rotation = (_rotation + delta + 360.0) % 360.0;
+        rotationViewer.SetRotation(_rotation);
+        if (_activeViewer is Formats.Pdf.PdfViewer)
+            ClearPdfTextSelection();
+        else
+            ClearOfficeSelection();
+        ViewModel.Rotation = _rotation;
+        ReapplyFitMode();
     }
 
     private void Toolbar_FindRequested(object? sender, EventArgs e)

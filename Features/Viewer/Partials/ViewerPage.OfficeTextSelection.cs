@@ -36,6 +36,7 @@ public sealed partial class ViewerPage
     {
         AttachOfficeTextHandlers(PdfViewerControl.PdfViewportCanvasControl);
         AttachOfficeTextHandlers(DocxViewerControl.Canvas);
+        AttachOfficeTextHandlers(PptxViewerControl.Canvas);
     }
 
     private void AttachOfficeTextHandlers(Panel contentPanel)
@@ -59,9 +60,11 @@ public sealed partial class ViewerPage
             CopyOfficeTextToClipboard();
             args.Handled = true;
         };
-        var scrollViewer = ReferenceEquals(contentPanel, DocxViewerControl.Canvas)
+        ScrollViewer scrollViewer = contentPanel == DocxViewerControl.Canvas
             ? DocxViewerControl.ScrollViewer
-            : PdfViewerControl.DocumentScrollViewerControl;
+            : contentPanel == PptxViewerControl.Canvas
+                ? PptxViewerControl.ScrollViewer
+                : PdfViewerControl.DocumentScrollViewerControl;
         scrollViewer.KeyboardAccelerators.Add(copyAccelerator);
     }
 
@@ -141,8 +144,14 @@ public sealed partial class ViewerPage
                 return false;
             }
 
-            double pageY = (canvasPoint.Y - GetDocxPageTopLp(pageIndex)) / PtToLp;
-            var hit = _docxDocument.HitTest(pageIndex, canvasPoint.X / PtToLp, pageY);
+            var (widthPt, heightPt) = _docxDocument.GetPageSize(pageIndex);
+            Point pagePoint = PageRotation.UnrotatePoint(
+                new Point(canvasPoint.X, canvasPoint.Y - GetDocxPageTopLp(pageIndex)),
+                widthPt * PtToLp,
+                heightPt * PtToLp,
+                _rotation);
+            var hit = _docxDocument.HitTest(
+                pageIndex, pagePoint.X / PtToLp, pagePoint.Y / PtToLp);
             if (hit is not { } docxHit)
             {
                 position = default;
@@ -153,17 +162,25 @@ public sealed partial class ViewerPage
             return true;
         }
 
-        if (_pptxDocument != null && _pptxDocument.SlideCount > 0)
+        if (_pptxDocument != null)
         {
-            var (_, heightPt) = _pptxDocument.GetSlideSize(0);
-            double slideHeightLp = heightPt * PtToLp;
-            double stride = slideHeightLp + 12;
-            int slideIndex = Math.Clamp((int)Math.Floor((canvasPoint.Y - 20) / stride), 0, _pptxDocument.SlideCount - 1);
-            double slideTop = 20 + slideIndex * stride;
+            int slideIndex = PptxViewerControl.FindSlide(canvasPoint.Y);
+            if (slideIndex < 0)
+            {
+                position = default;
+                return false;
+            }
+            double slideTop = GetPptxPageTopLp(slideIndex);
+            var (widthPt, heightPt) = _pptxDocument.GetSlideSize(slideIndex);
+            Point pagePoint = PageRotation.UnrotatePoint(
+                new Point(canvasPoint.X, canvasPoint.Y - slideTop),
+                widthPt * PtToLp,
+                heightPt * PtToLp,
+                _rotation);
             var map = GetPptxTextMap(slideIndex);
             int offset = map.HitTest(
-                canvasPoint.X / PtToLp,
-                (canvasPoint.Y - slideTop) / PtToLp,
+                pagePoint.X / PtToLp,
+                pagePoint.Y / PtToLp,
                 allowDistantHorizontalHit: extendSelection);
             if (offset < 0)
             {
@@ -181,7 +198,6 @@ public sealed partial class ViewerPage
 
     private bool IsPointInsideOfficePage(Point canvasPoint)
     {
-        const double PtToLp = 96.0 / 72.0;
         if (_docxDocument != null)
         {
             int pageIndex = FindDocxPage(canvasPoint.Y);
@@ -191,16 +207,14 @@ public sealed partial class ViewerPage
                     DocxViewerControl.GetPageHeightLp(pageIndex);
         }
 
-        if (_pptxDocument != null && _pptxDocument.SlideCount > 0)
+        if (_pptxDocument != null)
         {
-            var (_, heightPt) = _pptxDocument.GetSlideSize(0);
-            double slideHeight = heightPt * PtToLp;
-            double stride = slideHeight + 12;
-            int slideIndex = (int)Math.Floor((canvasPoint.Y - 20) / stride);
-            if ((uint)slideIndex >= (uint)_pptxDocument.SlideCount)
+            int slideIndex = PptxViewerControl.FindSlide(canvasPoint.Y);
+            if (slideIndex < 0)
                 return false;
-            double top = 20 + slideIndex * stride;
-            return canvasPoint.Y >= top && canvasPoint.Y <= top + slideHeight;
+            double top = GetPptxPageTopLp(slideIndex);
+            return canvasPoint.Y >= top &&
+                canvasPoint.Y <= top + PptxViewerControl.GetSlideHeightLp(slideIndex);
         }
         return false;
     }
@@ -348,23 +362,35 @@ public sealed partial class ViewerPage
     private void AddDocxSelectionOverlay(DocxDocument.DocxMatch rect)
     {
         const double PtToLp = 96.0 / 72.0;
+        var (widthPt, heightPt) = _docxDocument!.GetPageSize(rect.PageIndex);
+        Rect rotated = PageRotation.RotateRect(
+            new Rect(rect.X * PtToLp, rect.Y * PtToLp,
+                rect.Width * PtToLp, rect.Height * PtToLp),
+            widthPt * PtToLp,
+            heightPt * PtToLp,
+            _rotation);
         AddOfficeSelectionOverlay(new Rect(
-            rect.X * PtToLp,
-            GetDocxPageTopLp(rect.PageIndex) + rect.Y * PtToLp,
-            rect.Width * PtToLp,
-            rect.Height * PtToLp));
+            rotated.X,
+            GetDocxPageTopLp(rect.PageIndex) + rotated.Y,
+            rotated.Width,
+            rotated.Height));
     }
 
     private void AddPptxSelectionOverlay(int slideIndex, PdfSearchRect rect)
     {
         const double PtToLp = 96.0 / 72.0;
-        var (_, heightPt) = _pptxDocument!.GetSlideSize(slideIndex);
-        double slideTop = 20 + slideIndex * (heightPt * PtToLp + 12);
+        var (widthPt, heightPt) = _pptxDocument!.GetSlideSize(slideIndex);
+        Rect rotated = PageRotation.RotateRect(
+            new Rect(rect.X * PtToLp, rect.Y * PtToLp,
+                rect.Width * PtToLp, rect.Height * PtToLp),
+            widthPt * PtToLp,
+            heightPt * PtToLp,
+            _rotation);
         AddOfficeSelectionOverlay(new Rect(
-            rect.X * PtToLp,
-            slideTop + rect.Y * PtToLp,
-            rect.Width * PtToLp,
-            rect.Height * PtToLp));
+            rotated.X,
+            GetPptxPageTopLp(slideIndex) + rotated.Y,
+            rotated.Width,
+            rotated.Height));
     }
 
     private void AddOfficeSelectionOverlay(Rect rect)
@@ -473,11 +499,24 @@ public sealed partial class ViewerPage
             if (_docxDocument != null)
             {
                 rectangles.AddRange(_docxDocument.GetSelectionRects(page, rangeStart, rangeEnd)
-                    .Select(rect => new Rect(
-                        rect.X * 96.0 / 72.0,
-                        GetDocxPageTopLp(rect.PageIndex) + rect.Y * 96.0 / 72.0,
-                        rect.Width * 96.0 / 72.0,
-                        rect.Height * 96.0 / 72.0)));
+                    .Select(rect =>
+                    {
+                        var (widthPt, heightPt) = _docxDocument.GetPageSize(rect.PageIndex);
+                        Rect rotated = PageRotation.RotateRect(
+                            new Rect(
+                                rect.X * 96.0 / 72.0,
+                                rect.Y * 96.0 / 72.0,
+                                rect.Width * 96.0 / 72.0,
+                                rect.Height * 96.0 / 72.0),
+                            widthPt * 96.0 / 72.0,
+                            heightPt * 96.0 / 72.0,
+                            _rotation);
+                        return new Rect(
+                            rotated.X,
+                            GetDocxPageTopLp(rect.PageIndex) + rotated.Y,
+                            rotated.Width,
+                            rotated.Height);
+                    }));
             }
             else
             {
@@ -485,13 +524,21 @@ public sealed partial class ViewerPage
                     .Select(rect =>
                     {
                         const double PtToLp = 96.0 / 72.0;
-                        var (_, heightPt) = _pptxDocument!.GetSlideSize(page);
-                        double top = 20 + page * (heightPt * PtToLp + 12);
+                        var (widthPt, heightPt) = _pptxDocument!.GetSlideSize(page);
+                        Rect rotated = PageRotation.RotateRect(
+                            new Rect(
+                                rect.X * PtToLp,
+                                rect.Y * PtToLp,
+                                rect.Width * PtToLp,
+                                rect.Height * PtToLp),
+                            widthPt * PtToLp,
+                            heightPt * PtToLp,
+                            _rotation);
                         return new Rect(
-                            rect.X * PtToLp,
-                            top + rect.Y * PtToLp,
-                            rect.Width * PtToLp,
-                            rect.Height * PtToLp);
+                            rotated.X,
+                            GetPptxPageTopLp(page) + rotated.Y,
+                            rotated.Width,
+                            rotated.Height);
                     }));
             }
         }

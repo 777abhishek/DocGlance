@@ -13,6 +13,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Windows.Foundation;
 using Windows.UI;
 
 namespace DocGlance.Features.Viewer.Formats.Docx;
@@ -22,7 +23,8 @@ public sealed partial class DocxViewer :
     IDocumentViewer,
     ISupportsSearch,
     ISupportsThumbnails,
-    ISupportsOutline
+    ISupportsOutline,
+    ISupportsRotation
 {
     private readonly Dictionary<int, Image> _pageCache = new();
     private readonly Dictionary<int, double> _pageScale = new();
@@ -39,12 +41,14 @@ public sealed partial class DocxViewer :
     private CancellationTokenSource? _renderCts;
     private CancellationTokenSource? _documentCts;
     private double _zoom = 1.0;
+    private double _rotation;
     private int _currentPage;
 
     public FrameworkElement Control => this;
     public DocxDocument? Document { get; private set; }
     public IReadOnlyList<PageThumbnailItem> Thumbnails => _thumbnails;
     public IReadOnlyList<OutlineItem> Outline => _outline;
+    public double CurrentRotation => _rotation;
     public ScrollViewer ScrollViewer => DocumentScrollViewer;
     public Canvas Canvas => ViewportCanvas;
     public Canvas Highlights => SearchHighlightCanvas;
@@ -74,6 +78,7 @@ public sealed partial class DocxViewer :
         _documentCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _currentPage = 0;
         _zoom = 1.0;
+        _rotation = 0;
         DocumentScrollViewer.ChangeView(0, 0, 1.0f, disableAnimation: true);
 
         InitializePageGeometry();
@@ -114,6 +119,26 @@ public sealed partial class DocxViewer :
         _pageHeightLp = Array.Empty<double>();
         _currentPage = 0;
         return Task.CompletedTask;
+    }
+
+    public void SetRotation(double angle)
+    {
+        double rotation = PageRotation.Normalize(angle);
+        if (Math.Abs(rotation - _rotation) < 0.001)
+            return;
+
+        _rotation = rotation;
+        InitializePageGeometry();
+        foreach (PageThumbnailItem thumbnail in _thumbnails)
+            thumbnail.RotationAngle = rotation;
+        foreach (var (index, image) in _pageCache)
+            PositionPageImage(index, image);
+        RefreshSearchHighlights();
+        DocumentScrollViewer.UpdateLayout();
+        DocumentScrollViewer.ChangeView(
+            null, GetPageTopLp(_currentPage) * DocumentScrollViewer.ZoomFactor,
+            null, disableAnimation: true);
+        RenderViewportAsync().SafeFireAndForget("DocxRotationRender");
     }
 
     public void StartThumbnailLoading()
@@ -229,6 +254,9 @@ public sealed partial class DocxViewer :
 
     public void Highlight(SearchResult result)
     {
+        DocxDocument? document = Document;
+        if (document == null)
+            return;
         int index = Array.FindIndex(_searchResults, candidate => ReferenceEquals(candidate, result));
         if (index < 0)
             return;
@@ -240,9 +268,19 @@ public sealed partial class DocxViewer :
             return;
 
         const double ptToLp = 96.0 / 72.0;
+        var (pageWidthPt, pageHeightPt) = document.GetPageSize(match.PageIndex);
+        Rect rotatedMatch = PageRotation.RotateRect(
+            new Rect(
+                match.X * ptToLp,
+                match.Y * ptToLp,
+                match.Width * ptToLp,
+                match.Height * ptToLp),
+            pageWidthPt * ptToLp,
+            pageHeightPt * ptToLp,
+            _rotation);
         double targetOffset = Math.Max(
             0,
-            (GetPageTopLp(match.PageIndex) + match.Y * ptToLp) *
+            (GetPageTopLp(match.PageIndex) + rotatedMatch.Y) *
             DocumentScrollViewer.ZoomFactor - DocumentScrollViewer.ViewportHeight / 2);
         DocumentScrollViewer.ChangeView(null, targetOffset, null, disableAnimation: true);
         _currentPage = match.PageIndex;
@@ -307,13 +345,12 @@ public sealed partial class DocxViewer :
                 var image = new Image
                 {
                     Source = bitmap,
-                    Width = _pageWidthLp[i],
-                    Height = _pageHeightLp[i],
+                    Width = widthPt * 96.0 / 72.0,
+                    Height = heightPt * 96.0 / 72.0,
                     Stretch = Microsoft.UI.Xaml.Media.Stretch.Fill,
                     UseLayoutRounding = true,
                 };
-                Canvas.SetLeft(image, 0);
-                Canvas.SetTop(image, _pageTopLp[i]);
+                PositionPageImage(i, image);
                 Canvas.SetZIndex(image, 0);
 
                 if (_pageCache.TryGetValue(i, out Image? oldImage))
@@ -360,8 +397,10 @@ public sealed partial class DocxViewer :
         for (int i = 0; i < document.PageCount; i++)
         {
             var (width, height) = document.GetPageSize(i);
-            _pageWidthLp[i] = width * ptToLp;
-            _pageHeightLp[i] = height * ptToLp;
+            (double rotatedWidth, double rotatedHeight) = PageRotation.GetSize(
+                width * ptToLp, height * ptToLp, _rotation);
+            _pageWidthLp[i] = rotatedWidth;
+            _pageHeightLp[i] = rotatedHeight;
             _pageTopLp[i] = totalHeight;
             totalHeight += _pageHeightLp[i];
             if (i < document.PageCount - 1)
@@ -376,6 +415,18 @@ public sealed partial class DocxViewer :
         Canvas.SetZIndex(SearchHighlightCanvas, 10);
     }
 
+    private void PositionPageImage(int pageIndex, Image image)
+    {
+        var (widthPt, heightPt) = Document!.GetPageSize(pageIndex);
+        double width = widthPt * 96.0 / 72.0;
+        double height = heightPt * 96.0 / 72.0;
+        image.RenderTransformOrigin = new Windows.Foundation.Point(0.5, 0.5);
+        image.RenderTransform = new Microsoft.UI.Xaml.Media.RotateTransform { Angle = _rotation };
+        (double rotatedWidth, double rotatedHeight) = PageRotation.GetSize(width, height, _rotation);
+        Canvas.SetLeft(image, (_pageWidthLp[pageIndex] - width) / 2);
+        Canvas.SetTop(image, _pageTopLp[pageIndex] + (rotatedHeight - height) / 2);
+    }
+
     private void CreateThumbnailPlaceholders()
     {
         DocxDocument document = Document!;
@@ -388,7 +439,8 @@ public sealed partial class DocxViewer :
                 PageNumber = i + 1,
                 PageLabel = $"{i + 1}",
                 IsSelected = i == 0,
-                BoxHeight = width > 0 ? 154 * height / width : 154 * 1.414,
+                BoxHeight = width > 0 ? 200 * height / width : 200 * 1.414,
+                RotationAngle = _rotation,
             });
         }
     }
@@ -503,8 +555,15 @@ public sealed partial class DocxViewer :
                     BorderThickness = new Thickness(active ? 1 : 0.5),
                     IsHitTestVisible = false,
                 };
-                Canvas.SetLeft(highlight, rect.X * ptToLp);
-                Canvas.SetTop(highlight, GetPageTopLp(rect.PageIndex) + rect.Y * ptToLp);
+                var (widthPt, heightPt) = Document.GetPageSize(rect.PageIndex);
+                Rect rotatedRect = PageRotation.RotateRect(
+                    new Rect(rect.X * ptToLp, rect.Y * ptToLp,
+                        rect.Width * ptToLp, rect.Height * ptToLp),
+                    widthPt * ptToLp, heightPt * ptToLp, _rotation);
+                Canvas.SetLeft(highlight, rotatedRect.X);
+                Canvas.SetTop(highlight, GetPageTopLp(rect.PageIndex) + rotatedRect.Y);
+                highlight.Width = Math.Max(2, rotatedRect.Width);
+                highlight.Height = Math.Max(2, rotatedRect.Height);
                 SearchHighlightCanvas.Children.Add(highlight);
             }
         }

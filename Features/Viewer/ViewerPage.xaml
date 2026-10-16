@@ -130,12 +130,24 @@
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="models:PageThumbnailItem">
                             <StackPanel HorizontalAlignment="Center" Spacing="3" Padding="0,3">
-                                <Grid Width="200" Height="{x:Bind BoxHeight, Mode=OneWay}">
+                                <Grid Width="{x:Bind DisplayBoxWidth, Mode=OneWay}"
+                                      Height="{x:Bind DisplayBoxHeight, Mode=OneWay}">
                                     <Border CornerRadius="5" BorderThickness="1"
                                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                                         <Image Source="{x:Bind Thumbnail, Mode=OneWay}"
-                                               Stretch="Uniform" Margin="2"/>
+                                               Width="{x:Bind BoxWidth, Mode=OneWay}"
+                                               Height="{x:Bind BoxHeight, Mode=OneWay}"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               Stretch="Fill" Margin="2">
+                                            <Image.RenderTransform>
+                                                <RotateTransform
+                                                    Angle="{x:Bind RotationAngle, Mode=OneWay}"
+                                                    CenterX="{x:Bind RotationCenterX, Mode=OneWay}"
+                                                    CenterY="{x:Bind RotationCenterY, Mode=OneWay}"/>
+                                            </Image.RenderTransform>
+                                        </Image>
                                     </Border>
                                     <Border CornerRadius="5"
                                         BorderThickness="{x:Bind RingThickness, Mode=OneWay}"
@@ -321,6 +333,11 @@
                     VerticalContentAlignment="Stretch"/>
 
                 <ContentControl x:Name="DocxViewerHost"
+                    Visibility="Collapsed"
+                    HorizontalContentAlignment="Stretch"
+                    VerticalContentAlignment="Stretch"/>
+
+                <ContentControl x:Name="PptxViewerHost"
                     Visibility="Collapsed"
                     HorizontalContentAlignment="Stretch"
                     VerticalContentAlignment="Stretch"/>
