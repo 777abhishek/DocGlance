@@ -24,9 +24,6 @@ public sealed partial class ViewerPage
     private CancellationTokenSource? _searchDebounceCts;
     private IReadOnlyList<PptxSearchMatch> _pptxSearchResults = Array.Empty<PptxSearchMatch>();
     private int _activePptxSearchIndex = -1;
-    private IReadOnlyList<DocxDocument.DocxSearchMatch> _docxSearchResults =
-        Array.Empty<DocxDocument.DocxSearchMatch>();
-    private int _activeDocxSearchIndex = -1;
     private SearchResult[] _activeViewerSearchResults = Array.Empty<SearchResult>();
     private int _activeViewerSearchIndex = -1;
 
@@ -108,25 +105,6 @@ public sealed partial class ViewerPage
                 return;
             }
 
-            if (_docxDocument is { } docxDocument)
-            {
-                var docxResults = await Task.Run(
-                    () => docxDocument.SearchText(query, caseSensitive),
-                    ct);
-                if (ct.IsCancellationRequested) return;
-
-                _docxSearchResults = docxResults;
-                _activeDocxSearchIndex = docxResults.Count > 0 ? 0 : -1;
-                FindCount.Text = docxResults.Count == 0
-                    ? "No matches"
-                    : $"1 of {docxResults.Count}";
-                DrawDocxSearchHighlights();
-
-                if (_activeDocxSearchIndex >= 0)
-                    ScrollToDocxSearchHit(_activeDocxSearchIndex);
-                return;
-            }
-
             SetSearchLoading(false);
             return;
         }
@@ -149,12 +127,9 @@ public sealed partial class ViewerPage
         _activeViewerSearchIndex = -1;
         _pptxSearchResults = Array.Empty<PptxSearchMatch>();
         _activePptxSearchIndex = -1;
-        _docxSearchResults = Array.Empty<DocxDocument.DocxSearchMatch>();
-        _activeDocxSearchIndex = -1;
         ClearPptxSearchHighlights();
         FindCount.Text     = "";
         DrawAllHighlights();
-        DrawDocxSearchHighlights();
     }
 
     private async Task SearchInViewer(ISupportsSearch viewer, string query, bool matchCase)
@@ -191,6 +166,8 @@ public sealed partial class ViewerPage
             spreadsheetViewer.MatchCase = matchCase;
         else if (viewer is Formats.Pdf.PdfViewer pdfViewer)
             pdfViewer.MatchCase = matchCase;
+        else if (viewer is Formats.Docx.DocxViewer docxViewer)
+            docxViewer.MatchCase = matchCase;
 
         ClearSearchHighlights();
         SetSearchLoading(true);
@@ -238,72 +215,6 @@ public sealed partial class ViewerPage
         PdfViewerControl.RefreshHighlights();
     }
 
-    private void DrawDocxSearchHighlights()
-    {
-        if (SearchHighlightCanvas == null) return;
-        SearchHighlightCanvas.Children.Clear();
-        if (_docxDocument == null || _docxSearchResults.Count == 0)
-            return;
-
-        const double PtToLp = 96.0 / 72.0;
-        var (firstVisible, lastVisible) = GetVisibleDocxPageRange();
-        if (firstVisible < 0) return;
-
-        for (int matchIndex = 0; matchIndex < _docxSearchResults.Count; matchIndex++)
-        {
-            bool active = matchIndex == _activeDocxSearchIndex;
-            foreach (var rect in _docxSearchResults[matchIndex].Rects)
-            {
-                if (rect.PageIndex < firstVisible || rect.PageIndex > lastVisible)
-                    continue;
-
-                var highlight = new Border
-                {
-                    Width = Math.Max(2, rect.Width * PtToLp),
-                    Height = Math.Max(2, rect.Height * PtToLp),
-                    CornerRadius = new CornerRadius(2),
-                    Background = new SolidColorBrush(active
-                        ? Color.FromArgb(145, 255, 105, 97)
-                        : Color.FromArgb(105, 255, 224, 102)),
-                    BorderBrush = new SolidColorBrush(active
-                        ? Color.FromArgb(190, 210, 70, 65)
-                        : Color.FromArgb(145, 205, 160, 40)),
-                    BorderThickness = new Thickness(active ? 1 : 0.5),
-                    IsHitTestVisible = false,
-                };
-
-                Canvas.SetLeft(highlight, rect.X * PtToLp);
-                Canvas.SetTop(
-                    highlight,
-                    GetDocxPageTopLp(rect.PageIndex) + rect.Y * PtToLp);
-                SearchHighlightCanvas.Children.Add(highlight);
-            }
-        }
-    }
-
-    private void ScrollToDocxSearchHit(int hitIndex)
-    {
-        if (_docxDocument == null ||
-            hitIndex < 0 ||
-            hitIndex >= _docxSearchResults.Count)
-            return;
-
-        var rect = _docxSearchResults[hitIndex].Rects[0];
-        const double PtToLp = 96.0 / 72.0;
-        double hitTop = GetDocxPageTopLp(rect.PageIndex) + rect.Y * PtToLp;
-        double targetOffset = Math.Max(
-            0,
-            hitTop * DocumentScrollViewer.ZoomFactor -
-            DocumentScrollViewer.ViewportHeight / 2);
-
-        UpdateCurrentPage(rect.PageIndex + 1);
-        DocumentScrollViewer.ChangeView(
-            null,
-            targetOffset,
-            null,
-            disableAnimation: false);
-    }
-
     // ── Navigate Prev / Next ──────────────────────────────────────────────────
 
     private void NavigateSearchHit(int direction)
@@ -325,16 +236,6 @@ public sealed partial class ViewerPage
             FindCount.Text = $"{_activePptxSearchIndex + 1} of {_pptxSearchResults.Count}";
             DrawPptxSearchHighlights();
             GoToPage(_pptxSearchResults[_activePptxSearchIndex].SlideIndex + 1);
-            return;
-        }
-
-        if (_docxSearchResults.Count > 0)
-        {
-            _activeDocxSearchIndex =
-                (_activeDocxSearchIndex + direction + _docxSearchResults.Count) % _docxSearchResults.Count;
-            FindCount.Text = $"{_activeDocxSearchIndex + 1} of {_docxSearchResults.Count}";
-            DrawDocxSearchHighlights();
-            ScrollToDocxSearchHit(_activeDocxSearchIndex);
             return;
         }
 

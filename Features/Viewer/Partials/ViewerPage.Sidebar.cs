@@ -2,7 +2,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using DocGlance.Services.Storage;
 using DocGlance.Core.Models;
-using DocGlance.Rendering.Docx;
 using DocGlance.Rendering.Pdf;
 using DocGlance.Features.Viewer.Components;
 using DocGlance.Features.Viewer.Contracts;
@@ -52,57 +51,6 @@ public sealed partial class ViewerPage
             .ToList();
         if (NotesTab.IsChecked == true)
             UpdateNotesVisibility();
-    }
-
-    private async Task LoadDocxOutlineAsync(string filePath, CancellationToken cancellationToken)
-    {
-        var document = _docxDocument;
-        if (document == null)
-        {
-            SetOutlineItems(Array.Empty<OutlineItem>());
-            return;
-        }
-
-        try
-        {
-            var items = await Task.Run(() =>
-            {
-                var outline = DocxDocument.ReadOutline(filePath).ToList();
-                var pending = FlattenOutline(outline).ToList();
-                var unresolved = new HashSet<OutlineItem>(pending);
-                var normalizedTitles = pending
-                    .Select(item => (Item: item, Title: NormalizeOutlineText(item.Title)))
-                    .Where(entry => entry.Title.Length > 0)
-                    .ToList();
-
-                for (int page = 0; page < document.PageCount && unresolved.Count > 0; page++)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    string pageText = NormalizeOutlineText(document.ExtractPageText(page));
-                    foreach (var (item, title) in normalizedTitles)
-                    {
-                        if (unresolved.Contains(item) && pageText.Contains(title, StringComparison.Ordinal))
-                        {
-                            item.Page = page + 1;
-                            unresolved.Remove(item);
-                        }
-                    }
-                }
-                return outline;
-            }, cancellationToken);
-            if (ReferenceEquals(_docxDocument, document) && !cancellationToken.IsCancellationRequested)
-                SetOutlineItems(items);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            Infrastructure.Logging.Logger.Error($"[Sidebar] Could not read DOCX headings from {filePath}", ex);
-            if (ReferenceEquals(_docxDocument, document))
-                SetOutlineItems(Array.Empty<OutlineItem>());
-        }
     }
 
     private async Task LoadPptxOutlineAsync(CancellationToken cancellationToken)
@@ -158,19 +106,6 @@ public sealed partial class ViewerPage
                 SetOutlineItems(Array.Empty<OutlineItem>());
         }
     }
-
-    private static IEnumerable<OutlineItem> FlattenOutline(IEnumerable<OutlineItem> items)
-    {
-        foreach (var item in items)
-        {
-            yield return item;
-            foreach (var child in FlattenOutline(item.Children))
-                yield return child;
-        }
-    }
-
-    private static string NormalizeOutlineText(string value) =>
-        new(value.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
 
     internal void GoToPage(int n)
     {

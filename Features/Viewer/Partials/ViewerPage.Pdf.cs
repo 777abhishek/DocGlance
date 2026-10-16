@@ -15,13 +15,13 @@ using DocGlance.Rendering.Xlsx;
 using DocGlance.Rendering.Shared;
 using DocGlance.Rendering.Pdf.Models;
 using DocGlance.Interop.PdfCraft;
-using DocGlance.Interop.WordCraft;
 using DocGlance.Interop.GridCraft;
 using DocGlance.Interop.DeckCraft;
 using DocGlance.Features.Viewer.Components;
 using DocGlance.Features.Viewer.Formats.Text;
 using DocGlance.Features.Viewer.Formats.Fallback;
 using DocGlance.Features.Viewer.Formats.Pdf;
+using DocGlance.Features.Viewer.Formats.Docx;
 using DocGlance.Features.Viewer.Formats.Spreadsheet;
 using DocGlance.Features.Viewer.Contracts;
 using System;
@@ -81,9 +81,9 @@ public sealed partial class ViewerPage
         _searchCts?.Cancel();
         _searchDebounceCts?.Cancel();
         ClearSearchHighlights();
-        _activeViewer = null;
         ClearOfficeSelection();
         ClearOfficeHighlights();
+        _activeViewer = null;
         _selectedText = null;
         _officeSelectionAnchor = null;
         _officeSelectionFocus = null;
@@ -91,18 +91,15 @@ public sealed partial class ViewerPage
         await SpreadsheetViewerControl.CleanupAsync();
         
         await PdfViewerControl.CleanupAsync();
+        await DocxViewerControl.CleanupAsync();
         
         _cts = new CancellationTokenSource();
         var ct = _cts.Token;
 
         DocumentScrollViewer.ViewChanged -= OnPptxViewportChanged;
-        DocumentScrollViewer.ViewChanged -= OnDocxViewportChanged;
         ClearPptxCache();
-        ClearDocxCache();
         _pptxDocument?.Dispose();
         _pptxDocument = null;
-        _docxDocument?.Dispose();
-        _docxDocument = null;
         
         Thumbnails.Clear();
         ThumbnailList.ItemsSource = Thumbnails;
@@ -132,7 +129,7 @@ public sealed partial class ViewerPage
 
         if (factory is PdfViewerFactory)
             await LoadPdfAsync(doc.FilePath ?? string.Empty, ct);
-        else if (ext == ".docx" || ext == ".doc")
+        else if (factory is DocxViewerFactory)
             await LoadDocxAsync(doc.FilePath ?? string.Empty, ct);
         else if (ext == ".pptx" || ext == ".ppt" || ext == ".pptm" || ext == ".ppsx")
             await LoadPptxAsync(doc.FilePath ?? string.Empty, ct);
@@ -289,6 +286,8 @@ public sealed partial class ViewerPage
         UnsupportedFileMessage.Visibility = Visibility.Visible;
         
         // Hide other viewers and sidebar
+        PdfViewerHost.Visibility = Visibility.Collapsed;
+        DocxViewerHost.Visibility = Visibility.Collapsed;
         DocumentScrollViewer.Visibility = Visibility.Collapsed;
         TextViewerHost.Visibility = Visibility.Collapsed;
         SpreadsheetViewerHost.Visibility = Visibility.Collapsed;
@@ -309,6 +308,8 @@ public sealed partial class ViewerPage
         ErrorMessage.Visibility = Visibility.Visible;
         
         // Hide other viewers and sidebar
+        PdfViewerHost.Visibility = Visibility.Collapsed;
+        DocxViewerHost.Visibility = Visibility.Collapsed;
         DocumentScrollViewer.Visibility = Visibility.Collapsed;
         TextViewerHost.Visibility = Visibility.Collapsed;
         SpreadsheetViewerHost.Visibility = Visibility.Collapsed;
@@ -324,7 +325,6 @@ public sealed partial class ViewerPage
     // ══════════════════════════════════════════════════════════════════════════
     
     private PptxDocument? _pptxDocument;
-    private DocxDocument? _docxDocument;
     
     private async Task LoadPptxAsync(string filePath, CancellationToken ct)
     {
@@ -870,105 +870,48 @@ public sealed partial class ViewerPage
     // DOCX (WordCraft — native DOCX parser and renderer)
     // ══════════════════════════════════════════════════════════════════════════
 
-    private readonly Dictionary<int, Image> _docxPageCache = new();
-    private readonly Dictionary<int, double> _docxPageScale = new();
-    private double[] _docxPageTopLp = Array.Empty<double>();
-    private double[] _docxPageWidthLp = Array.Empty<double>();
-    private double[] _docxPageHeightLp = Array.Empty<double>();
-
     private async Task LoadDocxAsync(string filePath, CancellationToken ct)
     {
         ShowLoading(true);
         try
         {
-            // Clear the PDF viewport image
-            if (ViewportImage != null)
-                ViewportImage.Source = null;
+            ShowDocxViewer();
+            await DocxViewerControl.LoadAsync(_doc!, ct);
+            DocxDocument document = _docxDocument
+                ?? throw new InvalidOperationException("DOCX viewer did not retain the opened document.");
 
-            // DOCX uses zoom-enabled scroll viewer like PPTX
-            DocumentScrollViewer.ZoomMode = ZoomMode.Enabled;
-            DocumentScrollViewer.ViewChanged -= OnPptxViewportChanged;
-            _pptxDocument?.Dispose();
-            _pptxDocument = null;
-            ClearPptxCache();
-
-            if (!WordCraftNative.IsAvailable)
-            {
-                ShowErrorCard("WordCraft DOCX renderer not available.\nPlease ensure wordcraft_ffi.dll is present.");
-                return;
-            }
-
-            DocumentScrollViewer.ViewChanged -= OnDocxViewportChanged;
-            ClearDocxCache();
-            _pptxTextMaps.Clear();
-            _docxDocument?.Dispose();
-            _docxDocument = await DocxDocument.OpenAsync(filePath, ct);
-
-            if (_docxDocument == null)
-            {
-                ShowErrorCard("Cannot open document — file may be corrupt or encrypted.");
-                return;
-            }
-
-            // Each DOCX page is a page
-            _total = _docxDocument.PageCount;
-            await LoadDocxOutlineAsync(filePath, ct);
+            _total = document.PageCount;
+            SetOutlineItems(DocxViewerControl.Outline);
             _page = 1;
-            _docxSearchResults = Array.Empty<DocxDocument.DocxSearchMatch>();
-            _activeDocxSearchIndex = -1;
-            SearchHighlightCanvas.Children.Clear();
             Toolbar.UpdatePageInfo(_page, _total);
             ViewModel.TotalPages = _total;
             ViewModel.CurrentPage = _page;
 
-            // Show sidebar with thumbnails
             Toolbar.SidebarIsChecked = true;
             SidebarCard.Visibility = Visibility.Visible;
             SidebarColumn.Width = new Microsoft.UI.Xaml.GridLength(240);
             ViewModel.SidebarOpen = true;
 
-            // Create thumbnail placeholders
             Thumbnails.Clear();
-            for (int i = 0; i < _total; i++)
-            {
-                Thumbnails.Add(new PageThumbnailItem
-                {
-                    PageNumber = i + 1,
-                    PageLabel = $"{i + 1}",
-                    IsSelected = i == 0,
-                });
-            }
+            foreach (PageThumbnailItem thumbnail in DocxViewerControl.Thumbnails)
+                Thumbnails.Add(thumbnail);
+            ThumbnailList.ItemsSource = Thumbnails;
 
-            // Apply 100% zoom initially
             _zoom = NaturalZoom;
             ZoomLabel.Text = "100%";
             ViewModel.NaturalZoom = NaturalZoom;
             ViewModel.Zoom = _zoom;
-
-            // Size canvas to fit all pages vertically
-            UpdateDocxCanvasSize();
-
-            // Force layout update
-            DocumentScrollViewer.UpdateLayout();
-
-            // Start DOCX in fit-width mode and keep the matching toolbar toggle active.
             SetFitMode(FitMode.FitWidth);
             ApplyFitWidth();
 
-            // Wait for zoom animation
-            await Task.Delay(100);
-            DocumentScrollViewer.UpdateLayout();
-
-            // Render visible pages
-            _docxRenderCts?.Cancel();
-            _docxRenderCts = new CancellationTokenSource();
-            await RenderDocxViewportAsync(_docxRenderCts.Token);
-            DocumentScrollViewer.ViewChanged += OnDocxViewportChanged;
-
-            // Load thumbnails in background
-            LoadDocxThumbnailsAsync().SafeFireAndForget("DocxThumbnails");
+            await Task.Delay(100, ct);
+            DocxViewerControl.ScrollViewer.UpdateLayout();
+            await DocxViewerControl.RenderViewportAsync(ct);
+            DocxViewerControl.StartThumbnailLoading();
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException)
+        {
+        }
         catch (Exception ex)
         {
             Logger.Error($"LoadDocxAsync: {filePath}", ex);
@@ -980,274 +923,5 @@ public sealed partial class ViewerPage
         }
     }
 
-    private DispatcherTimer? _docxRenderDebounceTimer;
-    private CancellationTokenSource? _docxRenderCts;
 
-    private void OnDocxViewportChanged(object? sender, ScrollViewerViewChangedEventArgs e)
-    {
-        if (_docxDocument == null) return;
-
-        float currentZoom = DocumentScrollViewer.ZoomFactor;
-        if (Math.Abs(currentZoom - _zoom) > 0.001)
-        {
-            _zoom = currentZoom;
-            double displayPct = Math.Round(_zoom / NaturalZoom * 100.0);
-            ZoomLabel.Text = $"{displayPct}%";
-            SyncToViewModel();
-        }
-
-        // Cancel any pending render
-        _docxRenderDebounceTimer?.Stop();
-        _docxRenderCts?.Cancel();
-
-        if (!e.IsIntermediate)
-        {
-            UpdateCurrentPageFromDocxScroll();
-            DrawDocxSearchHighlights();
-
-            // Debounce: wait 200ms after view settles before re-rendering
-            _docxRenderDebounceTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
-            _docxRenderDebounceTimer.Tick -= OnDocxRenderDebounceTimerTick;
-            _docxRenderDebounceTimer.Tick += OnDocxRenderDebounceTimerTick;
-            _docxRenderDebounceTimer.Start();
-        }
-    }
-
-    private void OnDocxRenderDebounceTimerTick(object? sender, object e)
-    {
-        _docxRenderDebounceTimer?.Stop();
-
-        // Cancel any in-flight render (not disposing — tokens may still be in flight)
-        _docxRenderCts?.Cancel();
-        _docxRenderCts = new CancellationTokenSource();
-
-        // Fire and forget - don't await in event handler to avoid deadlocks
-        RenderDocxViewportAsync(_docxRenderCts.Token).SafeFireAndForget("DocxViewportRender");
-    }
-
-    private void UpdateDocxCanvasSize()
-    {
-        if (_docxDocument == null) return;
-
-        const double PtToLp = 96.0 / 72.0;
-        _docxPageTopLp = new double[_docxDocument.PageCount];
-        _docxPageWidthLp = new double[_docxDocument.PageCount];
-        _docxPageHeightLp = new double[_docxDocument.PageCount];
-        double totalHeight = 0;
-        double maxWidth = 0;
-
-        for (int i = 0; i < _docxDocument.PageCount; i++)
-        {
-            var (w, h) = _docxDocument.GetPageSize(i);
-            _docxPageWidthLp[i] = w * PtToLp;
-            _docxPageHeightLp[i] = h * PtToLp;
-            _docxPageTopLp[i] = totalHeight;
-            totalHeight += _docxPageHeightLp[i];
-            if (i < _docxDocument.PageCount - 1)
-                totalHeight += 12;
-            if (_docxPageWidthLp[i] > maxWidth) maxWidth = _docxPageWidthLp[i];
-        }
-
-        PdfViewportCanvas.Width = maxWidth;
-        PdfViewportCanvas.Height = totalHeight;
-        SearchHighlightCanvas.Width = maxWidth;
-        SearchHighlightCanvas.Height = totalHeight;
-        Canvas.SetZIndex(SearchHighlightCanvas, 10);
-    }
-
-    private double GetDocxPageTopLp(int pageIndex) =>
-        pageIndex >= 0 && pageIndex < _docxPageTopLp.Length
-            ? _docxPageTopLp[pageIndex]
-            : 0;
-
-    private (int firstPage, int lastPage) GetVisibleDocxPageRange()
-    {
-        if (_docxDocument == null || _docxPageTopLp.Length != _docxDocument.PageCount)
-            return (-1, -1);
-
-        double zoom = Math.Max(0.01, DocumentScrollViewer.ZoomFactor);
-        double visibleTop = DocumentScrollViewer.VerticalOffset / zoom;
-        double visibleBottom =
-            (DocumentScrollViewer.VerticalOffset + DocumentScrollViewer.ViewportHeight) / zoom;
-        int firstPage = -1;
-        int lastPage = -1;
-
-        for (int i = 0; i < _docxDocument.PageCount; i++)
-        {
-            double pageTop = _docxPageTopLp[i];
-            double pageBottom = pageTop + _docxPageHeightLp[i];
-            if (pageBottom >= visibleTop && pageTop <= visibleBottom)
-            {
-                if (firstPage < 0)
-                    firstPage = i;
-                lastPage = i;
-            }
-        }
-
-        return (firstPage, lastPage);
-    }
-
-    private void UpdateCurrentPageFromDocxScroll()
-    {
-        if (_docxDocument == null || _docxPageTopLp.Length != _docxDocument.PageCount)
-            return;
-
-        double zoom = Math.Max(0.01, DocumentScrollViewer.ZoomFactor);
-        double centerY =
-            (DocumentScrollViewer.VerticalOffset + DocumentScrollViewer.ViewportHeight / 2) / zoom;
-        double nearestDistance = double.MaxValue;
-        int currentPage = 0;
-
-        for (int i = 0; i < _docxDocument.PageCount; i++)
-        {
-            double pageTop = _docxPageTopLp[i];
-            double pageHeight = _docxPageHeightLp[i];
-            double pageBottom = pageTop + pageHeight;
-            if (centerY >= pageTop && centerY <= pageBottom)
-            {
-                currentPage = i;
-                break;
-            }
-
-            double distance = Math.Abs(centerY - (pageTop + pageHeight / 2));
-            if (distance < nearestDistance)
-            {
-                nearestDistance = distance;
-                currentPage = i;
-            }
-        }
-
-        if (_page != currentPage + 1)
-            UpdateCurrentPage(currentPage + 1);
-    }
-
-    private async Task RenderDocxViewportAsync(CancellationToken ct = default)
-    {
-        if (_docxDocument == null) return;
-
-        try
-        {
-            var (firstPage, lastPage) = GetVisibleDocxPageRange();
-            if (firstPage < 0) return;
-
-            // Render visible pages + 1 buffer
-            int renderStart = Math.Max(0, firstPage - 1);
-            int renderEnd = Math.Min(_docxDocument.PageCount - 1, lastPage + 1);
-
-            for (int i = 0; i < _docxDocument.PageCount; i++)
-            {
-                if (ct.IsCancellationRequested) return;
-
-                double w = _docxPageWidthLp[i];
-                double h = _docxPageHeightLp[i];
-                double y = GetDocxPageTopLp(i);
-
-                if (i >= renderStart && i <= renderEnd)
-                {
-                    var (widthPt, heightPt) = _docxDocument.GetPageSize(i);
-                    double renderScale = RenderBudget.OfficeScale(
-                        _zoom, DisplayScale, widthPt, heightPt);
-                    bool needsRender = !_docxPageCache.ContainsKey(i) ||
-                        !_docxPageScale.TryGetValue(i, out double cachedScale) ||
-                        RenderBudget.NeedsRerenderScale(cachedScale, renderScale);
-                    if (!needsRender)
-                        continue;
-
-                    var bmp = await _docxDocument.RenderPageAsync(i, renderScale, ct);
-                    if (bmp == null) continue;
-
-                    var image = new Image
-                    {
-                        Source = bmp,
-                        Width = w,
-                        Height = h,
-                        Stretch = Microsoft.UI.Xaml.Media.Stretch.Fill,
-                        UseLayoutRounding = true,
-                    };
-
-                    Microsoft.UI.Xaml.Controls.Canvas.SetLeft(image, 0);
-                    Microsoft.UI.Xaml.Controls.Canvas.SetTop(image, y);
-                    Canvas.SetZIndex(image, 0);
-
-                    if (_docxPageCache.TryGetValue(i, out var oldImage))
-                    {
-                        PdfViewportCanvas.Children.Remove(oldImage);
-                        if (oldImage.Source is WriteableBitmap oldBitmap)
-                            oldImage.Source = null;
-                    }
-                    PdfViewportCanvas.Children.Add(image);
-                    _docxPageCache[i] = image;
-                    _docxPageScale[i] = renderScale;
-                }
-            }
-
-            // The rendered range already includes one page of look-ahead on each side.
-            var toRemove = _docxPageCache.Keys.Where(idx =>
-                idx < renderStart || idx > renderEnd).ToList();
-
-            foreach (int idx in toRemove)
-            {
-                if (_docxPageCache.TryGetValue(idx, out var img))
-                {
-                    PdfViewportCanvas.Children.Remove(img);
-                    if (img.Source is WriteableBitmap bmp)
-                        img.Source = null;
-                    _docxPageCache.Remove(idx);
-                    _docxPageScale.Remove(idx);
-                }
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // Expected when zoom/scroll happens during render
-        }
-        catch (Exception ex)
-        {
-            Logger.Error($"RenderDocxViewportAsync error", ex);
-        }
-    }
-
-    private void ClearDocxCache()
-    {
-        _docxRenderDebounceTimer?.Stop();
-        _docxRenderCts?.Cancel();
-        _docxRenderCts = null;
-
-        foreach (var img in _docxPageCache.Values)
-        {
-            PdfViewportCanvas.Children.Remove(img);
-            if (img.Source is WriteableBitmap bmp)
-                img.Source = null;
-        }
-        _docxPageCache.Clear();
-        _docxPageScale.Clear();
-    }
-
-    private async Task LoadDocxThumbnailsAsync()
-    {
-        // Capture the document so a file switch mid-loop cannot touch the new one,
-        // and bind to the page token so closing the tab stops the loop early.
-        var document = _docxDocument;
-        var ct = _cts?.Token ?? default;
-        if (document == null) return;
-
-        for (int i = 0; i < document.PageCount && i < 50; i++)
-        {
-            if (ct.IsCancellationRequested) return;
-            try
-            {
-                var thumb = await document.RenderPageAsync(i, scale: RenderBudget.ThumbnailOfficeScale, ct);
-                if (thumb == null || ct.IsCancellationRequested) return;
-
-                // Only publish if this document is still the one being displayed
-                if (!ReferenceEquals(_docxDocument, document) || i >= Thumbnails.Count) return;
-                Thumbnails[i].Thumbnail = thumb;
-            }
-            catch (OperationCanceledException) { return; }
-            catch (Exception ex)
-            {
-                Logger.Error($"LoadDocxThumbnails: page {i}", ex);
-            }
-        }
-    }
 }

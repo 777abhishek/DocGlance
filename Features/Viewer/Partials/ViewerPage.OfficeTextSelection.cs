@@ -34,15 +34,17 @@ public sealed partial class ViewerPage
 
     private void InitializeOfficeTextSelection()
     {
-        if (DocumentScrollViewer.Content is not Panel contentPanel)
-            return;
+        AttachOfficeTextHandlers(PdfViewerControl.PdfViewportCanvasControl);
+        AttachOfficeTextHandlers(DocxViewerControl.Canvas);
+    }
 
+    private void AttachOfficeTextHandlers(Panel contentPanel)
+    {
         contentPanel.PointerPressed += OnOfficeContentPointerPressed;
         contentPanel.PointerMoved += OnOfficeContentPointerMoved;
         contentPanel.PointerReleased += OnOfficeContentPointerReleased;
         contentPanel.PointerCaptureLost += OnOfficeContentPointerCaptureLost;
         contentPanel.RightTapped += OnOfficeContentRightTapped;
-
         var copyAccelerator = new KeyboardAccelerator
         {
             Key = VirtualKey.C,
@@ -57,7 +59,10 @@ public sealed partial class ViewerPage
             CopyOfficeTextToClipboard();
             args.Handled = true;
         };
-        DocumentScrollViewer.KeyboardAccelerators.Add(copyAccelerator);
+        var scrollViewer = ReferenceEquals(contentPanel, DocxViewerControl.Canvas)
+            ? DocxViewerControl.ScrollViewer
+            : PdfViewerControl.DocumentScrollViewerControl;
+        scrollViewer.KeyboardAccelerators.Add(copyAccelerator);
     }
 
     private void OnOfficeContentPointerPressed(object sender, PointerRoutedEventArgs e)
@@ -182,7 +187,8 @@ public sealed partial class ViewerPage
             int pageIndex = FindDocxPage(canvasPoint.Y);
             return pageIndex >= 0 &&
                 canvasPoint.Y >= GetDocxPageTopLp(pageIndex) &&
-                canvasPoint.Y <= GetDocxPageTopLp(pageIndex) + _docxPageHeightLp[pageIndex];
+                canvasPoint.Y <= GetDocxPageTopLp(pageIndex) +
+                    DocxViewerControl.GetPageHeightLp(pageIndex);
         }
 
         if (_pptxDocument != null && _pptxDocument.SlideCount > 0)
@@ -204,23 +210,7 @@ public sealed partial class ViewerPage
         if (_docxDocument == null)
             return -1;
 
-        int nearestPage = -1;
-        double nearestDistance = double.MaxValue;
-        for (int i = 0; i < _docxPageTopLp.Length; i++)
-        {
-            double top = _docxPageTopLp[i];
-            double bottom = top + _docxPageHeightLp[i];
-            if (canvasY >= top && canvasY <= bottom)
-                return i;
-
-            double distance = canvasY < top ? top - canvasY : canvasY - bottom;
-            if (distance < nearestDistance)
-            {
-                nearestDistance = distance;
-                nearestPage = i;
-            }
-        }
-        return nearestPage;
+        return DocxViewerControl.FindPage(canvasY);
     }
 
     private readonly Dictionary<int, PdfPageTextMap> _pptxTextMaps = new();

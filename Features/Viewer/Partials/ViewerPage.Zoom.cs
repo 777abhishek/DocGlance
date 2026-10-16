@@ -96,7 +96,7 @@ public sealed partial class ViewerPage
         // DOCX uses the same page-sized canvas and ScrollViewer scaling as PPTX.
         if (_docxDocument != null)
         {
-            DocumentScrollViewer.ChangeView(null, null, (float)_zoom, disableAnimation: false);
+            DocxViewerControl.SetZoom(_zoom);
             return;
         }
 

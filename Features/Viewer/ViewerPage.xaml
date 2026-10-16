@@ -320,6 +320,11 @@
                     HorizontalContentAlignment="Stretch"
                     VerticalContentAlignment="Stretch"/>
 
+                <ContentControl x:Name="DocxViewerHost"
+                    Visibility="Collapsed"
+                    HorizontalContentAlignment="Stretch"
+                    VerticalContentAlignment="Stretch"/>
+
                 <ContentControl
                     x:Name="UnsupportedFileMessage"
                     Visibility="Collapsed"/>
