@@ -417,8 +417,16 @@ public sealed partial class ViewerPage
 
     private (double X, double Y) ToPdfTextPoint(int page, Point canvasPoint)
     {
+        if (_pdfState == null)
+            return (0, 0);
         double pageTop = GetPageTopLp(page);
-        return (canvasPoint.X * LpToPt, (canvasPoint.Y - pageTop) * LpToPt);
+        var (widthPt, heightPt) = _pdfState!.GetPageSize(page);
+        Point pagePoint = PageRotation.UnrotatePoint(
+            new Point(canvasPoint.X, canvasPoint.Y - pageTop),
+            widthPt * PtToLp,
+            heightPt * PtToLp,
+            _rotation);
+        return (pagePoint.X * LpToPt, pagePoint.Y * LpToPt);
     }
 
     private int GetPdfTextPageAt(double canvasY)

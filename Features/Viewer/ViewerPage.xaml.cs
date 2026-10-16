@@ -16,6 +16,7 @@ using DocGlance.Rendering.Pdf.Models;
 using DocGlance.Rendering.Shared;
 using DocGlance.Rendering.Xlsx;
 using DocGlance.Rendering.Docx;
+using DocGlance.Rendering.Pptx;
 using DocGlance.Features.Viewer.Formats.Text;
 using DocGlance.Infrastructure.Logging;
 using DocGlance.Features.Viewer.Contracts;
@@ -27,6 +28,7 @@ using System.Threading.Tasks;
 using DocGlance.Features.Viewer.Formats.Fallback;
 using DocGlance.Features.Viewer.Formats.Pdf;
 using DocGlance.Features.Viewer.Formats.Docx;
+using DocGlance.Features.Viewer.Formats.Pptx;
 using DocGlance.Features.Viewer.Formats.Spreadsheet;
 
 namespace DocGlance.Features.Viewer;
@@ -38,6 +40,7 @@ public sealed partial class ViewerPage : Page
         {
             new PdfViewerFactory(),
             new DocxViewerFactory(),
+            new PptxViewerFactory(),
             new TextViewerFactory(),
             new SpreadsheetViewerFactory(),
         },
@@ -49,6 +52,10 @@ public sealed partial class ViewerPage : Page
     private DocxViewer DocxViewerControl =>
         _docxViewerControl ?? throw new InvalidOperationException("The DOCX viewer has not been initialized.");
     private DocxDocument? _docxDocument => _docxViewerControl?.Document;
+    private PptxViewer? _pptxViewerControl;
+    private PptxViewer PptxViewerControl =>
+        _pptxViewerControl ?? throw new InvalidOperationException("The PPTX viewer has not been initialized.");
+    private PptxDocument? _pptxDocument => _pptxViewerControl?.Document;
     private TextViewer TextViewerControl { get; set; } = null!;
     private SpreadsheetViewer SpreadsheetViewerControl { get; set; } = null!;
     private SpreadsheetDocument? _spreadsheetDocument => SpreadsheetViewerControl?.Document;
@@ -57,10 +64,14 @@ public sealed partial class ViewerPage : Page
     private ScrollViewer DocumentScrollViewer =>
         _activeViewer is DocxViewer docxViewer
             ? docxViewer.ScrollViewer
+            : _activeViewer is PptxViewer pptxViewer
+                ? pptxViewer.ScrollViewer
             : PdfViewerControl.DocumentScrollViewerControl;
     private Canvas PdfViewportCanvas =>
         _activeViewer is DocxViewer docxViewer
             ? docxViewer.Canvas
+            : _activeViewer is PptxViewer pptxViewer
+                ? pptxViewer.Canvas
             : PdfViewerControl.PdfViewportCanvasControl;
     private Image ViewportImage => PdfViewerControl.ViewportImageControl;
     private Canvas PdfAnnotationCanvas => PdfViewerControl.PdfAnnotationCanvasControl;
@@ -99,6 +110,7 @@ public sealed partial class ViewerPage : Page
         PdfViewerControl.GetRotatedPageSize(pageIndex);
     private double GetPageTopLp(int pageIndex) => PdfViewerControl.GetPageTopLp(pageIndex);
     private double GetDocxPageTopLp(int pageIndex) => DocxViewerControl.GetPageTopLp(pageIndex);
+    private double GetPptxPageTopLp(int pageIndex) => PptxViewerControl.GetSlideTopLp(pageIndex);
 
     public ObservableCollection<PageThumbnailItem> Thumbnails { get; } = new();
 
@@ -113,6 +125,8 @@ public sealed partial class ViewerPage : Page
         PdfViewerHost.Content = _pdfViewerControl;
         _docxViewerControl = (DocxViewer)_viewerRegistry.Resolve(".docx").Create(ViewModel);
         DocxViewerHost.Content = _docxViewerControl;
+        _pptxViewerControl = (PptxViewer)_viewerRegistry.Resolve(".pptx").Create(ViewModel);
+        PptxViewerHost.Content = _pptxViewerControl;
         PdfViewerControl.ZoomChanged += (_, zoom) =>
         {
             _zoom = zoom;
@@ -131,6 +145,13 @@ public sealed partial class ViewerPage : Page
         PdfViewerControl.ClearTextSelectionRequested += (_, _) => ClearPdfTextSelectionState();
         DocxViewerControl.PageChanged += (_, page) => UpdateCurrentPage(page);
         DocxViewerControl.ZoomChanged += (_, zoom) =>
+        {
+            _zoom = zoom;
+            ZoomLabel.Text = $"{Math.Round(_zoom / NaturalZoom * 100.0)}%";
+            SyncToViewModel();
+        };
+        PptxViewerControl.PageChanged += (_, page) => UpdateCurrentPage(page);
+        PptxViewerControl.ZoomChanged += (_, zoom) =>
         {
             _zoom = zoom;
             ZoomLabel.Text = $"{Math.Round(_zoom / NaturalZoom * 100.0)}%";
@@ -159,6 +180,8 @@ public sealed partial class ViewerPage : Page
         };
         DocxViewerControl.SizeChanged += (_, _) => ScheduleFitModeReapply();
         DocxViewerControl.ScrollViewer.PointerWheelChanged += OnViewerPointerWheelChanged;
+        PptxViewerControl.SizeChanged += (_, _) => ScheduleFitModeReapply();
+        PptxViewerControl.ScrollViewer.PointerWheelChanged += OnViewerPointerWheelChanged;
         PdfViewerControl.SizeChanged += (_, _) => ScheduleFitModeReapply();
         SpreadsheetViewerControl.SizeChanged += (_, _) => ScheduleFitModeReapply();
         SpreadsheetViewerControl.ActiveSheetChanged += (_, sheetIndex) =>
@@ -307,7 +330,7 @@ public sealed partial class ViewerPage : Page
         // leaked the Rust-side document (whole file buffer + renderer + font caches)
         // until GC — the reported "memory grows when opening documents" symptom.
         _ = TextViewerControl.CleanupAsync();
-        ClearPptxCache();
+        _ = PptxViewerControl.CleanupAsync();
         _ = DocxViewerControl.CleanupAsync();
         _pptxTextMaps.Clear();
         ClearOfficeSelection();
@@ -317,8 +340,6 @@ public sealed partial class ViewerPage : Page
             _ = _fallbackViewer.CleanupAsync();
             _fallbackViewer = null;
         }
-        _pptxDocument?.Dispose();
-        _pptxDocument = null;
 
         // The per-page service owns the PDF document — closing it frees the native handle.
         // A fresh service keeps the page usable if it is reattached later.
@@ -351,11 +372,13 @@ public sealed partial class ViewerPage : Page
             TextViewerHost.Visibility = Visibility.Visible;
             PdfViewerHost.Visibility = Visibility.Collapsed;
             DocxViewerHost.Visibility = Visibility.Collapsed;
+            PptxViewerHost.Visibility = Visibility.Collapsed;
             DocumentScrollViewer.Visibility = Visibility.Collapsed;
             SpreadsheetViewerHost.Visibility = Visibility.Collapsed;
             UnsupportedFileMessage.Visibility = Visibility.Collapsed;
             ErrorMessage.Visibility = Visibility.Collapsed;
             Toolbar.WordWrapVisibility = Visibility.Visible;
+            Toolbar.RotationButtonsVisibility = Visibility.Collapsed;
             Toolbar.SidebarButtonVisibility = Visibility.Collapsed;
             Toolbar.FitWidthButtonVisibility = Visibility.Collapsed;
             Toolbar.FitPageButtonVisibility = Visibility.Collapsed;
@@ -378,12 +401,14 @@ public sealed partial class ViewerPage : Page
         _activeViewer = PdfViewerControl;
         PdfViewerHost.Visibility = Visibility.Visible;
         DocxViewerHost.Visibility = Visibility.Collapsed;
+        PptxViewerHost.Visibility = Visibility.Collapsed;
         TextViewerHost.Visibility = Visibility.Collapsed;
         DocumentScrollViewer.Visibility = Visibility.Visible;
         SpreadsheetViewerHost.Visibility = Visibility.Collapsed;
         UnsupportedFileMessage.Visibility = Visibility.Collapsed;
         ErrorMessage.Visibility = Visibility.Collapsed;
         Toolbar.WordWrapVisibility = Visibility.Collapsed;
+        Toolbar.RotationButtonsVisibility = Visibility.Visible;
         Toolbar.SidebarButtonVisibility = Visibility.Visible;
         Toolbar.FitWidthButtonVisibility = Visibility.Visible;
         Toolbar.FitPageButtonVisibility = Visibility.Visible;
@@ -394,11 +419,30 @@ public sealed partial class ViewerPage : Page
         _activeViewer = DocxViewerControl;
         PdfViewerHost.Visibility = Visibility.Collapsed;
         DocxViewerHost.Visibility = Visibility.Visible;
+        PptxViewerHost.Visibility = Visibility.Collapsed;
         TextViewerHost.Visibility = Visibility.Collapsed;
         SpreadsheetViewerHost.Visibility = Visibility.Collapsed;
         UnsupportedFileMessage.Visibility = Visibility.Collapsed;
         ErrorMessage.Visibility = Visibility.Collapsed;
         Toolbar.WordWrapVisibility = Visibility.Collapsed;
+        Toolbar.RotationButtonsVisibility = Visibility.Visible;
+        Toolbar.SidebarButtonVisibility = Visibility.Visible;
+        Toolbar.FitWidthButtonVisibility = Visibility.Visible;
+        Toolbar.FitPageButtonVisibility = Visibility.Visible;
+    }
+
+    internal void ShowPptxViewer()
+    {
+        _activeViewer = PptxViewerControl;
+        PdfViewerHost.Visibility = Visibility.Collapsed;
+        DocxViewerHost.Visibility = Visibility.Collapsed;
+        PptxViewerHost.Visibility = Visibility.Visible;
+        TextViewerHost.Visibility = Visibility.Collapsed;
+        SpreadsheetViewerHost.Visibility = Visibility.Collapsed;
+        UnsupportedFileMessage.Visibility = Visibility.Collapsed;
+        ErrorMessage.Visibility = Visibility.Collapsed;
+        Toolbar.WordWrapVisibility = Visibility.Collapsed;
+        Toolbar.RotationButtonsVisibility = Visibility.Visible;
         Toolbar.SidebarButtonVisibility = Visibility.Visible;
         Toolbar.FitWidthButtonVisibility = Visibility.Visible;
         Toolbar.FitPageButtonVisibility = Visibility.Visible;
@@ -409,12 +453,14 @@ public sealed partial class ViewerPage : Page
         _activeViewer = SpreadsheetViewerControl;
         PdfViewerHost.Visibility = Visibility.Collapsed;
         DocxViewerHost.Visibility = Visibility.Collapsed;
+        PptxViewerHost.Visibility = Visibility.Collapsed;
         TextViewerHost.Visibility = Visibility.Collapsed;
         DocumentScrollViewer.Visibility = Visibility.Collapsed;
         SpreadsheetViewerHost.Visibility = Visibility.Visible;
         UnsupportedFileMessage.Visibility = Visibility.Collapsed;
         ErrorMessage.Visibility = Visibility.Collapsed;
         Toolbar.WordWrapVisibility = Visibility.Collapsed;
+        Toolbar.RotationButtonsVisibility = Visibility.Collapsed;
         Toolbar.SidebarButtonVisibility = Visibility.Collapsed;
         Toolbar.FitWidthButtonVisibility = Visibility.Visible;
         Toolbar.FitPageButtonVisibility = Visibility.Visible;

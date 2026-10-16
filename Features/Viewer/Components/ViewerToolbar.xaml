@@ -130,6 +130,7 @@
 
         <!-- Rotation -->
         <StackPanel
+            x:Name="RotationPanel"
             Grid.Column="3"
             Orientation="Horizontal"
             Spacing="2"

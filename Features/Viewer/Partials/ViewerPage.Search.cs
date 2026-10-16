@@ -3,7 +3,6 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using DocGlance.Core.Models;
-using DocGlance.Rendering.Pptx;
 using DocGlance.Rendering.Docx;
 using DocGlance.Rendering.Xlsx;
 using DocGlance.Infrastructure.Logging;
@@ -22,8 +21,6 @@ public sealed partial class ViewerPage
 {
     private CancellationTokenSource? _searchCts;
     private CancellationTokenSource? _searchDebounceCts;
-    private IReadOnlyList<PptxSearchMatch> _pptxSearchResults = Array.Empty<PptxSearchMatch>();
-    private int _activePptxSearchIndex = -1;
     private SearchResult[] _activeViewerSearchResults = Array.Empty<SearchResult>();
     private int _activeViewerSearchIndex = -1;
 
@@ -85,26 +82,6 @@ public sealed partial class ViewerPage
 
         try
         {
-            bool caseSensitive = MatchCaseButton?.IsChecked == true;
-            if (_pptxDocument is { } pptxDocument)
-            {
-                var pptxResults = await Task.Run(
-                    () => pptxDocument.SearchText(query, caseSensitive),
-                    ct);
-                if (ct.IsCancellationRequested) return;
-
-                _pptxSearchResults = pptxResults;
-                _activePptxSearchIndex = pptxResults.Count > 0 ? 0 : -1;
-                FindCount.Text = pptxResults.Count == 0
-                    ? "No matches"
-                    : $"1 of {pptxResults.Count}";
-                DrawPptxSearchHighlights();
-
-                if (_activePptxSearchIndex >= 0)
-                    GoToPage(pptxResults[0].SlideIndex + 1);
-                return;
-            }
-
             SetSearchLoading(false);
             return;
         }
@@ -125,9 +102,6 @@ public sealed partial class ViewerPage
             viewerSearch.ClearHighlight();
         _activeViewerSearchResults = Array.Empty<SearchResult>();
         _activeViewerSearchIndex = -1;
-        _pptxSearchResults = Array.Empty<PptxSearchMatch>();
-        _activePptxSearchIndex = -1;
-        ClearPptxSearchHighlights();
         FindCount.Text     = "";
         DrawAllHighlights();
     }
@@ -168,6 +142,8 @@ public sealed partial class ViewerPage
             pdfViewer.MatchCase = matchCase;
         else if (viewer is Formats.Docx.DocxViewer docxViewer)
             docxViewer.MatchCase = matchCase;
+        else if (viewer is Formats.Pptx.PptxViewer pptxViewer)
+            pptxViewer.MatchCase = matchCase;
 
         ClearSearchHighlights();
         SetSearchLoading(true);
@@ -226,16 +202,6 @@ public sealed partial class ViewerPage
                 % _activeViewerSearchResults.Length;
             viewerSearch.Highlight(_activeViewerSearchResults[_activeViewerSearchIndex]);
             FindCount.Text = $"{_activeViewerSearchIndex + 1} of {_activeViewerSearchResults.Length}";
-            return;
-        }
-
-        if (_pptxSearchResults.Count > 0)
-        {
-            _activePptxSearchIndex =
-                (_activePptxSearchIndex + direction + _pptxSearchResults.Count) % _pptxSearchResults.Count;
-            FindCount.Text = $"{_activePptxSearchIndex + 1} of {_pptxSearchResults.Count}";
-            DrawPptxSearchHighlights();
-            GoToPage(_pptxSearchResults[_activePptxSearchIndex].SlideIndex + 1);
             return;
         }
 
