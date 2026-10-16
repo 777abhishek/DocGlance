@@ -555,13 +555,6 @@ public sealed partial class ViewerPage
         };
         copyItem.Click += async (_, _) => await CopyPdfTextSelectionAsync();
         menu.Items.Add(copyItem);
-        var translateItem = new MenuFlyoutItem
-        {
-            Text = "Translate selection",
-            Icon = new SymbolIcon(Symbol.Globe),
-        };
-        translateItem.Click += (_, _) => _ = ShowTranslationDialogAsync(selectedText);
-        menu.Items.Add(translateItem);
         menu.Items.Add(new MenuFlyoutSeparator());
         AddPdfAnnotationMenuItem(menu, "Highlight", PdfTextAnnotationKind.Highlight);
         AddPdfAnnotationMenuItem(menu, "Underline", PdfTextAnnotationKind.Underline);

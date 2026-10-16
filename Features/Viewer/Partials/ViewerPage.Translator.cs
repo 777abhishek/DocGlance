@@ -31,13 +31,6 @@ public sealed partial class ViewerPage
         };
         menu.Items.Add(copyItem);
         menu.Items.Add(new MenuFlyoutSeparator());
-        var translateItem = new MenuFlyoutItem
-        {
-            Text = "Translate selection",
-            Icon = new SymbolIcon(Symbol.Globe),
-        };
-        translateItem.Click += (_, _) => _ = ShowTranslationDialogAsync(selectedText);
-        menu.Items.Add(translateItem);
         menu.ShowAt(TextViewerControl.TextBox, e.GetPosition(TextViewerControl.TextBox));
         e.Handled = true;
     }

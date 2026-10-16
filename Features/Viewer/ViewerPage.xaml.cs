@@ -247,29 +247,21 @@ public sealed partial class ViewerPage : Page
             !IsSpreadsheetViewerActive() &&
             _total > 1;
 
-        if (Infrastructure.Configuration.AppSettings.ShowSidebar)
+        bool shouldOpenSidebar =
+            Infrastructure.Configuration.AppSettings.ShowSidebar && supportsSidebar;
+        double targetWidth = shouldOpenSidebar ? 240 : 0;
+        if (Toolbar.IsSidebarOpen != shouldOpenSidebar ||
+            Math.Abs(SidebarColumn.Width.Value - targetWidth) >= 0.5)
         {
-            if (supportsSidebar && SidebarColumn.Width.Value == 0)
-            {
-                SidebarColumn.Width = new GridLength(240);
-                SidebarCard.Visibility = Visibility.Visible;
-                Toolbar.SidebarIsChecked = true;
-                ViewModel.SidebarOpen = true;
-            }
+            SetSidebarOpen(shouldOpenSidebar);
         }
-        else
-        {
-            SidebarColumn.Width = new GridLength(0);
-            SidebarCard.Visibility = Visibility.Collapsed;
-            Toolbar.SidebarIsChecked = false;
-            ViewModel.SidebarOpen = false;
-        }
-
-        ScheduleFitModeReapply();
     }
 
     private void ScheduleFitModeReapply()
     {
+        if (_isSidebarAnimating)
+            return;
+
         if (_resizeDebounceTimer == null)
         {
             _resizeDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
