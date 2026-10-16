@@ -1,4 +1,6 @@
 using DocGlance.Core.Models;
+using DocGlance.Interop.PdfCraft;
+using DocGlance.Rendering.Pdf.Models;
 using System;
 using System.Collections.Generic;
 using System.Globalization;

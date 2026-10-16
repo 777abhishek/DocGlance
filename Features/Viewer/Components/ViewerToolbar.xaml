@@ -2,30 +2,35 @@
 <UserControl
     x:Class="DocGlance.Features.Viewer.Components.ViewerToolbar"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:components="using:DocGlance.Features.Viewer.Components">
 
     <UserControl.Resources>
-        <Style x:Key="IB" TargetType="Button">
-    <Setter Property="Width" Value="36"/>
-    <Setter Property="Height" Value="36"/>
-    <Setter Property="Padding" Value="0"/>
-    <Setter Property="Background" Value="Transparent"/>
-    <Setter Property="BorderThickness" Value="0"/>
-    <Setter Property="CornerRadius" Value="6"/>
-    <Setter Property="HorizontalContentAlignment" Value="Center"/>
-    <Setter Property="VerticalContentAlignment" Value="Center"/>
-</Style>
-
-<Style x:Key="ITB" TargetType="ToggleButton">
-    <Setter Property="Width" Value="36"/>
-    <Setter Property="Height" Value="36"/>
-    <Setter Property="Padding" Value="0"/>
-    <Setter Property="Background" Value="Transparent"/>
-    <Setter Property="BorderThickness" Value="0"/>
-    <Setter Property="CornerRadius" Value="6"/>
-    <Setter Property="HorizontalContentAlignment" Value="Center"/>
-    <Setter Property="VerticalContentAlignment" Value="Center"/>
-</Style>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Features/Viewer/Components/ViewerToolbarIcons.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            <Style x:Key="IB" TargetType="Button">
+                <Setter Property="Width" Value="36"/>
+                <Setter Property="Height" Value="36"/>
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="CornerRadius" Value="6"/>
+                <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/>
+            </Style>
+            <Style x:Key="ITB" TargetType="ToggleButton">
+                <Setter Property="Width" Value="36"/>
+                <Setter Property="Height" Value="36"/>
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="CornerRadius" Value="6"/>
+                <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/>
+            </Style>
+        </ResourceDictionary>
     </UserControl.Resources>
 
     <Grid Height="48"
@@ -53,7 +58,7 @@
             ToolTipService.ToolTip="Sidebar">
             <FontIcon
                 FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
-                Glyph="&#xF030F;"
+                Glyph="{StaticResource ViewerIcon.Sidebar}"
                 FontSize="20"/>
         </ToggleButton>
 
@@ -107,7 +112,7 @@
                 ToolTipService.ToolTip="Fit width">
                 <FontIcon
                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
-                    Glyph="&#xF590;"
+                    Glyph="{StaticResource ViewerIcon.FitWidth}"
                     FontSize="20"/>
             </ToggleButton>
 
@@ -118,7 +123,7 @@
                 ToolTipService.ToolTip="Fit page">
                 <FontIcon
                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
-                    Glyph="&#xF54D;"
+                    Glyph="{StaticResource ViewerIcon.FitPage}"
                     FontSize="20"/>
             </ToggleButton>
         </StackPanel>
@@ -136,7 +141,7 @@
                 ToolTipService.ToolTip="Rotate left">
                 <FontIcon
                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
-                    Glyph="&#xF186;"
+                    Glyph="{StaticResource ViewerIcon.RotateLeft}"
                     FontSize="20"/>
             </Button>
 
@@ -146,139 +151,15 @@
                 ToolTipService.ToolTip="Rotate right">
                 <FontIcon
                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
-                    Glyph="&#xF188;"
+                    Glyph="{StaticResource ViewerIcon.RotateRight}"
                     FontSize="20"/>
             </Button>
         </StackPanel>
 
         <!-- Right-side actions -->
-        <StackPanel
-            x:Name="PdfMarkupTools"
-            Grid.Column="4"
-            Orientation="Horizontal"
-            Spacing="2"
-            HorizontalAlignment="Center"
-            Visibility="Collapsed">
-
-            <ToggleButton
-                x:Name="PenToolButton"
-                Style="{StaticResource ITB}"
-                Click="PenToolButton_Click"
-                ToolTipService.ToolTip="Freehand pen">
-                <FontIcon Glyph="&#xE76D;" FontSize="19"/>
-            </ToggleButton>
-
-            <ToggleButton
-                x:Name="MarkupToolButton"
-                Style="{StaticResource ITB}"
-                Click="MarkupToolButton_Click"
-                ToolTipService.ToolTip="Drag across text to highlight">
-                <FontIcon Glyph="&#xE7E6;" FontSize="20"/>
-            </ToggleButton>
-
-            <ToggleButton
-                x:Name="EraserToolButton"
-                Style="{StaticResource ITB}"
-                Click="EraserToolButton_Click"
-                ToolTipService.ToolTip="Erase annotations">
-                <FontIcon Glyph="&#xE75C;" FontSize="19"/>
-            </ToggleButton>
-
-            <ToggleButton
-                x:Name="NoteToolButton"
-                Style="{StaticResource ITB}"
-                Click="NoteToolButton_Click"
-                ToolTipService.ToolTip="Add a note">
-                <FontIcon Glyph="&#xE8F2;" FontSize="19"/>
-            </ToggleButton>
-
-            <ToggleButton
-                x:Name="TextToolButton"
-                Style="{StaticResource ITB}"
-                Click="TextToolButton_Click"
-                ToolTipService.ToolTip="Add a text box">
-                <FontIcon Glyph="&#xE8D2;" FontSize="19"/>
-            </ToggleButton>
-
-            <ToggleButton
-                x:Name="SignatureToolButton"
-                Style="{StaticResource ITB}"
-                Click="SignatureToolButton_Click"
-                ToolTipService.ToolTip="Draw a signature">
-                <FontIcon Glyph="&#xE8A7;" FontSize="19"/>
-            </ToggleButton>
-
-            <ToggleButton
-                x:Name="ImageToolButton"
-                Style="{StaticResource ITB}"
-                Click="ImageToolButton_Click"
-                ToolTipService.ToolTip="Insert an image">
-                <FontIcon Glyph="&#xE91B;" FontSize="19"/>
-            </ToggleButton>
-
-            <Button
-                x:Name="UndoAnnotationButton"
-                Style="{StaticResource IB}"
-                Click="UndoAnnotationButton_Click"
-                IsEnabled="False"
-                ToolTipService.ToolTip="Undo annotation">
-                <FontIcon Glyph="&#xE7A7;" FontSize="19"/>
-            </Button>
-
-            <Button
-                x:Name="RedoAnnotationButton"
-                Style="{StaticResource IB}"
-                Click="RedoAnnotationButton_Click"
-                IsEnabled="False"
-                ToolTipService.ToolTip="Redo annotation">
-                <FontIcon Glyph="&#xE7A6;" FontSize="19"/>
-            </Button>
-
-            <Button
-                Style="{StaticResource IB}"
-                ToolTipService.ToolTip="Markup settings">
-                <FontIcon Glyph="&#xE713;" FontSize="18"/>
-                <Button.Flyout>
-                    <Flyout Placement="Bottom">
-                        <StackPanel Spacing="10" MinWidth="220" Padding="8">
-                            <TextBlock Text="Markup style" FontWeight="SemiBold"/>
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <RadioButton
-                                    x:Name="HighlightStyleButton"
-                                    Content="Highlight"
-                                    IsChecked="True"
-                                    Tag="0"
-                                    Checked="MarkupStyle_Checked"/>
-                                <RadioButton
-                                    Content="Underline"
-                                    Tag="1"
-                                    Checked="MarkupStyle_Checked"/>
-                                <RadioButton
-                                    Content="Strikeout"
-                                    Tag="2"
-                                    Checked="MarkupStyle_Checked"/>
-                            </StackPanel>
-                            <TextBlock Text="Color" FontWeight="SemiBold"/>
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Button Width="28" Height="28" Padding="0" Background="#FFFFDC28" Click="MarkupColor_Click" Tag="FFFFDC28" ToolTipService.ToolTip="Yellow"/>
-                                <Button Width="28" Height="28" Padding="0" Background="#FFFF5C5C" Click="MarkupColor_Click" Tag="FFFF5C5C" ToolTipService.ToolTip="Red"/>
-                                <Button Width="28" Height="28" Padding="0" Background="#FF52C7A5" Click="MarkupColor_Click" Tag="FF52C7A5" ToolTipService.ToolTip="Green"/>
-                                <Button Width="28" Height="28" Padding="0" Background="#FF60A5FA" Click="MarkupColor_Click" Tag="FF60A5FA" ToolTipService.ToolTip="Blue"/>
-                                <Button Width="28" Height="28" Padding="0" Background="#FFE879F9" Click="MarkupColor_Click" Tag="FFE879F9" ToolTipService.ToolTip="Pink"/>
-                            </StackPanel>
-                            <TextBlock Text="Opacity" FontWeight="SemiBold"/>
-                            <Slider
-                                x:Name="MarkupOpacitySlider"
-                                Minimum="10"
-                                Maximum="100"
-                                Value="35"
-                                StepFrequency="5"
-                                ValueChanged="MarkupOpacitySlider_ValueChanged"/>
-                        </StackPanel>
-                    </Flyout>
-                </Button.Flyout>
-            </Button>
-        </StackPanel>
+        <components:PdfMarkupToolbar
+            x:Name="PdfMarkupToolbar"
+            Grid.Column="4"/>
 
         <!-- Right-side actions -->
         <StackPanel
@@ -293,7 +174,7 @@
                 Visibility="Collapsed"
                 Click="WordWrapButton_Click"
                 ToolTipService.ToolTip="Word wrap">
-                <FontIcon Glyph="&#xEF64;" FontSize="20"/>
+                <FontIcon Glyph="{StaticResource ViewerIcon.WordWrap}" FontSize="20"/>
             </ToggleButton>
 
             <!-- Search -->
@@ -304,7 +185,7 @@
                 ToolTipService.ToolTip="Find">
                 <FontIcon
                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
-                    Glyph="&#xF690;"
+                    Glyph="{StaticResource ViewerIcon.Find}"
                     FontSize="20"/>
             </Button>
 
@@ -315,7 +196,7 @@
                 ToolTipService.ToolTip="Open with default app">
                 <FontIcon
                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
-                    Glyph="&#xF583;"
+                    Glyph="{StaticResource ViewerIcon.OpenExternal}"
                     FontSize="20"/>
             </Button>
 
@@ -326,7 +207,7 @@
                 ToolTipService.ToolTip="Show in File Explorer">
                 <FontIcon
                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
-                    Glyph="&#xF0C61;"
+                    Glyph="{StaticResource ViewerIcon.ShowInExplorer}"
                     FontSize="20"/>
             </Button>
 
@@ -338,7 +219,7 @@
                 ToolTipService.ToolTip="Document info">
                 <FontIcon
                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
-                    Glyph="&#xF4A4;"
+                    Glyph="{StaticResource ViewerIcon.DocumentInfo}"
                     FontSize="20"/>
             </Button>
 
@@ -349,7 +230,7 @@
 
                 <FontIcon
                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
-                    Glyph="&#xF557;"
+                    Glyph="{StaticResource ViewerIcon.MoreOptions}"
                     FontSize="20"/>
 
                 <Button.Flyout>
@@ -361,7 +242,7 @@
                             <MenuFlyoutItem.Icon>
                                 <FontIcon
                                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
-                                    Glyph="&#xF4A4;"
+                                    Glyph="{StaticResource ViewerIcon.DocumentInfo}"
                                     FontSize="20"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
@@ -371,7 +252,7 @@
                             ToolTipService.ToolTip="Presentation mode"
                             Click="PresentationModeMenuItem_Click">
                             <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE740;" FontSize="20"/>
+                                <FontIcon Glyph="{StaticResource ViewerIcon.PresentationMode}" FontSize="20"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 
@@ -379,7 +260,7 @@
                             Text="Bookmark this page"
                             Click="BookmarkMenuItem_Click">
                             <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE718;" FontSize="20"/>
+                                <FontIcon Glyph="{StaticResource ViewerIcon.Bookmark}" FontSize="20"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 
@@ -388,7 +269,7 @@
                             Text="Print"
                             Click="PrintMenuItem_Click">
                             <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE749;" FontSize="20"/>
+                                <FontIcon Glyph="{StaticResource ViewerIcon.Print}" FontSize="20"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 
@@ -396,7 +277,7 @@
                             Text="Copy page text"
                             Click="CopyPageTextMenuItem_Click">
                             <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE8C8;" FontSize="20"/>
+                                <FontIcon Glyph="{StaticResource ViewerIcon.CopyPageText}" FontSize="20"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 
@@ -404,7 +285,7 @@
                             Text="Copy file path"
                             Click="CopyPathMenuItem_Click">
                             <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE71B;" FontSize="20"/>
+                                <FontIcon Glyph="{StaticResource ViewerIcon.CopyPath}" FontSize="20"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 
@@ -415,7 +296,7 @@
                             <MenuFlyoutItem.Icon>
                                 <FontIcon
                                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
-                                    Glyph="&#xF583;"
+                                    Glyph="{StaticResource ViewerIcon.OpenExternal}"
                                     FontSize="20"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
@@ -426,7 +307,7 @@
                             <MenuFlyoutItem.Icon>
                                 <FontIcon
                                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
-                                    Glyph="&#xF0C61;"
+                                    Glyph="{StaticResource ViewerIcon.ShowInExplorer}"
                                     FontSize="20"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
@@ -436,7 +317,7 @@
                             Text="Document tools"
                             Click="ToolsMenuItem_Click">
                             <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE90F;" FontSize="20"/>
+                                <FontIcon Glyph="{StaticResource ViewerIcon.Tools}" FontSize="20"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 
@@ -444,7 +325,7 @@
                             Text="Settings"
                             Click="SettingsMenuItem_Click">
                             <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE713;" FontSize="20"/>
+                                <FontIcon Glyph="{StaticResource ViewerIcon.Settings}" FontSize="20"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 
@@ -452,7 +333,7 @@
                             Text="Keyboard shortcuts"
                             Click="KeyboardShortcutsMenuItem_Click">
                             <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE765;" FontSize="20"/>
+                                <FontIcon Glyph="{StaticResource ViewerIcon.KeyboardShortcuts}" FontSize="20"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 

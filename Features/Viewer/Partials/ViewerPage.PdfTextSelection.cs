@@ -1,4 +1,5 @@
 using DocGlance.Core.Models;
+using DocGlance.Rendering.Pdf.Models;
 using DocGlance.Infrastructure.Logging;
 using DocGlance.Rendering.Pdf;
 using DocGlance.Features.Viewer.Components;

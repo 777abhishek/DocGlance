@@ -25,6 +25,7 @@ using DocGlance.Features.Viewer;
 using DocGlance.Infrastructure.Configuration;
 using DocGlance.Infrastructure.Logging;
 using DocGlance.Services.Input;
+using DocGlance.Services.Session;
 
 namespace DocGlance.UI.Shell;
 
@@ -53,8 +54,7 @@ public sealed partial class TitleBarWindow : Window
     private Visibility _tabsVisibilityBeforePresentation;
     private Visibility _updateBannerVisibilityBeforePresentation;
 
-    private static TitleBarWindow? _quickLookHotkeyOwner;
-    private static GlobalHotkeyRegistration? _quickLookHotkeyRegistration;
+    private readonly QuickLookHotkeyService _quickLookHotkeyService;
 
     // ── HWND (for pickers in unpackaged apps) ─────────────────────────────────
     public IntPtr Hwnd => WindowNative.GetWindowHandle(this);
@@ -110,214 +110,32 @@ public sealed partial class TitleBarWindow : Window
     }
 
 
-    public bool IsQuickLookHotkeyRegistered => _quickLookHotkeyRegistration?.IsRegistered == true;
+    public bool IsQuickLookHotkeyRegistered => _quickLookHotkeyService.IsRegistered;
 
     public bool TrySetQuickLookShortcutEnabled(bool enabled, out string error)
-    {
-        error = string.Empty;
-        if (_quickLookHotkeyRegistration == null)
-        {
-            error = "The global shortcut service is unavailable.";
-            return false;
-        }
-
-        if (enabled)
-        {
-            if (!_quickLookHotkeyRegistration.TryRegister(
-                    AppSettings.QuickLookHotkeyKey,
-                    AppSettings.QuickLookHotkeyModifiers,
-                    out error))
-                return false;
-        }
-        else
-        {
-            _quickLookHotkeyRegistration.Unregister();
-        }
-
-        AppSettings.QuickLookSpaceShortcutEnabled = enabled;
-        return true;
-    }
+        => _quickLookHotkeyService.TrySetShortcutEnabled(enabled, out error);
 
     public bool TrySetQuickLookHotkey(int virtualKey, uint modifiers, out string error)
-    {
-        error = string.Empty;
-        if (_quickLookHotkeyRegistration == null)
-        {
-            error = "The global shortcut service is unavailable.";
-            return false;
-        }
+        => _quickLookHotkeyService.TrySetHotkey(virtualKey, modifiers, out error);
 
-        bool enabled = AppSettings.QuickLookSpaceShortcutEnabled;
-        if (!_quickLookHotkeyRegistration.TryRegister(virtualKey, modifiers, out error))
-            return false;
-
-        if (!enabled)
-            _quickLookHotkeyRegistration.Unregister();
-
-        AppSettings.QuickLookHotkeyKey = virtualKey;
-        AppSettings.QuickLookHotkeyModifiers = modifiers;
-        return true;
-    }
-
-    public void SuspendQuickLookHotkey() => _quickLookHotkeyRegistration?.Unregister();
+    public void SuspendQuickLookHotkey() => _quickLookHotkeyService.Suspend();
 
     public bool ResumeQuickLookHotkey(out string error)
-    {
-        error = string.Empty;
-        if (!AppSettings.QuickLookSpaceShortcutEnabled)
-            return true;
+        => _quickLookHotkeyService.Resume(out error);
 
-        return _quickLookHotkeyRegistration?.TryRegister(
-            AppSettings.QuickLookHotkeyKey,
-            AppSettings.QuickLookHotkeyModifiers,
-            out error) == true;
-    }
+    internal void BecomeQuickLookHotkeyOwner() => _quickLookHotkeyService.BecomeOwner();
 
-    private void BecomeQuickLookHotkeyOwner()
-    {
-        _quickLookHotkeyOwner = this;
-        try
-        {
-            _quickLookHotkeyRegistration = new GlobalHotkeyRegistration(
-                Hwnd,
-                DispatcherQueue,
-                () => (Current ?? this).HandleGlobalFileOpenHotkey());
+    private void ReleaseQuickLookHotkeyOwner() => _quickLookHotkeyService.ReleaseOwner();
 
-            if (AppSettings.QuickLookSpaceShortcutEnabled &&
-                !_quickLookHotkeyRegistration.TryRegister(
-                    AppSettings.QuickLookHotkeyKey,
-                    AppSettings.QuickLookHotkeyModifiers,
-                    out string error))
-            {
-                Logger.Log($"[QuickLook] Could not register global shortcut: {error}");
-            }
-        }
-        catch (Exception ex)
-        {
-            _quickLookHotkeyRegistration?.Dispose();
-            _quickLookHotkeyRegistration = null;
-            _quickLookHotkeyOwner = null;
-            Logger.Error("[QuickLook] Could not initialize global shortcut registration", ex);
-        }
-    }
-
-    private void ReleaseQuickLookHotkeyOwner()
-    {
-        if (!ReferenceEquals(_quickLookHotkeyOwner, this))
-            return;
-
-        _quickLookHotkeyRegistration?.Dispose();
-        _quickLookHotkeyRegistration = null;
-        _quickLookHotkeyOwner = null;
-
-        var replacement = App.AllWindows.FirstOrDefault(window => !ReferenceEquals(window, this));
-        replacement?.BecomeQuickLookHotkeyOwner();
-    }
-
-    private void HandleGlobalFileOpenHotkey()
-    {
-        try
-        {
-            var window = Current ?? this;
-            IntPtr foregroundWindow = GetForegroundWindow();
-            bool appIsForeground = foregroundWindow == window.Hwnd ||
-                App.AllWindows.Any(appWindow => appWindow.Hwnd == foregroundWindow);
-
-            if (appIsForeground || TryGetSelectedExplorerFile(foregroundWindow) is not { } filePath)
-                return;
-
-            var document = DocumentItem.FromFileInfo(new FileInfo(filePath));
-            window.RestoreAndActivate();
-            window.OpenDocument(document);
-        }
-        catch (Exception ex)
-        {
-            Logger.Error("[QuickLook] Global file-open shortcut failed", ex);
-        }
-    }
-
-    private static string? TryGetSelectedExplorerFile(IntPtr foregroundWindow)
-    {
-        object? shell = null;
-        object? windows = null;
-
-        try
-        {
-            Type? shellType = Type.GetTypeFromProgID("Shell.Application");
-            if (shellType == null || Activator.CreateInstance(shellType) is not { } shellObject)
-                return null;
-
-            shell = shellObject;
-            dynamic shellAutomation = shellObject;
-            windows = shellAutomation.Windows();
-            dynamic shellWindows = windows;
-            int windowCount = Convert.ToInt32(shellWindows.Count);
-
-            for (int i = 0; i < windowCount; i++)
-            {
-                object? browser = null;
-                object? document = null;
-                object? selectedItems = null;
-                object? selectedItem = null;
-                try
-                {
-                    browser = shellWindows.Item(i);
-                    dynamic browserAutomation = browser;
-                    if (new IntPtr(Convert.ToInt64(browserAutomation.HWND)) != foregroundWindow)
-                        continue;
-
-                    document = browserAutomation.Document;
-                    dynamic documentAutomation = document;
-                    selectedItems = documentAutomation.SelectedItems();
-                    dynamic selection = selectedItems;
-                    if (Convert.ToInt32(selection.Count) == 0)
-                        return null;
-
-                    selectedItem = selection.Item(0);
-                    dynamic file = selectedItem;
-                    string? path = Convert.ToString(file.Path);
-                    if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
-                        return null;
-
-                    string extension = Path.GetExtension(path);
-                    return SupportedExtensions.All.Contains(extension, StringComparer.OrdinalIgnoreCase)
-                        ? path
-                        : null;
-                }
-                finally
-                {
-                    ReleaseComObject(selectedItem);
-                    ReleaseComObject(selectedItems);
-                    ReleaseComObject(document);
-                    ReleaseComObject(browser);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.Error("[QuickLook] Could not read the selected Explorer file", ex);
-        }
-        finally
-        {
-            ReleaseComObject(windows);
-            ReleaseComObject(shell);
-        }
-
-        return null;
-    }
-
-    private static void ReleaseComObject(object? value)
-    {
-        if (value != null && Marshal.IsComObject(value))
-            Marshal.ReleaseComObject(value);
-    }
+    internal void HandleGlobalFileOpenHotkey() => _quickLookHotkeyService.HandleGlobalFileOpenHotkey();
 
 
     public TitleBarWindow()
     {
         Current = this;
         InitializeComponent();
-        if (_quickLookHotkeyOwner == null)
+        _quickLookHotkeyService = new QuickLookHotkeyService(this);
+        if (!QuickLookHotkeyService.HasOwner)
             BecomeQuickLookHotkeyOwner();
 
         ExtendsContentIntoTitleBar = true;
@@ -1022,9 +840,6 @@ public sealed partial class TitleBarWindow : Window
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
 
-    [DllImport("user32.dll")]
-    private static extern IntPtr GetForegroundWindow();
-
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern IntPtr LoadImage(IntPtr hInst, string lpszName,
         uint uType, int cxDesired, int cyDesired, uint fuLoad);
@@ -1212,26 +1027,11 @@ public sealed partial class TitleBarWindow : Window
     /// </summary>
     public void SaveSession()
     {
-        try
-        {
-            var filePaths = _tabData.Values
-                .Where(v => !string.IsNullOrEmpty(v.doc.FilePath) && File.Exists(v.doc.FilePath))
-                .Select(v => v.doc.FilePath)
-                .ToList();
+        int selectedIndex = -1;
+        if (Tabs.SelectedItem is TabViewItem selectedTab && _tabData.ContainsKey(selectedTab))
+            selectedIndex = _tabData.Keys.ToList().IndexOf(selectedTab);
 
-            int selectedIndex = -1;
-            if (Tabs.SelectedItem is TabViewItem selectedTab && _tabData.ContainsKey(selectedTab))
-            {
-                selectedIndex = _tabData.Keys.ToList().IndexOf(selectedTab);
-            }
-
-            Services.Storage.SessionStateStore.SaveOpenTabs(filePaths, selectedIndex);
-            Logger.Log($"[Session] Saved {filePaths.Count} open tabs");
-        }
-        catch (Exception ex)
-        {
-            Logger.Error("SaveSession failed", ex);
-        }
+        SessionService.SaveSession(_tabData.Values.Select(value => value.doc), selectedIndex);
     }
 
     /// <summary>
@@ -1239,93 +1039,14 @@ public sealed partial class TitleBarWindow : Window
     /// </summary>
     public void RestoreSession()
     {
-        var dispatcherQueue = DispatcherQueue;
-        DocGlance.Infrastructure.Diagnostics.DiagnosticsService.Milestone("SessionRestoreStarted");
-
-        _ = Task.Run(() =>
-        {
-            try
-            {
-                var state = Services.Storage.SessionStateStore.LoadSessionState();
-                var documents = new List<DocumentItem>();
-                int selectedDocumentIndex = -1;
-
-                if (state != null)
-                {
-                    for (int i = 0; i < state.OpenFiles.Count; i++)
-                    {
-                        var filePath = state.OpenFiles[i];
-                        try
-                        {
-                            if (!File.Exists(filePath))
-                            {
-                                Logger.Log($"[Session] Skipping missing file: {filePath}");
-                                continue;
-                            }
-
-                            var document = DocumentItem.FromFileInfo(new FileInfo(filePath));
-                            if (documents.Count == state.SelectedTabIndex)
-                                selectedDocumentIndex = documents.Count;
-                            documents.Add(document);
-                        }
-                        catch (Exception ex)
-                        {
-                            Logger.Error($"Failed to prepare restored tab for: {filePath}", ex);
-                        }
-                    }
-                }
-
-                if (!dispatcherQueue.TryEnqueue(
-                    Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
-                    () =>
-                    {
-                        try
-                        {
-                            if (documents.Count == 0)
-                            {
-                                Logger.Log("[Session] No previous session to restore");
-                                return;
-                            }
-
-                            Logger.Log($"[Session] Restoring {documents.Count} tabs");
-                            DocumentItem? selectedDocument = null;
-                            foreach (var (document, index) in documents.Select((document, index) => (document, index)))
-                            {
-                                try
-                                {
-                                    OpenDocument(document);
-                                    if (index == selectedDocumentIndex)
-                                        selectedDocument = document;
-                                }
-                                catch (Exception ex)
-                                {
-                                    Logger.Error($"Failed to restore tab for: {document.FilePath}", ex);
-                                }
-                            }
-
-                            if (selectedDocument != null)
-                            {
-                                var selectedTab = _tabData
-                                    .FirstOrDefault(entry => ReferenceEquals(entry.Value.doc, selectedDocument)).Key;
-                                if (selectedTab != null)
-                                    Tabs.SelectedItem = selectedTab;
-                            }
-                        }
-                        finally
-                        {
-                            DocGlance.Infrastructure.Diagnostics.DiagnosticsService.Milestone("SessionRestoreCompleted");
-                        }
-                    }))
-                {
-                    Logger.Warn("[Session] UI dispatcher unavailable; restored session was not applied");
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error("RestoreSession failed", ex);
-                DocGlance.Infrastructure.Diagnostics.DiagnosticsService.Milestone("SessionRestoreFailed");
-            }
-        });
+        SessionService.RestoreSession(DispatcherQueue, OpenDocument, SelectRestoredDocument);
     }
 
+    private void SelectRestoredDocument(DocumentItem document)
+    {
+        var selectedTab = _tabData
+            .FirstOrDefault(entry => ReferenceEquals(entry.Value.doc, document)).Key;
+        if (selectedTab != null)
+            Tabs.SelectedItem = selectedTab;
+    }
 }

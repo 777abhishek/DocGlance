@@ -2,6 +2,8 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
 using DocGlance.Core.Models;
+using DocGlance.Rendering.Shared;
+using DocGlance.Rendering.Pdf.Models;
 using DocGlance.Rendering;
 using DocGlance.Rendering.Pdf;
 using DocGlance.Infrastructure.Logging;

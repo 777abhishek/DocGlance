@@ -20,10 +20,12 @@ using Windows.Storage.Pickers;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.System;
 using DocGlance.Common.Validators;
-using DocGlance.Rendering.Document;
-using DocGlance.Rendering.Presentation;
+using DocGlance.Rendering.Docx;
+using DocGlance.Rendering.Pptx;
+using DocGlance.Rendering.Xlsx;
 using DocGlance.Infrastructure.Logging;
 using DocGlance.Rendering.Pdf;
+using DocGlance.Interop.PdfCraft;
 using WinRT.Interop;
 
 namespace DocGlance.Features.Tools;

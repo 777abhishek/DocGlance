@@ -1,6 +1,7 @@
 ﻿using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using DocGlance.Core.Enums;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using DocGlance.Services.Storage;
@@ -198,12 +199,6 @@ public sealed partial class ViewerPage
                 await StorageFile.GetFileFromPathAsync(_doc.FilePath));
         }
         catch { }
-    }
-
-    private void OpenDefaultAppButton_Click(object sender, RoutedEventArgs e)
-    {
-        // Redirect to the main handler
-        OpenExternalButton_Click(sender, EventArgs.Empty);
     }
 
     private async void ShowInExplorerButton_Click(object? sender, EventArgs e)

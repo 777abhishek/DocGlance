@@ -12,7 +12,7 @@ public sealed partial class ViewerPage
 {
     private void PlainTextBlock_RightTapped(object sender, RightTappedRoutedEventArgs e)
     {
-        string selectedText = PlainTextBlock.SelectedText;
+        string selectedText = TextViewerControl.TextBox.SelectedText;
         if (string.IsNullOrWhiteSpace(selectedText))
             return;
 
@@ -38,7 +38,7 @@ public sealed partial class ViewerPage
         };
         translateItem.Click += (_, _) => _ = ShowTranslationDialogAsync(selectedText);
         menu.Items.Add(translateItem);
-        menu.ShowAt(PlainTextBlock, e.GetPosition(PlainTextBlock));
+        menu.ShowAt(TextViewerControl.TextBox, e.GetPosition(TextViewerControl.TextBox));
         e.Handled = true;
     }
 

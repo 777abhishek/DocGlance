@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using DocGlance.Rendering.Pdf;
+using DocGlance.Core.Enums;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -12,8 +13,6 @@ namespace DocGlance.Features.Viewer;
 
 public sealed partial class ViewerPage
 {
-    // ── FitMode tracking ──────────────────────────────────────────────────────
-    private enum FitMode { None, FitWidth, FitPage }
     private FitMode _fitMode = FitMode.None;
 
     private void SetFitMode(FitMode mode)
@@ -105,8 +104,6 @@ public sealed partial class ViewerPage
             return;
         }
 
-        if (_currentRenderedElement != null)
-            DocumentScrollViewer.ChangeView(null, null, (float)_zoom, disableAnimation: false);
     }
 
     private Windows.Foundation.Point GetViewportCenter() =>
@@ -265,16 +262,6 @@ public sealed partial class ViewerPage
             return;
         }
 
-        if (_currentRenderedElement != null)
-        {
-            const double rendererWidth = 800.0;
-            const double rendererHeight = 1000.0;
-            const double padding = 28.0;
-            double availableWidth = DocumentScrollViewer.ViewportWidth - padding * 2;
-            double availableHeight = DocumentScrollViewer.ViewportHeight - padding * 2;
-            if (availableWidth > 0 && availableHeight > 0)
-                SetZoom(Math.Min(availableWidth / rendererWidth, availableHeight / rendererHeight));
-        }
     }
 
     // ── Re-apply active fit on viewport change ────────────────────────────────

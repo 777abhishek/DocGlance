@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
+using DocGlance.Core.Enums;
 using System;
 using Windows.System;
 
@@ -103,7 +104,7 @@ public sealed partial class ViewerPage
 
     private bool CanZoomCurrentDocument() =>
         _pdfState != null || _pptxDocument != null || _docxDocument != null ||
-        _spreadsheetDocument != null || _currentRenderedElement != null;
+        _spreadsheetDocument != null;
 
     private void ToggleWordWrap()
     {
@@ -133,9 +134,8 @@ public sealed partial class ViewerPage
     {
         GoToPage(1);
         DocumentScrollViewer.ChangeView(0, 0, null, disableAnimation: true);
-        TextViewerScroll.ChangeView(0, 0, null, disableAnimation: true);
-        if (PlainTextViewerGrid.Visibility == Visibility.Visible)
-            PlainTextBlock.Select(0, 0);
+        if (TextViewerHost.Visibility == Visibility.Visible)
+            TextViewerControl.TextBox.Select(0, 0);
         if (SpreadsheetViewerHost.Visibility == Visibility.Visible)
             SpreadsheetViewerControl.ResetScrollPosition();
 
@@ -165,9 +165,9 @@ public sealed partial class ViewerPage
         _sidebarVisibilityBeforePresentation = SidebarCard.Visibility;
         _zoomPillVisibilityBeforePresentation = ZoomPill.Visibility;
         _sidebarWidthBeforePresentation = SidebarColumn.Width;
-        _plainTextFontSizeBeforePresentation = PlainTextBlock.FontSize;
-        _lineNumberFontSizeBeforePresentation = LineNumberBlock.FontSize;
-        _lineNumberHeightBeforePresentation = LineNumberBlock.LineHeight;
+        _plainTextFontSizeBeforePresentation = TextViewerControl.TextBox.FontSize;
+        _lineNumberFontSizeBeforePresentation = TextViewerControl.LineNumbers.FontSize;
+        _lineNumberHeightBeforePresentation = TextViewerControl.LineNumbers.LineHeight;
         _isPresentationMode = true;
 
         FindBar.Visibility = Visibility.Collapsed;
@@ -180,11 +180,11 @@ public sealed partial class ViewerPage
         SidebarColumn.Width = new GridLength(0);
         SetFitMode(_spreadsheetDocument != null ? FitMode.FitWidth : FitMode.FitPage);
 
-        if (PlainTextViewerGrid.Visibility == Visibility.Visible)
+        if (TextViewerHost.Visibility == Visibility.Visible)
         {
-            PlainTextBlock.FontSize = 22;
-            LineNumberBlock.FontSize = 22;
-            LineNumberBlock.LineHeight = 36;
+            TextViewerControl.TextBox.FontSize = 22;
+            TextViewerControl.LineNumbers.FontSize = 22;
+            TextViewerControl.LineNumbers.LineHeight = 36;
         }
 
         DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
@@ -211,9 +211,9 @@ public sealed partial class ViewerPage
         SidebarCard.Visibility = _sidebarVisibilityBeforePresentation;
         ZoomPill.Visibility = _zoomPillVisibilityBeforePresentation;
         SidebarColumn.Width = _sidebarWidthBeforePresentation;
-        PlainTextBlock.FontSize = _plainTextFontSizeBeforePresentation;
-        LineNumberBlock.FontSize = _lineNumberFontSizeBeforePresentation;
-        LineNumberBlock.LineHeight = _lineNumberHeightBeforePresentation;
+        TextViewerControl.TextBox.FontSize = _plainTextFontSizeBeforePresentation;
+        TextViewerControl.LineNumbers.FontSize = _lineNumberFontSizeBeforePresentation;
+        TextViewerControl.LineNumbers.LineHeight = _lineNumberHeightBeforePresentation;
 
         SetFitMode(_fitModeBeforePresentation);
         if (_fitModeBeforePresentation == FitMode.None)
@@ -232,16 +232,6 @@ public sealed partial class ViewerPage
         if (_spreadsheetDocument != null)
         {
             ApplyFitWidth();
-            return;
-        }
-
-        if (_currentRenderedElement != null)
-        {
-            DocumentScrollViewer.UpdateLayout();
-            double availableWidth = DocumentScrollViewer.ViewportWidth - 48;
-            double availableHeight = DocumentScrollViewer.ViewportHeight - 48;
-            if (availableWidth > 0 && availableHeight > 0)
-                SetZoom(Math.Min(availableWidth / 800.0, availableHeight / 1000.0));
             return;
         }
 

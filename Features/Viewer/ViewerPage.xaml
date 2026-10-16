@@ -5,7 +5,6 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:models="using:DocGlance.Core.Models"
     xmlns:components="using:DocGlance.Features.Viewer.Components"
-    xmlns:spreadsheet="using:DocGlance.Features.Viewer.Spreadsheet"
     Background="Transparent"
 >
 
@@ -354,57 +353,9 @@
                     </Canvas>
                 </ScrollViewer>
 
-                <!-- Unsupported file message (same pattern as HomePage empty state) -->
-                <StackPanel
+                <ContentControl
                     x:Name="UnsupportedFileMessage"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                    Spacing="16"
-                    Visibility="Collapsed">
-                    <FontIcon
-                        x:Name="UnsupportedIcon"
-                        FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
-                        Glyph="&#xE8A5;"
-                        FontSize="48"
-                        HorizontalAlignment="Center"
-                        Opacity="0.6"/>
-                    <TextBlock
-                        x:Name="UnsupportedFileName"
-                        Text="Document name"
-                        FontSize="18"
-                        FontWeight="SemiBold"
-                        HorizontalAlignment="Center"
-                        TextAlignment="Center"
-                        TextWrapping="Wrap"
-                        MaxWidth="500"
-                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                    <TextBlock
-                        x:Name="UnsupportedMetadata"
-                        Text="DOCX · 1 MB · Date"
-                        FontSize="13"
-                        HorizontalAlignment="Center"
-                        TextAlignment="Center"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Opacity="0.8"/>
-                    <TextBlock
-                        x:Name="UnsupportedPath"
-                        Text="C:\path\to\file"
-                        FontSize="12"
-                        HorizontalAlignment="Center"
-                        TextAlignment="Center"
-                        TextWrapping="Wrap"
-                        MaxWidth="500"
-                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                        Opacity="0.6"
-                        Margin="0,-6,0,4"/>
-                    <Button
-                        x:Name="OpenDefaultAppButton"
-                        Content="Open with default app"
-                        HorizontalAlignment="Center"
-                        Padding="20,10"
-                        Style="{StaticResource AccentButtonStyle}"
-                        Click="OpenDefaultAppButton_Click"/>
-                </StackPanel>
+                    Visibility="Collapsed"/>
 
                 <!-- Error message (same pattern as HomePage empty state) -->
                 <StackPanel
@@ -430,95 +381,12 @@
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                 </StackPanel>
 
-                <!-- ── TEXT viewer (plain) — TextBox IS the scroll host ── -->
-                <!-- ── PLAIN TEXT viewer — TextBox is the scroll host ── -->
-                <Grid x:Name="PlainTextViewerGrid"
-                    Visibility="Collapsed"
-                    Background="Transparent">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-
-                    <TextBlock x:Name="LineNumberBlock"
-                        Grid.Column="0"
-                        FontFamily="Cascadia Code, Consolas, Courier New, monospace"
-                        FontSize="13"
-                        LineHeight="22"
-                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                        TextAlignment="Right"
-                        IsTextSelectionEnabled="False"
-                        VerticalAlignment="Top"
-                        Margin="16,20,12,16"/>
-
-                    <!-- TextBox owns its own scrollbars — no outer ScrollViewer needed -->
-                    <TextBox x:Name="PlainTextBlock"
-                        Grid.Column="1"
-                        FontFamily="Cascadia Code, Consolas, Courier New, monospace"
-                        FontSize="13"
-                        IsReadOnly="True"
-                        AcceptsReturn="True"
-                        TextWrapping="NoWrap"
-                        HorizontalAlignment="Stretch"
-                        VerticalAlignment="Stretch"
-                        BorderThickness="0"
-                        Background="Transparent"
-                        Padding="0,16,24,16"
-                        ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                        ScrollViewer.VerticalScrollBarVisibility="Auto">
-                        <TextBox.Resources>
-                            <SolidColorBrush x:Key="TextControlBackground" Color="Transparent"/>
-                            <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent"/>
-                            <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent"/>
-                        </TextBox.Resources>
-                    </TextBox>
-                </Grid>
-
-                <!-- ── CODE viewer — RichTextBlock in ScrollViewer ── -->
-                <ScrollViewer x:Name="TextViewerScroll"
-                    Visibility="Collapsed"
-                    HorizontalScrollBarVisibility="Auto"
-                    VerticalScrollBarVisibility="Auto"
-                    Background="Transparent">
-                    <Grid Background="Transparent">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-
-                        <TextBlock x:Name="CodeLineNumberBlock"
-                            Grid.Column="0"
-                            FontFamily="Cascadia Code, Consolas, Courier New, monospace"
-                            FontSize="13"
-                            LineHeight="22"
-                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                            TextAlignment="Right"
-                            IsTextSelectionEnabled="False"
-                            VerticalAlignment="Top"
-                            Margin="16,16,12,16"/>
-
-                        <RichTextBlock x:Name="TextViewerBlock"
-                            Grid.Column="1"
-                            FontFamily="Cascadia Code, Consolas, Courier New, monospace"
-                            FontSize="13"
-                            LineHeight="22"
-                            IsTextSelectionEnabled="True"
-                            TextWrapping="NoWrap"
-                            VerticalAlignment="Top"
-                            Margin="0,16,24,16"/>
-                    </Grid>
-                </ScrollViewer>
-
-                <!-- ── MARKDOWN viewer — rendered HTML in WebView2 ── -->
-                <Grid x:Name="MarkdownViewerHost"
-                    Visibility="Collapsed"
-                    Padding="0"/>
+                <ContentControl x:Name="TextViewerHost"
+                    Visibility="Collapsed"/>
 
                 <!-- ── SPREADSHEET viewer — native Win2D cell grid ── -->
-                <Grid x:Name="SpreadsheetViewerHost"
-                    Visibility="Collapsed">
-                    <spreadsheet:SpreadsheetViewer x:Name="SpreadsheetViewerControl"/>
-                </Grid>
+                <ContentControl x:Name="SpreadsheetViewerHost"
+                    Visibility="Collapsed"/>
 
                 <Border x:Name="FindBar"
                     Visibility="Collapsed"

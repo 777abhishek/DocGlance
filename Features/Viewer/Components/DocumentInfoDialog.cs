@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using DocGlance.Common.Formatters;
 using DocGlance.Core.Models;
+using DocGlance.Rendering.Pdf.Models;
 using System;
 using System.IO;
 

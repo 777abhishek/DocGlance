@@ -9,19 +9,34 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 using DocGlance.Services;
-using DocGlance.Services.Documents;
 using DocGlance.Core.Models;
+using DocGlance.Core.Enums;
 using DocGlance.Rendering.Pdf;
+using DocGlance.Rendering.Xlsx;
+using DocGlance.Features.Viewer.Formats.Text;
 using DocGlance.Infrastructure.Logging;
+using DocGlance.Features.Viewer.Contracts;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Threading;
+using System.Threading.Tasks;
+using DocGlance.Features.Viewer.Formats.Fallback;
+using DocGlance.Features.Viewer.Formats.Spreadsheet;
 
 namespace DocGlance.Features.Viewer;
 
 public sealed partial class ViewerPage : Page
 {
+    private readonly DocumentViewerRegistry _viewerRegistry = new(
+        new IDocumentViewerFactory[] { new TextViewerFactory(), new SpreadsheetViewerFactory() },
+        new FallbackViewerFactory());
+    private TextViewer TextViewerControl { get; set; } = null!;
+    private SpreadsheetViewer SpreadsheetViewerControl { get; set; } = null!;
+    private SpreadsheetDocument? _spreadsheetDocument => SpreadsheetViewerControl?.Document;
+    private FallbackViewer? _fallbackViewer;
+    private IDocumentViewer? _activeViewer;
+
     // ── ViewModel ─────────────────────────────────────────────────────────────
     public ViewerViewModel ViewModel { get; } = new();
 
@@ -37,11 +52,6 @@ public sealed partial class ViewerPage : Page
     internal CancellationTokenSource? _cts;
     internal List<OutlineItem>        _outline  = new();
 
-    // ── PERF-05: WebView2 disposal tracking ──────────────────────────────────
-    // Track current renderer and element to ensure proper cleanup
-    private Core.Interfaces.IFileRenderer? _currentRenderer;
-    private Microsoft.UI.Xaml.UIElement? _currentRenderedElement;
-
     public ObservableCollection<PageThumbnailItem> Thumbnails { get; } = new();
 
     // ── UI-10: Resize debounce ───────────────────────────────────────────────
@@ -51,6 +61,10 @@ public sealed partial class ViewerPage : Page
     public ViewerPage()
     {
         InitializeComponent();
+        TextViewerControl = (TextViewer)_viewerRegistry.Resolve(".txt").Create(ViewModel);
+        TextViewerHost.Content = TextViewerControl;
+        SpreadsheetViewerControl = (SpreadsheetViewer)_viewerRegistry.Resolve(".xlsx").Create(ViewModel);
+        SpreadsheetViewerHost.Content = SpreadsheetViewerControl;
         InitializeViewerShortcuts();
         Toolbar.PdfToolSelected += Toolbar_PdfToolSelected;
 
@@ -58,7 +72,7 @@ public sealed partial class ViewerPage : Page
 
         // Initialize Office text selection (drag-to-select and copy)
         InitializeOfficeTextSelection();
-        PlainTextBlock.RightTapped += PlainTextBlock_RightTapped;
+        TextViewerControl.TextBox.RightTapped += PlainTextBlock_RightTapped;
         SpreadsheetViewerControl.TranslateRequested += text => _ = ShowTranslationDialogAsync(text);
 
         // Wire viewport-resize → reapply active fit mode + re-render (the
@@ -73,9 +87,6 @@ public sealed partial class ViewerPage : Page
         {
             if (_spreadsheetDocument == null) return;
             UpdateCurrentPage(sheetIndex + 1);
-            SpreadsheetViewerControl.SetSearchMatches(
-                _spreadsheetMatches,
-                _activeSpreadsheetIndex);
             ReapplyFitMode();
         };
         SpreadsheetViewerControl.ZoomChanged += (_, zoom) =>
@@ -209,35 +220,23 @@ public sealed partial class ViewerPage : Page
         _cts?.Cancel();
 
         _searchCts?.Cancel();
-        _spreadsheetSearchCts?.Cancel();
-        _spreadsheetSearchGeneration++;
-
-        // PERF-05: Clean up WebView2 and other resources
-        if (_currentRenderer != null && _currentRenderedElement != null)
-        {
-            try
-            {
-                _ = _currentRenderer.CleanupAsync(_currentRenderedElement);
-            }
-            catch
-            {
-                // Swallow cleanup exceptions (already shutting down)
-            }
-            _currentRenderer = null;
-            _currentRenderedElement = null;
-        }
+        _searchDebounceCts?.Cancel();
 
         // Release every native document this page owns. Without this, closing a tab
         // leaked the Rust-side document (whole file buffer + renderer + font caches)
         // until GC — the reported "memory grows when opening documents" symptom.
         CleanupViewportRendering();
+        _ = TextViewerControl.CleanupAsync();
         ClearPptxCache();
         ClearDocxCache();
         _pptxTextMaps.Clear();
         ClearOfficeSelection();
-        SpreadsheetViewerControl?.Cleanup();
-        _spreadsheetDocument?.Dispose();
-        _spreadsheetDocument = null;
+        _ = SpreadsheetViewerControl?.CleanupAsync();
+        if (_fallbackViewer != null)
+        {
+            _ = _fallbackViewer.CleanupAsync();
+            _fallbackViewer = null;
+        }
         _pptxDocument?.Dispose();
         _pptxDocument = null;
         _docxDocument?.Dispose();
@@ -264,6 +263,79 @@ public sealed partial class ViewerPage : Page
         LoadingOverlay.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
         ViewModel.IsLoading = on;
     }
+
+    private async Task LoadTextFileAsync(DocumentItem document, CancellationToken cancellationToken)
+    {
+        ShowLoading(true);
+        try
+        {
+            await TextViewerControl.LoadAsync(document, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            _activeViewer = TextViewerControl;
+            TextViewerHost.Visibility = Visibility.Visible;
+            DocumentScrollViewer.Visibility = Visibility.Collapsed;
+            SpreadsheetViewerHost.Visibility = Visibility.Collapsed;
+            UnsupportedFileMessage.Visibility = Visibility.Collapsed;
+            ErrorMessage.Visibility = Visibility.Collapsed;
+            Toolbar.WordWrapVisibility = Visibility.Visible;
+            Toolbar.SidebarButtonVisibility = Visibility.Collapsed;
+            Toolbar.FitWidthButtonVisibility = Visibility.Collapsed;
+            Toolbar.FitPageButtonVisibility = Visibility.Collapsed;
+            Toolbar.IsWordWrapChecked = false;
+            SidebarCard.Visibility = Visibility.Collapsed;
+            SidebarColumn.Width = new GridLength(0);
+            ViewModel.SidebarOpen = false;
+            _total = 1;
+            _page = 1;
+            Toolbar.UpdatePageInfo(1, 1);
+        }
+        finally
+        {
+            ShowLoading(false);
+        }
+    }
+
+    internal void ShowPdfViewer()
+    {
+        _activeViewer = null;
+        TextViewerHost.Visibility = Visibility.Collapsed;
+        DocumentScrollViewer.Visibility = Visibility.Visible;
+        SpreadsheetViewerHost.Visibility = Visibility.Collapsed;
+        UnsupportedFileMessage.Visibility = Visibility.Collapsed;
+        ErrorMessage.Visibility = Visibility.Collapsed;
+        Toolbar.WordWrapVisibility = Visibility.Collapsed;
+        Toolbar.SidebarButtonVisibility = Visibility.Visible;
+        Toolbar.FitWidthButtonVisibility = Visibility.Visible;
+        Toolbar.FitPageButtonVisibility = Visibility.Visible;
+    }
+
+    internal void ShowSpreadsheetViewer()
+    {
+        _activeViewer = SpreadsheetViewerControl;
+        TextViewerHost.Visibility = Visibility.Collapsed;
+        DocumentScrollViewer.Visibility = Visibility.Collapsed;
+        SpreadsheetViewerHost.Visibility = Visibility.Visible;
+        UnsupportedFileMessage.Visibility = Visibility.Collapsed;
+        ErrorMessage.Visibility = Visibility.Collapsed;
+        Toolbar.WordWrapVisibility = Visibility.Collapsed;
+        Toolbar.SidebarButtonVisibility = Visibility.Collapsed;
+        Toolbar.FitWidthButtonVisibility = Visibility.Visible;
+        Toolbar.FitPageButtonVisibility = Visibility.Visible;
+        SidebarCard.Visibility = Visibility.Collapsed;
+        SidebarColumn.Width = new GridLength(0);
+        ViewModel.SidebarOpen = false;
+    }
+
+    private void WordWrapButton_Click(object? sender, EventArgs e)
+    {
+        TextViewerControl.TextBox.TextWrapping = Toolbar.IsWordWrapChecked
+            ? TextWrapping.Wrap
+            : TextWrapping.NoWrap;
+    }
+
+    private void ShowInfoBar(string message, InfoBarSeverity severity) =>
+        Logger.Log($"[InfoBar] {severity}: {message}");
 
     // ── Public API (used by TitleBarWindow) ───────────────────────────────────
     public int           CurrentPage     => _page;

@@ -1,0 +1,71 @@
+using DocGlance.Features.Viewer;
+using DocGlance.Features.Viewer.Contracts;
+using DocGlance.Features.Viewer.Formats.Fallback;
+using DocGlance.Features.Viewer.Formats.Spreadsheet;
+using DocGlance.Features.Viewer.Formats.Text;
+
+namespace DocGlance.Tests.Features.Viewer;
+
+public sealed class DocumentViewerRegistryTests
+{
+    [Fact]
+    public void Resolve_ClaimsXlsWithFallbackFactory()
+    {
+        var fallback = new FallbackViewerFactory();
+        var registry = new DocumentViewerRegistry(Array.Empty<IDocumentViewerFactory>(), fallback);
+
+        registry.Resolve(".xls").Should().BeSameAs(fallback);
+        registry.Resolve(@"C:\documents\legacy.xls").Should().BeSameAs(fallback);
+    }
+
+    [Fact]
+    public void Resolve_UsesTextAndSpreadsheetFactoriesForTheirFormats()
+    {
+        var text = new TextViewerFactory();
+        var spreadsheet = new SpreadsheetViewerFactory();
+        var registry = new DocumentViewerRegistry(
+            new IDocumentViewerFactory[] { text, spreadsheet },
+            new FallbackViewerFactory());
+
+        registry.Resolve(".CSV").Should().BeSameAs(text);
+        registry.Resolve(".xlsx").Should().BeSameAs(spreadsheet);
+    }
+
+    [Fact]
+    public void Resolve_UsesFallbackForUnclaimedExtensions()
+    {
+        var fallback = new StubFactory(".xls");
+        var registry = new DocumentViewerRegistry(Array.Empty<IDocumentViewerFactory>(), fallback);
+
+        registry.Resolve(".unknown").Should().BeSameAs(fallback);
+    }
+
+    [Fact]
+    public void Resolve_UsesRegisteredFactoryForClaimedExtension()
+    {
+        var fallback = new StubFactory(".xls");
+        var text = new StubFactory(".txt", ".md");
+        var registry = new DocumentViewerRegistry(new[] { text }, fallback);
+
+        registry.Resolve("C:\\documents\\notes.TXT").Should().BeSameAs(text);
+    }
+
+    [Fact]
+    public void Constructor_RejectsDuplicateExtensionClaims()
+    {
+        var first = new StubFactory(".txt");
+        var second = new StubFactory(".TXT");
+
+        var act = () => new DocumentViewerRegistry(new[] { first, second }, new StubFactory(".xls"));
+
+        act.Should().Throw<ArgumentException>().WithMessage("*claims*");
+    }
+
+    private sealed class StubFactory(params string[] extensions) : IDocumentViewerFactory
+    {
+        public IReadOnlyCollection<string> SupportedExtensions { get; } = extensions;
+
+        public IDocumentViewer Create(ViewerViewModel viewModel) =>
+            throw new NotSupportedException();
+    }
+}

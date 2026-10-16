@@ -3,13 +3,26 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
-using DocGlance.Services.Documents;
 using DocGlance.UI.Controls;
 using DocGlance.Infrastructure.Logging;
 using DocGlance.Core.Models;
+using DocGlance.Core.Enums;
 using DocGlance.Rendering;
 using DocGlance.Rendering.Pdf;
+using DocGlance.Rendering.Docx;
+using DocGlance.Rendering.Pptx;
+using DocGlance.Rendering.Xlsx;
+using DocGlance.Rendering.Shared;
+using DocGlance.Rendering.Pdf.Models;
+using DocGlance.Interop.PdfCraft;
+using DocGlance.Interop.WordCraft;
+using DocGlance.Interop.GridCraft;
+using DocGlance.Interop.DeckCraft;
 using DocGlance.Features.Viewer.Components;
+using DocGlance.Features.Viewer.Formats.Text;
+using DocGlance.Features.Viewer.Formats.Fallback;
+using DocGlance.Features.Viewer.Formats.Spreadsheet;
+using DocGlance.Features.Viewer.Contracts;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -68,18 +81,16 @@ public sealed partial class ViewerPage
         _cts?.Cancel();
 
         _searchCts?.Cancel();
-        _spreadsheetSearchCts?.Cancel();
-        _spreadsheetSearchGeneration++;
-        ClearSpreadsheetSearch();
+        _searchDebounceCts?.Cancel();
+        ClearSearchHighlights();
+        _activeViewer = null;
         ClearOfficeSelection();
         ClearOfficeHighlights();
         _selectedText = null;
         _officeSelectionAnchor = null;
         _officeSelectionFocus = null;
         _pptxTextMaps.Clear();
-        SpreadsheetViewerControl.Cleanup();
-        _spreadsheetDocument?.Dispose();
-        _spreadsheetDocument = null;
+        await SpreadsheetViewerControl.CleanupAsync();
         
         // Service owns document lifecycle — just clear our reference
         _pdfState = null;
@@ -93,6 +104,10 @@ public sealed partial class ViewerPage
         DocumentScrollViewer.ViewChanged -= OnDocxViewportChanged;
         ClearPptxCache();
         ClearDocxCache();
+        _pptxDocument?.Dispose();
+        _pptxDocument = null;
+        _docxDocument?.Dispose();
+        _docxDocument = null;
         
         Thumbnails.Clear();
         ThumbnailList.ItemsSource = Thumbnails;
@@ -125,21 +140,15 @@ public sealed partial class ViewerPage
             await LoadDocxAsync(doc.FilePath ?? string.Empty, ct);
         else if (ext == ".pptx" || ext == ".ppt" || ext == ".pptm" || ext == ".ppsx")
             await LoadPptxAsync(doc.FilePath ?? string.Empty, ct);
-        else if (ext == ".xlsx" || ext == ".xlsm" || ext == ".xltx" || ext == ".xltm")
-            await LoadXlsxAsync(doc.FilePath ?? string.Empty, ct);
-        else if (IsTextFile(ext))  // All text-based files now use the same lightweight viewer
-            await LoadTextFileAsync(doc.FilePath ?? string.Empty, ct);
         else
         {
-            // Try RendererRegistry (Office etc.) before falling back to info card
-            System.Diagnostics.Debug.WriteLine($"[ViewerPage] Looking for renderer for extension: '{ext}'");
-            var renderer = DocGlance.Rendering.RendererRegistry.GetRenderer(ext);
-            System.Diagnostics.Debug.WriteLine($"[ViewerPage] Renderer found: {renderer?.GetType().Name ?? "null"}");
-            
-            if (renderer != null)
-                await LoadViaRendererAsync(renderer, doc.FilePath ?? string.Empty, ct);
+            IDocumentViewerFactory factory = _viewerRegistry.Resolve(ext);
+            if (factory is SpreadsheetViewerFactory)
+                await LoadXlsxAsync(doc.FilePath ?? string.Empty, ct);
+            else if (factory is TextViewerFactory)
+                await LoadTextFileAsync(doc, ct);
             else
-                ShowInfoCard(doc);
+                await ShowFallbackViewerAsync(doc);
         }
 
         Infrastructure.Diagnostics.DiagnosticsService.SetCurrentOperation(null);
@@ -377,24 +386,24 @@ public sealed partial class ViewerPage
 
     // ── Non-PDF Viewers ───────────────────────────────────────────────────────
 
-    private void ShowInfoCard(DocumentItem doc)
+    private async Task ShowFallbackViewerAsync(DocumentItem doc)
     {
+        if (_fallbackViewer != null)
+            await _fallbackViewer.CleanupAsync();
+
+        _fallbackViewer = (FallbackViewer)_viewerRegistry.Resolve(doc.FilePath ?? string.Empty).Create(ViewModel);
+        _fallbackViewer.OpenRequested += (_, _) => OpenExternalButton_Click(this, EventArgs.Empty);
+        await _fallbackViewer.LoadAsync(doc, CancellationToken.None);
+        _activeViewer = _fallbackViewer;
+        UnsupportedFileMessage.Content = _fallbackViewer.Control;
         _total = 1;
         Toolbar.UpdatePageInfo(1, 1);
-
-        // Populate the unsupported file message UI (defined in XAML)
-        UnsupportedIcon.Glyph = doc.FileGlyph;
-        UnsupportedIcon.Foreground = doc.TypeColor;
-        UnsupportedFileName.Text = doc.Title;
-        UnsupportedMetadata.Text = $"{doc.FileType?.ToUpperInvariant()}  ·  {doc.FileSize}  ·  {doc.LastWriteTime:MMM dd, yyyy}";
-        UnsupportedPath.Text = doc.FilePath;
         UnsupportedFileMessage.Visibility = Visibility.Visible;
         
         // Hide other viewers and sidebar
         DocumentScrollViewer.Visibility = Visibility.Collapsed;
-        PlainTextViewerGrid.Visibility = Visibility.Collapsed;
-        TextViewerScroll.Visibility = Visibility.Collapsed;
-        MarkdownViewerHost.Visibility = Visibility.Collapsed;
+        TextViewerHost.Visibility = Visibility.Collapsed;
+        SpreadsheetViewerHost.Visibility = Visibility.Collapsed;
         ErrorMessage.Visibility = Visibility.Collapsed;
         
         SidebarCard.Visibility = Visibility.Collapsed;
@@ -402,82 +411,10 @@ public sealed partial class ViewerPage
         Toolbar.SidebarButtonVisibility = Visibility.Collapsed;
     }
 
-    private async Task LoadViaRendererAsync(DocGlance.Core.Interfaces.IFileRenderer renderer,
-                                           string filePath, CancellationToken ct)
-    {
-        try
-        {
-            // Clean up previous renderer
-            if (_currentRenderer != null && _currentRenderedElement != null)
-            {
-                try
-                {
-                    await _currentRenderer.CleanupAsync(_currentRenderedElement);
-                }
-                catch
-                {
-                    // Swallow cleanup exceptions
-                }
-                _currentRenderer = null;
-                _currentRenderedElement = null;
-            }
-
-            ShowLoading(true);
-            var element = await renderer.RenderAsync(filePath, ct);
-            ShowLoading(false);
-
-            if (ct.IsCancellationRequested || element == null)
-                return;
-
-            // If renderer returned a ViewerInfoCard, show our centered unsupported message instead
-            if (element is ViewerInfoCard)
-            {
-                var doc = DocumentItem.FromFileInfo(new FileInfo(filePath));
-                ShowInfoCard(doc);
-                return;
-            }
-
-            // Track for cleanup later
-            _currentRenderer = renderer;
-            _currentRenderedElement = element;
-
-            // Hide non-PDF viewers
-            PlainTextViewerGrid.Visibility  = Visibility.Collapsed;
-            TextViewerScroll.Visibility     = Visibility.Collapsed;
-            MarkdownViewerHost.Visibility   = Visibility.Collapsed;
-            DocumentScrollViewer.Visibility = Visibility.Visible;
-            UnsupportedFileMessage.Visibility = Visibility.Collapsed;
-            ErrorMessage.Visibility = Visibility.Collapsed;
-            
-            // Place the rendered element into Canvas
-            var canvasForRenderer = new Canvas { Width = 800, Height = 1000 };
-            canvasForRenderer.Children.Add(element);
-            PdfViewportCanvas.Children.Clear();
-            PdfViewportCanvas.Children.Add(canvasForRenderer);
-            
-            // Hide toolbar buttons not applicable
-            ZoomPill.Visibility        = Visibility.Collapsed;
-            Toolbar.WordWrapVisibility = Visibility.Collapsed;
-            Toolbar.SidebarButtonVisibility = Visibility.Collapsed;
-            SidebarCard.Visibility     = Visibility.Collapsed;
-            SidebarColumn.Width        = new GridLength(0);
-            Toolbar.FitWidthButtonVisibility = Visibility.Collapsed;
-            Toolbar.FitPageButtonVisibility = Visibility.Collapsed;
-            
-            _total = 1;
-            Toolbar.UpdatePageInfo(1, 1);
-        }
-        catch (System.Exception ex)
-        {
-            ShowLoading(false);
-            DocGlance.Infrastructure.Logging.Logger.Error($"Renderer failed for {filePath}", ex);
-            ShowErrorCard($"Failed to load file: {ex.Message}");
-        }
-    }
-
     private void ShowErrorCard(string message)
     {
         ViewModel.ErrorMessage = message;
+        _activeViewer = null;
         
         // Populate the error message UI (defined in XAML)
         ErrorMessageText.Text = message;
@@ -485,9 +422,8 @@ public sealed partial class ViewerPage
         
         // Hide other viewers and sidebar
         DocumentScrollViewer.Visibility = Visibility.Collapsed;
-        PlainTextViewerGrid.Visibility = Visibility.Collapsed;
-        TextViewerScroll.Visibility = Visibility.Collapsed;
-        MarkdownViewerHost.Visibility = Visibility.Collapsed;
+        TextViewerHost.Visibility = Visibility.Collapsed;
+        SpreadsheetViewerHost.Visibility = Visibility.Collapsed;
         UnsupportedFileMessage.Visibility = Visibility.Collapsed;
         
         SidebarCard.Visibility = Visibility.Collapsed;
@@ -499,15 +435,15 @@ public sealed partial class ViewerPage
     // PPTX SUPPORT — Treat slides like PDF pages
     // ══════════════════════════════════════════════════════════════════════════
     
-    private DocGlance.Rendering.Presentation.PptxDocument? _pptxDocument;
-    private DocGlance.Rendering.Document.DocxDocument? _docxDocument;
+    private PptxDocument? _pptxDocument;
+    private DocxDocument? _docxDocument;
     
     private async Task LoadPptxAsync(string filePath, CancellationToken ct)
     {
         ShowLoading(true);
         try
         {
-            _pptxSearchResults = Array.Empty<DocGlance.Rendering.Presentation.PptxSearchMatch>();
+            _pptxSearchResults = Array.Empty<PptxSearchMatch>();
             _activePptxSearchIndex = -1;
             FindCount.Text = "";
 
@@ -523,14 +459,14 @@ public sealed partial class ViewerPage
             ClearPptxCache();
             _pptxTextMaps.Clear();
             
-            if (!DocGlance.Rendering.Presentation.DeckCraftNative.IsAvailable)
+            if (!DeckCraftNative.IsAvailable)
             {
                 ShowErrorCard("PPTX renderer not available");
                 return;
             }
 
             _pptxDocument?.Dispose();
-            _pptxDocument = await DocGlance.Rendering.Presentation.PptxDocument.OpenAsync(filePath, ct);
+            _pptxDocument = await PptxDocument.OpenAsync(filePath, ct);
             
             if (_pptxDocument == null)
             {
@@ -981,8 +917,6 @@ public sealed partial class ViewerPage
     // SPREADSHEET (GridCraft XLSX — native Win2D grid viewer)
     // ══════════════════════════════════════════════════════════════════════════
 
-    private DocGlance.Rendering.Document.SpreadsheetDocument? _spreadsheetDocument;
-
     private async Task LoadXlsxAsync(string filePath, CancellationToken ct)
     {
         ShowLoading(true);
@@ -1001,23 +935,12 @@ public sealed partial class ViewerPage
             ClearPptxCache();
             _pdfState = null;
             Thumbnails.Clear();
-            _spreadsheetSearchCts?.Cancel();
-            _spreadsheetMatches.Clear();
-            _activeSpreadsheetIndex = -1;
-            SpreadsheetViewerControl.ClearSearchMatches();
+            _searchCts?.Cancel();
+            SpreadsheetViewerControl.ClearHighlight();
 
-            if (!DocGlance.Rendering.Document.GridCraftNative.IsAvailable)
+            if (!GridCraftNative.IsAvailable)
             {
                 ShowErrorCard("GridCraft XLSX renderer not available.\nPlease ensure gridcraft_ffi.dll is present.");
-                return;
-            }
-
-            _spreadsheetDocument?.Dispose();
-            _spreadsheetDocument = await DocGlance.Rendering.Document.SpreadsheetDocument.OpenAsync(filePath, ct);
-
-            if (_spreadsheetDocument == null)
-            {
-                ShowErrorCard("Cannot open spreadsheet — file may be corrupt or in an unsupported format.");
                 return;
             }
 
@@ -1028,16 +951,19 @@ public sealed partial class ViewerPage
             // Switch the viewer area to the native spreadsheet grid
             ShowSpreadsheetViewer();
 
+            await SpreadsheetViewerControl.LoadAsync(_doc!, ct);
+            SpreadsheetDocument spreadsheetDocument = _spreadsheetDocument
+                ?? throw new InvalidOperationException("Spreadsheet viewer did not retain the opened document.");
+            _activeViewer = SpreadsheetViewerControl;
+
             // Toolbar: show page info as sheet count
-            int sheetCount = _spreadsheetDocument.SheetCount;
+            int sheetCount = spreadsheetDocument.SheetCount;
             _total = sheetCount;
             _page  = 1;
             Toolbar.UpdatePageInfo(1, sheetCount);
             ViewModel.TotalPages   = sheetCount;
             ViewModel.CurrentPage  = 1;
 
-            // Hand off to the Win2D cell-grid control and start at actual size.
-            await SpreadsheetViewerControl.LoadDocumentAsync(_spreadsheetDocument, ct);
             SetZoom(1.0);
         }
         catch (OperationCanceledException) { }
@@ -1078,7 +1004,7 @@ public sealed partial class ViewerPage
             _pptxDocument = null;
             ClearPptxCache();
 
-            if (!DocGlance.Rendering.Document.WordCraftNative.IsAvailable)
+            if (!WordCraftNative.IsAvailable)
             {
                 ShowErrorCard("WordCraft DOCX renderer not available.\nPlease ensure wordcraft_ffi.dll is present.");
                 return;
@@ -1088,7 +1014,7 @@ public sealed partial class ViewerPage
             ClearDocxCache();
             _pptxTextMaps.Clear();
             _docxDocument?.Dispose();
-            _docxDocument = await DocGlance.Rendering.Document.DocxDocument.OpenAsync(filePath, ct);
+            _docxDocument = await DocxDocument.OpenAsync(filePath, ct);
 
             if (_docxDocument == null)
             {
@@ -1100,7 +1026,7 @@ public sealed partial class ViewerPage
             _total = _docxDocument.PageCount;
             await LoadDocxOutlineAsync(filePath, ct);
             _page = 1;
-            _docxSearchResults = Array.Empty<DocGlance.Rendering.Document.DocxDocument.DocxSearchMatch>();
+            _docxSearchResults = Array.Empty<DocxDocument.DocxSearchMatch>();
             _activeDocxSearchIndex = -1;
             SearchHighlightCanvas.Children.Clear();
             Toolbar.UpdatePageInfo(_page, _total);

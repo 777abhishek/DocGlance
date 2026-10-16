@@ -1,6 +1,5 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using System;
 using DocGlance.Infrastructure.Logging;
@@ -93,45 +92,38 @@ public sealed partial class ViewerToolbar : UserControl
         set => WordWrapButton.Visibility = value;
     }
 
-    public ViewerToolbar() => InitializeComponent();
-
-    public uint MarkupColorArgb { get; private set; } = 0xFFFFDC28;
-    public float MarkupOpacity => (float)(MarkupOpacitySlider.Value / 100.0);
-    public uint MarkupKind { get; private set; }
+    public uint MarkupColorArgb => PdfMarkupToolbar.MarkupColorArgb;
+    public float MarkupOpacity => PdfMarkupToolbar.MarkupOpacity;
+    public uint MarkupKind => PdfMarkupToolbar.MarkupKind;
     public Visibility PdfMarkupToolsVisibility
     {
-        get => PdfMarkupTools.Visibility;
-        set => PdfMarkupTools.Visibility = value;
+        get => PdfMarkupToolbar.ToolsVisibility;
+        set => PdfMarkupToolbar.ToolsVisibility = value;
     }
 
-    public bool IsMarkupToolActive => MarkupToolButton.IsChecked == true;
-    public PdfAnnotationTool? SelectedPdfTool { get; private set; }
+    public bool IsMarkupToolActive => SelectedPdfTool == PdfAnnotationTool.Markup;
+    public PdfAnnotationTool? SelectedPdfTool => PdfMarkupToolbar.SelectedTool;
 
-    public void SetMarkupToolActive(bool active)
+    public ViewerToolbar()
     {
+        InitializeComponent();
+        PdfMarkupToolbar.ToolSelected += tool => PdfToolSelected?.Invoke(tool);
+        PdfMarkupToolbar.MarkupSettingsChanged += (_, _) =>
+            MarkupSettingsChanged?.Invoke(this, EventArgs.Empty);
+        PdfMarkupToolbar.UndoRequested += (_, _) =>
+            UndoAnnotationRequested?.Invoke(this, EventArgs.Empty);
+        PdfMarkupToolbar.RedoRequested += (_, _) =>
+            RedoAnnotationRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void SetMarkupToolActive(bool active) =>
         SetSelectedPdfTool(active ? PdfAnnotationTool.Markup : null);
-    }
 
-    public void SetSelectedPdfTool(PdfAnnotationTool? tool)
-    {
-        if (SelectedPdfTool == tool)
-            return;
-        SelectedPdfTool = tool;
-        MarkupToolButton.IsChecked = tool == PdfAnnotationTool.Markup;
-        PenToolButton.IsChecked = tool == PdfAnnotationTool.Pen;
-        EraserToolButton.IsChecked = tool == PdfAnnotationTool.Eraser;
-        NoteToolButton.IsChecked = tool == PdfAnnotationTool.Note;
-        TextToolButton.IsChecked = tool == PdfAnnotationTool.Text;
-        SignatureToolButton.IsChecked = tool == PdfAnnotationTool.Signature;
-        ImageToolButton.IsChecked = tool == PdfAnnotationTool.Image;
-        PdfToolSelected?.Invoke(tool);
-    }
+    public void SetSelectedPdfTool(PdfAnnotationTool? tool) =>
+        PdfMarkupToolbar.SetSelectedTool(tool);
 
-    public void SetAnnotationHistoryAvailability(bool canUndo, bool canRedo)
-    {
-        UndoAnnotationButton.IsEnabled = canUndo;
-        RedoAnnotationButton.IsEnabled = canRedo;
-    }
+    public void SetAnnotationHistoryAvailability(bool canUndo, bool canRedo) =>
+        PdfMarkupToolbar.SetHistoryAvailability(canUndo, canRedo);
 
     public void UpdatePageInfo(int current, int total)
     {
@@ -171,73 +163,6 @@ public sealed partial class ViewerToolbar : UserControl
     }
     private void WordWrapButton_Click(object sender, RoutedEventArgs e) => WordWrapRequested?.Invoke(this, EventArgs.Empty);
 
-    private void MarkupToolButton_Click(object sender, RoutedEventArgs e) =>
-        SetSelectedPdfTool(MarkupToolButton.IsChecked == true
-            ? PdfAnnotationTool.Markup
-            : null);
-
-    private void PenToolButton_Click(object sender, RoutedEventArgs e) =>
-        SetSelectedPdfTool(PenToolButton.IsChecked == true
-            ? PdfAnnotationTool.Pen
-            : null);
-
-    private void EraserToolButton_Click(object sender, RoutedEventArgs e) =>
-        SetSelectedPdfTool(EraserToolButton.IsChecked == true
-            ? PdfAnnotationTool.Eraser
-            : null);
-
-    private void NoteToolButton_Click(object sender, RoutedEventArgs e) =>
-        SetSelectedPdfTool(NoteToolButton.IsChecked == true
-            ? PdfAnnotationTool.Note
-            : null);
-
-    private void TextToolButton_Click(object sender, RoutedEventArgs e) =>
-        SetSelectedPdfTool(TextToolButton.IsChecked == true
-            ? PdfAnnotationTool.Text
-            : null);
-
-    private void SignatureToolButton_Click(object sender, RoutedEventArgs e) =>
-        SetSelectedPdfTool(SignatureToolButton.IsChecked == true
-            ? PdfAnnotationTool.Signature
-            : null);
-
-    private void ImageToolButton_Click(object sender, RoutedEventArgs e) =>
-        SetSelectedPdfTool(ImageToolButton.IsChecked == true
-            ? PdfAnnotationTool.Image
-            : null);
-
-    private void UndoAnnotationButton_Click(object sender, RoutedEventArgs e) =>
-        UndoAnnotationRequested?.Invoke(this, EventArgs.Empty);
-
-    private void RedoAnnotationButton_Click(object sender, RoutedEventArgs e) =>
-        RedoAnnotationRequested?.Invoke(this, EventArgs.Empty);
-
-    private void MarkupStyle_Checked(object sender, RoutedEventArgs e)
-    {
-        if (sender is RadioButton { Tag: string tag } &&
-            uint.TryParse(tag, out uint kind))
-        {
-            MarkupKind = kind;
-            MarkupSettingsChanged?.Invoke(this, EventArgs.Empty);
-        }
-    }
-
-    private void MarkupColor_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is Button { Tag: string value } &&
-            uint.TryParse(value, System.Globalization.NumberStyles.HexNumber,
-                System.Globalization.CultureInfo.InvariantCulture, out uint argb))
-        {
-            MarkupColorArgb = argb;
-            MarkupSettingsChanged?.Invoke(this, EventArgs.Empty);
-        }
-    }
-
-    private void MarkupOpacitySlider_ValueChanged(
-        object sender,
-        Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e) =>
-        MarkupSettingsChanged?.Invoke(this, EventArgs.Empty);
-    
     private void PageNumber_Tapped(object sender, TappedRoutedEventArgs e)
     {
         if (!int.TryParse(PageNumberBox.Text, out int current)) current = 1;

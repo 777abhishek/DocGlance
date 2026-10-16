@@ -576,7 +576,7 @@ mod tests {
     #[test]
     fn reports_missing_model_without_network_access() {
         let root =
-            std::env::temp_dir().join(format!("quickview-translation-test-{}", std::process::id()));
+            std::env::temp_dir().join(format!("DocGlance-translation-test-{}", std::process::id()));
         let error = load_translation(&root, "en", "es").err().unwrap();
         assert!(error.contains("No installed model route"));
         let _ = std::fs::remove_dir_all(root);

@@ -3,9 +3,15 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using DocGlance.Core.Models;
-using DocGlance.Rendering.Presentation;
+using DocGlance.Rendering.Pptx;
+using DocGlance.Rendering.Pdf.Models;
 using DocGlance.Rendering.Pdf;
-using DocGlance.Rendering.Document;
+using DocGlance.Rendering.Docx;
+using DocGlance.Rendering.Xlsx;
+using DocGlance.Infrastructure.Logging;
+using DocGlance.Features.Viewer.Formats.Text;
+using DocGlance.Features.Viewer.Contracts;
+using DocGlance.Features.Viewer.Formats.Spreadsheet;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -25,6 +31,8 @@ public sealed partial class ViewerPage
     private IReadOnlyList<DocxDocument.DocxSearchMatch> _docxSearchResults =
         Array.Empty<DocxDocument.DocxSearchMatch>();
     private int _activeDocxSearchIndex = -1;
+    private SearchResult[] _activeViewerSearchResults = Array.Empty<SearchResult>();
+    private int _activeViewerSearchIndex = -1;
 
     // ── Canvas overlay creation ───────────────────────────────────────────────
 
@@ -47,19 +55,10 @@ public sealed partial class ViewerPage
     {
         string query = FindBox.Text.Trim();
 
-        // Route to text/code viewer search if either viewer is active
-        if (IsTextViewerActive())
+        if (_activeViewer is ISupportsSearch viewerSearch)
         {
             bool matchCase = MatchCaseButton?.IsChecked ?? false;
-            SearchInTextViewer(query, matchCase);
-            return;
-        }
-
-        // Route to spreadsheet viewer search if active
-        if (IsSpreadsheetViewerActive())
-        {
-            bool matchCase = MatchCaseButton?.IsChecked ?? false;
-            SearchInSpreadsheet(query, matchCase);
+            await SearchInViewer(viewerSearch, query, matchCase);
             return;
         }
 
@@ -159,6 +158,10 @@ public sealed partial class ViewerPage
 
     private void ClearSearchHighlights()
     {
+        if (_activeViewer is ISupportsSearch viewerSearch)
+            viewerSearch.ClearHighlight();
+        _activeViewerSearchResults = Array.Empty<SearchResult>();
+        _activeViewerSearchIndex = -1;
         _searchResults     = Array.Empty<PdfSearchResult>();
         _activeSearchIndex = -1;
         _pptxSearchResults = Array.Empty<PptxSearchMatch>();
@@ -169,6 +172,69 @@ public sealed partial class ViewerPage
         FindCount.Text     = "";
         DrawAllHighlights();
         DrawDocxSearchHighlights();
+    }
+
+    private async Task SearchInViewer(ISupportsSearch viewer, string query, bool matchCase)
+    {
+        _searchDebounceCts?.Cancel();
+        _searchDebounceCts?.Dispose();
+        _searchDebounceCts = new CancellationTokenSource();
+        CancellationToken debounceToken = _searchDebounceCts.Token;
+
+        if (string.IsNullOrEmpty(query))
+        {
+            _searchCts?.Cancel();
+            ClearSearchHighlights();
+            SetSearchLoading(false);
+            return;
+        }
+
+        try
+        {
+            await Task.Delay(200, debounceToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
+        _searchCts = new CancellationTokenSource();
+        CancellationToken cancellationToken = _searchCts.Token;
+        if (viewer is TextViewer textViewer)
+            textViewer.MatchCase = matchCase;
+        else if (viewer is SpreadsheetViewer spreadsheetViewer)
+            spreadsheetViewer.MatchCase = matchCase;
+
+        ClearSearchHighlights();
+        SetSearchLoading(true);
+        try
+        {
+            SearchResult[] results = await viewer.SearchAsync(query, cancellationToken);
+            if (cancellationToken.IsCancellationRequested || !ReferenceEquals(_activeViewer, viewer))
+                return;
+
+            _activeViewerSearchResults = results;
+            _activeViewerSearchIndex = results.Length > 0 ? 0 : -1;
+            if (_activeViewerSearchIndex >= 0)
+                viewer.Highlight(results[_activeViewerSearchIndex]);
+            FindCount.Text = results.Length == 0
+                ? "No matches"
+                : $"1 of {results.Length}";
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            Logger.Error("Viewer search failed", ex);
+            if (ReferenceEquals(_activeViewer, viewer))
+                FindCount.Text = "Search failed";
+        }
+        finally
+        {
+            if (ReferenceEquals(_activeViewer, viewer))
+                SetSearchLoading(false);
+        }
     }
 
     // ── Loading indicator ─────────────────────────────────────────────────────
@@ -335,17 +401,13 @@ public sealed partial class ViewerPage
 
     private void NavigateSearchHit(int direction)
     {
-        // Route to text/code viewer navigation if either viewer is active
-        if (IsTextViewerActive())
+        if (_activeViewer is ISupportsSearch viewerSearch && _activeViewerSearchResults.Length > 0)
         {
-            NavigateTextSearchHit(direction);
-            return;
-        }
-
-        // Route to spreadsheet navigation if active
-        if (IsSpreadsheetViewerActive())
-        {
-            NavigateSpreadsheetSearchHit(direction);
+            _activeViewerSearchIndex =
+                (_activeViewerSearchIndex + direction + _activeViewerSearchResults.Length)
+                % _activeViewerSearchResults.Length;
+            viewerSearch.Highlight(_activeViewerSearchResults[_activeViewerSearchIndex]);
+            FindCount.Text = $"{_activeViewerSearchIndex + 1} of {_activeViewerSearchResults.Length}";
             return;
         }
 
@@ -464,12 +526,6 @@ public sealed partial class ViewerPage
 
         if (_pdfState == null) return;
     }
-
-    // ── Helper: true when either text viewer (plain or code) is active ────────
-
-    private bool IsTextViewerActive() =>
-        (PlainTextViewerGrid?.Visibility == Visibility.Visible) ||
-        (TextViewerScroll?.Visibility    == Visibility.Visible);
 
     // ── Helper: true when spreadsheet viewer is active ────────────────────────
 

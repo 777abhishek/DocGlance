@@ -4,7 +4,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Media;
-using DocGlance.Rendering.Text;
+using DocGlance.Rendering.Shared;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -38,7 +38,7 @@ public static class CodeRenderer
 
     public static async Task<CodeRenderResult> RenderAsync(string filePath, bool isDarkTheme, CancellationToken ct = default)
     {
-        var loaded = await Task.Run(() => Text.TextFileReader.ReadCapped(filePath, MaxChars), ct);
+        var loaded = await Task.Run(() => TextFileReader.ReadCapped(filePath, MaxChars), ct);
         string text = loaded.Text;
         bool truncatedBySize = loaded.Truncated;
 

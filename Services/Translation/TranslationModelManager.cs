@@ -1,4 +1,5 @@
 using DocGlance.Infrastructure.Logging;
+using DocGlance.Interop.Translation;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -183,7 +184,7 @@ public sealed class TranslationModelManager
 
                 byte[] compressed = await File.ReadAllBytesAsync(downloadPath, cancellationToken);
                 byte[] verified = await Task.Run(
-                    () => TranslationEngineNative.VerifyAndDecompress(compressed, file.DecompressedSha256),
+                    () => TranslationNative.VerifyAndDecompress(compressed, file.DecompressedSha256),
                     cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -459,7 +460,7 @@ public sealed class TranslationModelManager
             Timeout = Timeout.InfiniteTimeSpan,
         };
         client.DefaultRequestHeaders.UserAgent.Add(
-            new ProductInfoHeaderValue("QuickView", "1.0"));
+            new ProductInfoHeaderValue("DocGlance", "1.0"));
         return client;
     }
 

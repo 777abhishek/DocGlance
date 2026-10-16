@@ -1,7 +1,7 @@
 using DocGlance.Core.Models;
 using DocGlance.Infrastructure.Logging;
 using DocGlance.Rendering.Pdf;
-using DocGlance.Services.Documents;
+using DocGlance.Rendering.Pdf.Models;
 using DocGlance.Features.Viewer.Components;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;

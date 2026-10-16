@@ -1,4 +1,5 @@
 using DocGlance.Infrastructure.Logging;
+using DocGlance.Interop.Translation;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -37,7 +38,7 @@ public sealed class TranslationService : ITranslationService
         if (detectSource)
         {
             normalizedSource = await Task.Run(
-                () => TranslationEngineNative.DetectLanguage(text),
+                () => TranslationNative.DetectLanguage(text),
                 cancellationToken);
         }
         else
@@ -63,7 +64,7 @@ public sealed class TranslationService : ITranslationService
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 string translated = await Task.Run(
-                    () => TranslationEngineNative.Translate(
+                    () => TranslationNative.Translate(
                         chunk.Text,
                         normalizedSource,
                         normalizedTarget,
@@ -106,7 +107,7 @@ public sealed class TranslationService : ITranslationService
         try
         {
             await Task.Run(
-                () => TranslationEngineNative.ReleaseCachedPair(
+                () => TranslationNative.ReleaseCachedPair(
                     TranslationModelManager.ModelRoot,
                     pair),
                 cancellationToken);

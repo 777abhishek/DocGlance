@@ -9,6 +9,7 @@ using DocGlance.Services.Registration;
 using DocGlance.Core.Models;
 using DocGlance.Common.Validators;
 using DocGlance.UI.Shell;
+using DocGlance.Services.Activation;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -103,12 +104,9 @@ public partial class App : Application
             Logger.VerboseEnabled = Infrastructure.Configuration.AppSettings.VerboseLogging;
 
             // WriteableBitmaps must be created on the UI thread; renderers use this dispatcher.
-            DocGlance.Rendering.NativeBitmap.Initialize(
+            DocGlance.Rendering.Shared.NativeBitmap.Initialize(
                 Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread());
 
-            // Register file renderers FIRST (needed for file opening)
-            RegisterRenderers();
-            
             // Construct the window but defer showing it until startup activation is
             // processed. File launches can select their document tab before the first
             // frame, avoiding a visible Home-tab flash.
@@ -119,7 +117,7 @@ public partial class App : Application
             // Listen for file handovers from second processes (Explorer double-click
             // while running). The Windows App SDK redirect is unreliable for unpackaged
             // apps — this pipe is the guaranteed payload channel (see Program.cs).
-            DocGlance.Services.Activation.ActivationIpc.StartServer(OpenExternalFiles);
+            DocGlance.Services.Activation.ActivationIpc.StartServer(ActivationService.OpenExternalFiles);
 
 #if !PACKAGED
             // Register file associations in background (non-blocking)
@@ -129,8 +127,8 @@ public partial class App : Application
 
             // Check for file-open activation
             var activatedArgs = AppInstance.GetCurrent().GetActivatedEventArgs();
-            bool openedFromActivation = TryOpenFromActivationArgs(activatedArgs);
-            bool openedFromCommandLine = !openedFromActivation && TryOpenFromCommandLine();
+            bool openedFromActivation = ActivationService.TryOpenFromActivationArgs(activatedArgs);
+            bool openedFromCommandLine = !openedFromActivation && ActivationService.TryOpenFromCommandLine();
 
             // Select and attach the initial document while the window is still hidden.
             // This lets the first presented frame be the viewer (with its loading state)
@@ -177,7 +175,7 @@ public partial class App : Application
             try
             {
                 ((TitleBarWindow)m_window).RestoreAndActivate();
-                bool opened = TryOpenFromActivationArgs(args);
+                bool opened = ActivationService.TryOpenFromActivationArgs(args);
                 Logger.Log($"[Reactivation] Redirect-args handling: {(opened ? "file(s) opened" : "no usable file in redirected args")}");
             }
             catch (Exception ex)
@@ -185,188 +183,6 @@ public partial class App : Application
                 Logger.Error("[Reactivation] Failed to handle redirected activation", ex);
             }
         });
-    }
-
-    /// <summary>
-    /// Entry point for file paths handed over by a second process (named pipe).
-    /// Runs on a worker thread — hops to the UI thread before touching XAML.
-    /// </summary>
-    private void OpenExternalFiles(IReadOnlyList<string> paths)
-    {
-        if (m_window is null)
-        {
-            Logger.Error("[ActivationIpc] No main window to open paths in");
-            return;
-        }
-
-        m_window.DispatcherQueue.TryEnqueue(() =>
-        {
-            try
-            {
-                ((TitleBarWindow)m_window).RestoreAndActivate();
-                foreach (var path in paths)
-                    OpenFilePath(path);
-            }
-            catch (Exception ex)
-            {
-                Logger.Error("[ActivationIpc] Failed to open handed-over paths", ex);
-            }
-        });
-    }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// A1: Register all IFileRenderer implementations with the RendererRegistry.
-    /// This allows ViewerPage to fall back to the registry after checking for
-    /// PDF/text/code/Markdown, enabling image and Office format support.
-    /// </summary>
-    private static void RegisterRenderers()
-    {
-
-        // These registry renderers are info-card fallbacks only; actual DOCX/XLSX/PPTX
-        // rendering goes through the native wrappers (DocxDocument, SpreadsheetDocument, PptxDocument).
-        var docxRenderer = new DocGlance.Rendering.Office.DocxRenderer();
-        var xlsxRenderer = new DocGlance.Rendering.Office.XlsxRenderer();
-        var pptxRenderer = new DocGlance.Rendering.Office.PptxRenderer();
-        
-        DocGlance.Rendering.RendererRegistry.Register(docxRenderer);
-        DocGlance.Rendering.RendererRegistry.Register(xlsxRenderer);
-        DocGlance.Rendering.RendererRegistry.Register(pptxRenderer);
-        
-        System.Diagnostics.Debug.WriteLine($"[App] Registered DOCX renderer for: {string.Join(", ", docxRenderer.SupportedExtensions)}");
-        System.Diagnostics.Debug.WriteLine($"[App] Registered XLSX renderer for: {string.Join(", ", xlsxRenderer.SupportedExtensions)}");
-        System.Diagnostics.Debug.WriteLine($"[App] Registered PPTX renderer for: {string.Join(", ", pptxRenderer.SupportedExtensions)}");
-    }
-
-    /// <summary>
-    /// Inspects AppActivationArguments and opens all files found.
-    /// Returns true when at least one file was opened.
-    /// Every branch decision is logged — activation regressions are invisible
-    /// otherwise (the redirected-args path was silent for months).
-    /// </summary>
-    private static bool TryOpenFromActivationArgs(AppActivationArguments? args)
-    {
-        if (args == null)
-        {
-            Logger.Warn("[Activation] TryOpenFromActivationArgs: args is null");
-            return false;
-        }
-
-        Logger.Log($"[Activation] TryOpenFromActivationArgs: Kind={args.Kind}, " +
-                   $"DataType={args.Data?.GetType().Name ?? "null"}");
-
-        var filePaths = DocGlance.Services.Activation.ActivationPaths.FromActivationArgs(args);
-
-        if (filePaths.Count == 0)
-        {
-            Logger.Warn("[Activation] No file paths decoded from activation args " +
-                        "(redirect payload may have been lost — pipe channel is the fallback)");
-            return false;
-        }
-
-        foreach (var path in filePaths)
-            OpenFilePath(path);
-        return true;
-    }
-
-    /// <summary>
-    /// Fallback: read file path(s) from process command-line arguments.
-    /// Handles: DocGlance.exe "C:\path\to\file.pdf" "C:\path\to\file2.docx"
-    /// </summary>
-    private static bool TryOpenFromCommandLine()
-    {
-        bool openedAny = false;
-        try
-        {
-            var cmdArgs = Environment.GetCommandLineArgs();
-            // cmdArgs[0] is the exe itself; [1] onwards are user-supplied args.
-            foreach (var arg in cmdArgs.Skip(1))
-            {
-                var path = arg.Trim().Trim('"');
-                if (!path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
-                    !string.Equals(path, Environment.ProcessPath, StringComparison.OrdinalIgnoreCase) &&
-                    File.Exists(path))
-                {
-                    OpenFilePath(path);
-                    openedAny = true;
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.Error("TryOpenFromCommandLine", ex);
-        }
-
-        return openedAny;
-    }
-
-    /// <summary>
-    /// Builds a DocumentItem from a file path and opens it in a new tab.
-    /// </summary>
-    private static void OpenFilePath(string filePath)
-    {
-        try
-        {
-            if (string.IsNullOrEmpty(filePath) ||
-                filePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(filePath, Environment.ProcessPath, StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            // Validate path for security and file size for DoS prevention
-            if (!FileSizeValidator.IsFileValidAndSafe(filePath, out var validationError))
-            {
-                Logger.Error($"File validation failed for: {filePath} - {validationError}");
-                ShowOpenError(filePath, validationError);
-                return;
-            }
-
-            Logger.Log($"[ACTIVATION] Opening: {filePath}");
-            var fi  = new FileInfo(filePath);
-            var doc = DocumentItem.FromFileInfo(fi);
-            TitleBarWindow.Current?.OpenDocument(doc);
-        }
-        catch (Exception ex)
-        {
-            Logger.Error($"OpenFilePath({filePath})", ex);
-        }
-    }
-
-    /// <summary>Tells the user why a file could not be opened (instead of failing silently).</summary>
-    private static void ShowOpenError(string filePath, string reason)
-    {
-        try
-        {
-            var window = TitleBarWindow.Current;
-            if (window?.Content is not FrameworkElement root || root.XamlRoot == null)
-                return;
-
-            window.DispatcherQueue.TryEnqueue(async () =>
-            {
-                try
-                {
-                    var dialog = new Microsoft.UI.Xaml.Controls.ContentDialog
-                    {
-                        Title           = "Can't open file",
-                        Content         = $"{Path.GetFileName(filePath)}\n\n{reason}",
-                        CloseButtonText = "OK",
-                        XamlRoot        = root.XamlRoot,
-                    };
-                    await dialog.ShowAsync();
-                }
-                catch (Exception ex)
-                {
-                    // e.g. another dialog is already open
-                    Logger.Warn($"ShowOpenError dialog failed: {ex.Message}");
-                }
-            });
-        }
-        catch (Exception ex)
-        {
-            Logger.Error("ShowOpenError", ex);
-        }
     }
 
     public void SetTheme(ElementTheme theme)

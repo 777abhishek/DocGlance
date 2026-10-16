@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using DocGlance.Interop.PdfCraft;
 using Windows.Data.Pdf;
 using DocGlance.Infrastructure.Concurrency;
 using DocGlance.Infrastructure.Logging;

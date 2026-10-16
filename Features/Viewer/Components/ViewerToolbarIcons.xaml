@@ -1,0 +1,33 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <x:String x:Key="ViewerIcon.Sidebar">&#xF030F;</x:String>
+    <x:String x:Key="ViewerIcon.FitWidth">&#xF590;</x:String>
+    <x:String x:Key="ViewerIcon.FitPage">&#xF54D;</x:String>
+    <x:String x:Key="ViewerIcon.RotateLeft">&#xF186;</x:String>
+    <x:String x:Key="ViewerIcon.RotateRight">&#xF188;</x:String>
+    <x:String x:Key="ViewerIcon.WordWrap">&#xEF64;</x:String>
+    <x:String x:Key="ViewerIcon.Find">&#xF690;</x:String>
+    <x:String x:Key="ViewerIcon.OpenExternal">&#xF583;</x:String>
+    <x:String x:Key="ViewerIcon.ShowInExplorer">&#xF0C61;</x:String>
+    <x:String x:Key="ViewerIcon.DocumentInfo">&#xF4A4;</x:String>
+    <x:String x:Key="ViewerIcon.MoreOptions">&#xF557;</x:String>
+    <x:String x:Key="ViewerIcon.PresentationMode">&#xE740;</x:String>
+    <x:String x:Key="ViewerIcon.Bookmark">&#xE718;</x:String>
+    <x:String x:Key="ViewerIcon.Print">&#xE749;</x:String>
+    <x:String x:Key="ViewerIcon.CopyPageText">&#xE8C8;</x:String>
+    <x:String x:Key="ViewerIcon.CopyPath">&#xE71B;</x:String>
+    <x:String x:Key="ViewerIcon.Tools">&#xE90F;</x:String>
+    <x:String x:Key="ViewerIcon.Settings">&#xE713;</x:String>
+    <x:String x:Key="ViewerIcon.KeyboardShortcuts">&#xE765;</x:String>
+    <x:String x:Key="ViewerIcon.Pen">&#xE76D;</x:String>
+    <x:String x:Key="ViewerIcon.Markup">&#xE7E6;</x:String>
+    <x:String x:Key="ViewerIcon.Eraser">&#xE75C;</x:String>
+    <x:String x:Key="ViewerIcon.Note">&#xE8F2;</x:String>
+    <x:String x:Key="ViewerIcon.Text">&#xE8D2;</x:String>
+    <x:String x:Key="ViewerIcon.Signature">&#xE8A7;</x:String>
+    <x:String x:Key="ViewerIcon.Image">&#xE91B;</x:String>
+    <x:String x:Key="ViewerIcon.Undo">&#xE7A7;</x:String>
+    <x:String x:Key="ViewerIcon.Redo">&#xE7A6;</x:String>
+    <x:String x:Key="ViewerIcon.MarkupSettings">&#xE713;</x:String>
+</ResourceDictionary>

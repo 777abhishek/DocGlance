@@ -1,5 +1,7 @@
 using Microsoft.UI.Xaml.Media.Imaging;
 using DocGlance.Common.Validators;
+using DocGlance.Interop.PdfCraft;
+using DocGlance.Rendering.Shared;
 using System;
 using System.Collections.Generic;
 using System.IO;
