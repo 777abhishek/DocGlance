@@ -24,16 +24,14 @@ public sealed class DocumentViewerRegistry
             foreach (string extension in factory.SupportedExtensions)
             {
                 string key = NormalizeExtension(extension);
-                if (!_factories.TryAdd(key, factory))
-                    throw new ArgumentException($"More than one viewer factory claims '{key}'.", nameof(factories));
+                _factories[key] = factory;
             }
         }
 
         foreach (string extension in _fallbackFactory.SupportedExtensions)
         {
             string key = NormalizeExtension(extension);
-            if (!_factories.TryAdd(key, _fallbackFactory))
-                throw new ArgumentException($"More than one viewer factory claims '{key}'.", nameof(fallbackFactory));
+            _factories[key] = _fallbackFactory;
         }
     }
 

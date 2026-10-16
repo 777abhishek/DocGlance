@@ -51,14 +51,14 @@ public sealed class DocumentViewerRegistryTests
     }
 
     [Fact]
-    public void Constructor_RejectsDuplicateExtensionClaims()
+    public void Resolve_UsesLastRegisteredFactoryForDuplicateClaims()
     {
         var first = new StubFactory(".txt");
         var second = new StubFactory(".TXT");
 
-        var act = () => new DocumentViewerRegistry(new[] { first, second }, new StubFactory(".xls"));
+        var registry = new DocumentViewerRegistry(new[] { first, second }, new StubFactory(".xls"));
 
-        act.Should().Throw<ArgumentException>().WithMessage("*claims*");
+        registry.Resolve(".txt").Should().BeSameAs(second);
     }
 
     private sealed class StubFactory(params string[] extensions) : IDocumentViewerFactory

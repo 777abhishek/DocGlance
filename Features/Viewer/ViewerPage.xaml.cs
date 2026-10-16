@@ -22,6 +22,7 @@ using System.Collections.ObjectModel;
 using System.Threading;
 using System.Threading.Tasks;
 using DocGlance.Features.Viewer.Formats.Fallback;
+using DocGlance.Features.Viewer.Formats.Pdf;
 using DocGlance.Features.Viewer.Formats.Spreadsheet;
 
 namespace DocGlance.Features.Viewer;
@@ -36,6 +37,12 @@ public sealed partial class ViewerPage : Page
     private SpreadsheetDocument? _spreadsheetDocument => SpreadsheetViewerControl?.Document;
     private FallbackViewer? _fallbackViewer;
     private IDocumentViewer? _activeViewer;
+    private ScrollViewer DocumentScrollViewer => PdfViewerControl.DocumentScrollViewerControl;
+    private Canvas PdfViewportCanvas => PdfViewerControl.PdfViewportCanvasControl;
+    private Image ViewportImage => PdfViewerControl.ViewportImageControl;
+    private Canvas SearchHighlightCanvas => PdfViewerControl.SearchHighlightCanvasControl;
+    private Canvas PdfAnnotationCanvas => PdfViewerControl.PdfAnnotationCanvasControl;
+    private Canvas PdfSelectionCanvas => PdfViewerControl.PdfSelectionCanvasControl;
 
     // ── ViewModel ─────────────────────────────────────────────────────────────
     public ViewerViewModel ViewModel { get; } = new();

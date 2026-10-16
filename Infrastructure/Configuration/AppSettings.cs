@@ -107,7 +107,7 @@ public static class AppSettings
 
     /// <summary>
     /// When true, Debug-level entries are written to app.log (render pipeline detail,
-    /// memory checkpoints). Off by default; see docs/reliability/CRASH_DIAGNOSTICS.md.
+    /// memory checkpoints). Off by default.
     /// </summary>
     public static bool VerboseLogging
     {

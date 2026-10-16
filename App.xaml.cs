@@ -31,7 +31,7 @@ public partial class App : Application
         {
             InitializeComponent();
 
-            // Global exception handlers (see docs/reliability/CRASH_DIAGNOSTICS.md):
+            // Global exception handlers are configured here so unhandled failures are logged consistently:
             //  - XAML UnhandledException: logged FATAL, NOT marked handled. Marking handled
             //    previously kept a broken visual tree alive — the reported transparent/blank
             //    window. Letting it crash produces a WER dump and a clean failure instead.
