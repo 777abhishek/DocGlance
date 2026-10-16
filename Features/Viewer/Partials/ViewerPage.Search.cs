@@ -4,8 +4,6 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using DocGlance.Core.Models;
 using DocGlance.Rendering.Pptx;
-using DocGlance.Rendering.Pdf.Models;
-using DocGlance.Rendering.Pdf;
 using DocGlance.Rendering.Docx;
 using DocGlance.Rendering.Xlsx;
 using DocGlance.Infrastructure.Logging;
@@ -24,8 +22,6 @@ public sealed partial class ViewerPage
 {
     private CancellationTokenSource? _searchCts;
     private CancellationTokenSource? _searchDebounceCts;
-    private IReadOnlyList<PdfSearchResult> _searchResults = Array.Empty<PdfSearchResult>();
-    private int _activeSearchIndex = -1;
     private IReadOnlyList<PptxSearchMatch> _pptxSearchResults = Array.Empty<PptxSearchMatch>();
     private int _activePptxSearchIndex = -1;
     private IReadOnlyList<DocxDocument.DocxSearchMatch> _docxSearchResults =
@@ -131,19 +127,8 @@ public sealed partial class ViewerPage
                 return;
             }
 
-            if (_pdfState == null) { SetSearchLoading(false); return; }
-            
-            var results = await PdfTextService.SearchAsync(_pdfState, query, caseSensitive, ct);
-            if (ct.IsCancellationRequested) return;
-
-            _searchResults     = results;
-            _activeSearchIndex = results.Count > 0 ? 0 : -1;
-
-            UpdateFindCount();
-            DrawAllHighlights();
-
-            if (_activeSearchIndex >= 0)
-                ScrollToHit(_activeSearchIndex);
+            SetSearchLoading(false);
+            return;
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
@@ -162,8 +147,6 @@ public sealed partial class ViewerPage
             viewerSearch.ClearHighlight();
         _activeViewerSearchResults = Array.Empty<SearchResult>();
         _activeViewerSearchIndex = -1;
-        _searchResults     = Array.Empty<PdfSearchResult>();
-        _activeSearchIndex = -1;
         _pptxSearchResults = Array.Empty<PptxSearchMatch>();
         _activePptxSearchIndex = -1;
         _docxSearchResults = Array.Empty<DocxDocument.DocxSearchMatch>();
@@ -206,6 +189,8 @@ public sealed partial class ViewerPage
             textViewer.MatchCase = matchCase;
         else if (viewer is SpreadsheetViewer spreadsheetViewer)
             spreadsheetViewer.MatchCase = matchCase;
+        else if (viewer is Formats.Pdf.PdfViewer pdfViewer)
+            pdfViewer.MatchCase = matchCase;
 
         ClearSearchHighlights();
         SetSearchLoading(true);
@@ -250,85 +235,7 @@ public sealed partial class ViewerPage
 
     private void DrawAllHighlights()
     {
-        // VIEWPORT ARCHITECTURE: highlights are anchored in canvas coordinates
-        // (canvas lp = pt × 96/72 × zoom), so they scroll with the content.
-        if (SearchHighlightCanvas == null || _viewportState == null || _pdfState == null) return;
-
-        SearchHighlightCanvas.Children.Clear();
-
-        var visiblePages = _viewportState.GetVisiblePages(_pdfState);
-
-        for (int resultIndex = 0; resultIndex < _searchResults.Count; resultIndex++)
-        {
-            var result = _searchResults[resultIndex];
-
-            // Skip results not in visible pages
-            bool isVisible = false;
-            foreach (var (pageIndex, _, _) in visiblePages)
-            {
-                if (pageIndex == result.PageIndex)
-                {
-                    isVisible = true;
-                    break;
-                }
-            }
-            if (!isVisible) continue;
-
-            // Active hit: match by CharIndex (stable identity), falling back to list position
-            bool active = resultIndex == _activeSearchIndex ||
-                          (_activeSearchIndex >= 0 &&
-                           _activeSearchIndex < _searchResults.Count &&
-                           _searchResults[_activeSearchIndex].PageIndex == result.PageIndex &&
-                           _searchResults[_activeSearchIndex].CharIndex == result.CharIndex);
-
-            // Get page position in document to offset highlight coordinates
-            double pageOffsetY = GetPageOffsetInDocument(result.PageIndex);
-
-            foreach (var rect in result.Rects)
-            {
-                // SearchHighlightCanvas is inside the zoomed ScrollViewer, like the
-                // Wordcraft and Deckcraft highlight layers. Coordinates stay in layout pixels.
-                double canvasX = rect.X * PtToLp;
-                double canvasY = (pageOffsetY + rect.Y) * PtToLp;
-
-                var highlight = new Border
-                {
-                    Width         = Math.Max(2, rect.Width  * PtToLp),
-                    Height        = Math.Max(2, rect.Height * PtToLp),
-                    CornerRadius  = new CornerRadius(2),
-                    Background    = new SolidColorBrush(active
-                        ? Color.FromArgb(145, 255, 105, 97)
-                        : Color.FromArgb(105, 255, 224, 102)),
-                    BorderBrush   = new SolidColorBrush(active
-                        ? Color.FromArgb(190, 210, 70, 65)
-                        : Color.FromArgb(145, 205, 160, 40)),
-                    BorderThickness = new Thickness(active ? 1 : 0.5),
-                    IsHitTestVisible = false,
-                };
-                Canvas.SetLeft(highlight, canvasX);
-                Canvas.SetTop(highlight, canvasY);
-                Canvas.SetZIndex(highlight, 10);
-                SearchHighlightCanvas.Children.Add(highlight);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Gets the Y offset of a page within the entire document in PDF points.
-    /// </summary>
-    private double GetPageOffsetInDocument(int pageIndex)
-    {
-        if (_pdfState == null || pageIndex <= 0) return 0;
-
-        const double PageGapPt = 12.0 * 72.0 / 96.0;  // gap converted to PDF points
-
-        double offset = 0;
-        for (int i = 0; i < pageIndex && i < _pdfState.PageCount; i++)
-        {
-            var (_, pageHeight) = _pdfState.GetPageSize(i);
-            offset += pageHeight + PageGapPt;
-        }
-        return offset;
+        PdfViewerControl.RefreshHighlights();
     }
 
     private void DrawDocxSearchHighlights()
@@ -431,52 +338,7 @@ public sealed partial class ViewerPage
             return;
         }
 
-        if (_searchResults.Count == 0) return;
-
-        _activeSearchIndex =
-            (_activeSearchIndex + direction + _searchResults.Count) % _searchResults.Count;
-
-        UpdateFindCount();
-        DrawAllHighlights();
-        ScrollToHit(_activeSearchIndex);
     }
-
-    /// <summary>
-    /// Scrolls so the active hit rect is centred vertically in the viewport.
-    /// VIEWPORT ARCHITECTURE: Calculate page offset and scroll to position.
-    /// </summary>
-    private void ScrollToHit(int hitIndex)
-    {
-        if (hitIndex < 0 || hitIndex >= _searchResults.Count) return;
-
-        var hit = _searchResults[hitIndex];
-        if (hit.Rects.Count == 0)
-        {
-            ScrollToPage(hit.PageIndex + 1);
-            return;
-        }
-
-        const double PtToLp   = 96.0 / 72.0;
-
-        // Page top + hit position in canvas layout pixels (canvas is zoom-scaled)
-        double pageTopLp  = GetPageOffsetInDocument(hit.PageIndex) * PtToLp;
-        double hitOffsetLp = hit.Rects[0].Y * PtToLp;   // rect coords are in PDF points
-        double hitContentLp = (pageTopLp + hitOffsetLp) * _zoom;
-
-        double viewportH  = DocumentScrollViewer.ViewportHeight;
-        double targetOffset = Math.Max(0, hitContentLp - viewportH / 2);
-
-        DocumentScrollViewer.ChangeView(null, targetOffset, null, disableAnimation: true);
-
-        UpdateCurrentPage(hit.PageIndex + 1);
-    }
-
-    // ── Count label ───────────────────────────────────────────────────────────
-
-    private void UpdateFindCount() =>
-        FindCount.Text = _activeSearchIndex < 0
-            ? (_searchResults.Count > 0 ? "No matches" : "")
-            : $"{_activeSearchIndex + 1} of {_searchResults.Count}";
 
     // ── Match-case toggle re-triggers search ──────────────────────────────────
 

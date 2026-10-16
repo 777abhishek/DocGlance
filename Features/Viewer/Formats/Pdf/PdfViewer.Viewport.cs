@@ -1,7 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
-using DocGlance.Core.Models;
 using DocGlance.Rendering.Shared;
 using DocGlance.Rendering.Pdf.Models;
 using DocGlance.Rendering;
@@ -17,7 +16,7 @@ using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace DocGlance.Features.Viewer;
+namespace DocGlance.Features.Viewer.Formats.Pdf;
 
 /// <summary>
 /// PDF rendering: each page is rendered as a full WriteableBitmap and placed
@@ -29,13 +28,11 @@ namespace DocGlance.Features.Viewer;
 ///   Canvas is zoom-independent: sized in lp at zoom 1.0, scaled by ScrollViewer.ZoomFactor
 ///   Pages are rendered at screen DPI × displayScale for sharpness
 /// </summary>
-public sealed partial class ViewerPage
+public sealed partial class PdfViewer
 {
     private const double PtToLp   = 96.0 / 72.0;
     private const double LpToPt   = 72.0 / 96.0;
     private const double PageGapLp = 12.0;           // gap between pages in layout pixels
-
-    private PdfViewportState? _viewportState;
 
     // Per-page Image controls on the canvas
     private readonly Dictionary<int, Image> _pdfPageCache = new();
@@ -55,17 +52,22 @@ public sealed partial class ViewerPage
     // Pre-computed so GetPageTopLp is O(1) instead of O(n) on every call.
     private double[]? _pageTopCache;
 
+    private float DisplayScale => (float)(XamlRoot?.RasterizationScale ?? 1.0);
+
+    internal event EventHandler<int>? PageChanged;
+    internal event EventHandler? ClearTextSelectionRequested;
+
     // ── Init / Cleanup ────────────────────────────────────────────────────────
 
-    private void InitializeViewportRendering()
+    internal void InitializeViewportRendering()
     {
-        if (_pdfState == null) return;
+        if (DocumentState == null) return;
 
         // Let the ScrollViewer own zoom so pages scale naturally
         DocumentScrollViewer.ZoomMode = ZoomMode.Enabled;
 
         _lastRenderZoom = -1f;
-        _viewportState = new PdfViewportState
+        ViewportState = new PdfViewportState
         {
             ViewportWidthPx  = (int)DocumentScrollViewer.ViewportWidth,
             ViewportHeightPx = (int)DocumentScrollViewer.ViewportHeight,
@@ -79,24 +81,26 @@ public sealed partial class ViewerPage
 
         DocumentScrollViewer.ViewChanged -= OnViewportViewChanged;
         DocumentScrollViewer.ViewChanged += OnViewportViewChanged;
-        EnsurePdfTextPageMap(0);
+        EnsureTextPageMap(0);
 
         RenderPagesAsync().SafeFireAndForget("PdfViewportRender");
     }
 
-    private void CleanupViewportRendering()
+    internal void CleanupViewportRendering()
     {
         DocumentScrollViewer.ViewChanged -= OnViewportViewChanged;
         // Cancel only — in-flight render tasks hold tokens from this CTS and would
         // throw ObjectDisposedException if we disposed it out from under them.
         _renderCts?.Cancel();
         _renderCts = null;
-        ClearPdfTextSelectionState();
-        _viewportState = null;
+        ClearTextSelectionRequested?.Invoke(this, EventArgs.Empty);
+        ViewportState = null;
         _lastRenderZoom = -1f;
         _pageTopCache = null;
         ClearPdfPageCache();
     }
+
+    internal void CancelPendingRenders() => _renderCts?.Cancel();
 
     private void ClearPdfPageCache()
     {
@@ -121,47 +125,37 @@ public sealed partial class ViewerPage
 
     internal void UpdateCanvasSize()
     {
-        if (_pdfState == null) return;
+        if (DocumentState == null) return;
 
         // Rebuild the O(1) page-top cache at the same time.
-        _pageTopCache = new double[_pdfState.PageCount];
+        _pageTopCache = new double[DocumentState.PageCount];
         double maxW = 0, totalH = 0;
-        for (int i = 0; i < _pdfState.PageCount; i++)
+        for (int i = 0; i < DocumentState.PageCount; i++)
         {
             var (w, h) = GetRotatedPageSize(i);
             _pageTopCache[i] = totalH;
             maxW    = Math.Max(maxW, w * PtToLp);
             totalH += h * PtToLp;
-            if (i < _pdfState.PageCount - 1) totalH += PageGapLp;
+            if (i < DocumentState.PageCount - 1) totalH += PageGapLp;
         }
 
-        PdfViewportCanvas.Width  = maxW;
-        PdfViewportCanvas.Height = totalH;
-
-        if (SearchHighlightCanvas != null)
-        {
-            SearchHighlightCanvas.Width  = maxW;
-            SearchHighlightCanvas.Height = totalH;
-        }
-
-        if (PdfSelectionCanvas != null)
-        {
-            PdfSelectionCanvas.Width = maxW;
-            PdfSelectionCanvas.Height = totalH;
-        }
-
-        if (PdfAnnotationCanvas != null)
-        {
-            PdfAnnotationCanvas.Width = maxW;
-            PdfAnnotationCanvas.Height = totalH;
-            DrawPdfAnnotationOverlays();
-        }
+        double maxWidth = maxW;
+        double totalHeightLp = totalH;
+        PdfViewportCanvas.Width = maxWidth;
+        PdfViewportCanvas.Height = totalHeightLp;
+        SearchHighlightCanvas.Width = maxWidth;
+        SearchHighlightCanvas.Height = totalHeightLp;
+        PdfAnnotationCanvas.Width = maxWidth;
+        PdfAnnotationCanvas.Height = totalHeightLp;
+        PdfSelectionCanvas.Width = maxWidth;
+        PdfSelectionCanvas.Height = totalHeightLp;
+        DrawAnnotationOverlays();
     }
 
-    private (double W, double H) GetRotatedPageSize(int i)
+    internal (double W, double H) GetRotatedPageSize(int i)
     {
-        var (w, h) = _pdfState!.GetPageSize(i);
-        int rot = ((int)Math.Round(_rotation) % 360 + 360) % 360;
+        var (w, h) = DocumentState!.GetPageSize(i);
+        int rot = ((int)Math.Round(PdfRotation) % 360 + 360) % 360;
         return (rot == 90 || rot == 270) ? (h, w) : (w, h);
     }
 
@@ -171,26 +165,26 @@ public sealed partial class ViewerPage
     {
         try
         {
-            if (_viewportState == null || _pdfState == null)
+            if (ViewportState == null || DocumentState == null)
             {
                 return;
             }
 
             float zoom = Math.Max(0.01f, DocumentScrollViewer.ZoomFactor);
-            _viewportState.ZoomFactor       = zoom;
-            _viewportState.ViewportWidthPx  = (int)DocumentScrollViewer.ViewportWidth;
-            _viewportState.ViewportHeightPx = (int)DocumentScrollViewer.ViewportHeight;
+            ViewportState.ZoomFactor       = zoom;
+            ViewportState.ViewportWidthPx  = (int)DocumentScrollViewer.ViewportWidth;
+            ViewportState.ViewportHeightPx = (int)DocumentScrollViewer.ViewportHeight;
             // Canvas is zoom-independent layout pixels; ScrollViewer offsets are zoomed.
-            _viewportState.ScrollXPt        = (DocumentScrollViewer.HorizontalOffset / zoom) * LpToPt;
-            _viewportState.ScrollYPt        = (DocumentScrollViewer.VerticalOffset / zoom) * LpToPt;
+            ViewportState.ScrollXPt        = (DocumentScrollViewer.HorizontalOffset / zoom) * LpToPt;
+            ViewportState.ScrollYPt        = (DocumentScrollViewer.VerticalOffset / zoom) * LpToPt;
 
             UpdateCurrentPageFromScroll();
-            EnsurePdfTextPageMap(Math.Clamp(_viewportState.CurrentPageIndex, 0, _pdfState.PageCount - 1));
+            EnsureTextPageMap(Math.Clamp(ViewportState.CurrentPageIndex, 0, DocumentState.PageCount - 1));
 
             if (!e.IsIntermediate)
             {
                 _lastRenderZoom = zoom;
-                DrawAllHighlights();
+                RefreshHighlights();
                 RenderPagesAsync().SafeFireAndForget("PdfViewportRender");
             }
         }
@@ -204,29 +198,29 @@ public sealed partial class ViewerPage
 
     private void UpdateCurrentPageFromScroll()
     {
-        if (_pdfState == null || _viewportState == null) return;
+        if (DocumentState == null || ViewportState == null) return;
 
         double zoom = Math.Max(0.01, DocumentScrollViewer.ZoomFactor);
         double scrollYLp = DocumentScrollViewer.VerticalOffset / zoom;
         double readingY  = scrollYLp + (DocumentScrollViewer.ViewportHeight / zoom) * 0.1;
 
         double topLp = 0;
-        for (int i = 0; i < _pdfState.PageCount; i++)
+        for (int i = 0; i < DocumentState.PageCount; i++)
         {
             var (_, h) = GetRotatedPageSize(i);
             double bottomLp = topLp + h * PtToLp;
-            if (readingY <= bottomLp || i == _pdfState.PageCount - 1)
+            if (readingY <= bottomLp || i == DocumentState.PageCount - 1)
             {
-                EnsurePdfTextPageMap(i);
+                EnsureTextPageMap(i);
                 int newPage = i + 1;
-                if (newPage != _page)
+                if (newPage != ViewportState.CurrentPageIndex + 1)
                 {
-                    _viewportState.CurrentPageIndex = i;
+                    ViewportState.CurrentPageIndex = i;
                     int captured = i;
                     DispatcherQueue.TryEnqueue(() =>
                     {
-                        if (_viewportState?.CurrentPageIndex == captured)
-                            UpdateCurrentPage(captured + 1);
+                        if (ViewportState?.CurrentPageIndex == captured)
+                            PageChanged?.Invoke(this, captured + 1);
                     });
                 }
                 break;
@@ -237,7 +231,7 @@ public sealed partial class ViewerPage
 
     // ── Rendering ─────────────────────────────────────────────────────────────
 
-    private async Task RenderPagesAsync()
+    internal async Task RenderPagesAsync()
     {
         // Must start on UI thread to access ScrollViewer properties and manipulate canvas safely
         if (!DispatcherQueue.HasThreadAccess)
@@ -250,7 +244,7 @@ public sealed partial class ViewerPage
         {
             Infrastructure.Logging.Logger.Log("[Render] RenderPagesAsync started");
             
-            if (_pdfState == null || _viewportState == null)
+            if (DocumentState == null || ViewportState == null)
             {
                 Infrastructure.Logging.Logger.Log("[Render] Skipping - null state");
                 return;
@@ -271,7 +265,7 @@ public sealed partial class ViewerPage
 
             Infrastructure.Logging.Logger.Log($"[Render] zoom={zoom:F2}, scrollYLp={scrollY:F0}, vpHLp={vpH:F0}, display={display:F2}");
 
-            var sampleSize = GetRotatedPageSize(Math.Clamp(_viewportState.CurrentPageIndex, 0, _pdfState.PageCount - 1));
+            var sampleSize = GetRotatedPageSize(Math.Clamp(ViewportState.CurrentPageIndex, 0, DocumentState.PageCount - 1));
             float dpi = RenderBudget.PdfPageDpi(zoom, display, sampleSize.W, sampleSize.H);
             
             Infrastructure.Logging.Logger.Log($"[Render] Calculated DPI: {dpi:F1} (zoom={zoom:F2} × display={display:F2} × {RenderBudget.TextOversample:F2})");
@@ -383,7 +377,7 @@ public sealed partial class ViewerPage
                     return;
                 }
                 Infrastructure.Logging.Logger.Log($"[Render] Rendering visible page {pageIndex}");
-                await RenderSinglePageAsync(_pdfState, pageIndex, dpi, display, ct);
+                await RenderSinglePageAsync(DocumentState, pageIndex, dpi, display, ct);
             }
 
             Infrastructure.Logging.Logger.Log("[Render] Starting buffer page render");
@@ -397,7 +391,7 @@ public sealed partial class ViewerPage
                     try
                     {
                         Infrastructure.Logging.Logger.Log($"[Render] Rendering buffer page {pageIndex}");
-                        await RenderSinglePageAsync(_pdfState, pageIndex, dpi, display, ct);
+                        await RenderSinglePageAsync(DocumentState, pageIndex, dpi, display, ct);
                     }
                     finally { _renderSemaphore.Release(); }
                 }, ct));
@@ -436,7 +430,7 @@ public sealed partial class ViewerPage
             }
 
             var (ptW, ptH) = GetRotatedPageSize(pageIndex);
-            float zoom = _viewportState?.ZoomFactor ?? 1f;
+            float zoom = ViewportState?.ZoomFactor ?? 1f;
             dpi = RenderBudget.PdfPageDpi(zoom, display, ptW, ptH);
             if (_pdfPageCache.ContainsKey(pageIndex) &&
                 _pdfPageDpi.TryGetValue(pageIndex, out float cachedDpi) &&
@@ -478,14 +472,14 @@ public sealed partial class ViewerPage
             }
 
             // Check if document generation is still current (not closed/replaced)
-            if (_pdfState == null || _pdfState.Generation != snapshotGeneration)
+            if (DocumentState == null || DocumentState.Generation != snapshotGeneration)
             {
                 Infrastructure.Logging.Logger.Log($"[RenderSingle] Stale generation for page {pageIndex} - discarding result");
                 return;
             }
 
             // Final generation check before publishing to UI
-            if (_pdfState == null || _pdfState.Generation != snapshotGeneration)
+            if (DocumentState == null || DocumentState.Generation != snapshotGeneration)
             {
                 Infrastructure.Logging.Logger.Log($"[RenderSingle] Stale generation at UI publish for page {pageIndex} - discarding");
                 return;
@@ -588,13 +582,13 @@ public sealed partial class ViewerPage
     /// <summary>Returns the first/last page indices that intersect the viewport + buffer.</summary>
     private (int First, int Last) GetVisiblePageRange(double scrollY, double vpH, int bufferPages)
     {
-        if (_pdfState == null) return (0, 0);
+        if (DocumentState == null) return (0, 0);
 
         double topLp = 0;
-        int first = 0, last = _pdfState.PageCount - 1;
+        int first = 0, last = DocumentState.PageCount - 1;
         bool foundFirst = false;
 
-        for (int i = 0; i < _pdfState.PageCount; i++)
+        for (int i = 0; i < DocumentState.PageCount; i++)
         {
             var (_, h) = GetRotatedPageSize(i);
             double pageH      = h * PtToLp;
@@ -608,7 +602,7 @@ public sealed partial class ViewerPage
 
             if (topLp > scrollY + vpH)
             {
-                last = Math.Min(_pdfState.PageCount - 1, i + bufferPages);
+                last = Math.Min(DocumentState.PageCount - 1, i + bufferPages);
                 break;
             }
 
@@ -623,13 +617,13 @@ public sealed partial class ViewerPage
     /// Improvement 2: O(1) lookup via pre-computed _pageTopCache array.
     /// Falls back to O(n) if cache is not yet built.
     /// </summary>
-    private double GetPageTopLp(int pageIndex)
+    internal double GetPageTopLp(int pageIndex)
     {
         if (_pageTopCache != null && (uint)pageIndex < (uint)_pageTopCache.Length)
             return _pageTopCache[pageIndex];
 
         // Fallback (should not normally be reached after InitializeViewportRendering)
-        if (_pdfState == null) return 0;
+        if (DocumentState == null) return 0;
         double y = 0;
         for (int i = 0; i < pageIndex; i++)
         {

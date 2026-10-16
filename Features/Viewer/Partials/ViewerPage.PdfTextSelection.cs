@@ -24,13 +24,8 @@ namespace DocGlance.Features.Viewer;
 
 public sealed partial class ViewerPage
 {
-    private const int PdfTextMapCacheCapacity = 12;
-    private readonly Dictionary<int, PdfPageTextMap> _pdfTextPageMaps = new();
-    private readonly HashSet<int> _pdfTextMapsLoading = new();
-    private readonly List<Rectangle> _pdfSelectionOverlays = new();
     private readonly DispatcherTimer _touchSelectionTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
 
-    private int _pdfTextMapGeneration;
     private int _pdfSelectionPage = -1;
     private int _pdfSelectionAnchor = -1;
     private int _pdfSelectionFocus = -1;
@@ -81,46 +76,7 @@ public sealed partial class ViewerPage
     }
 
     private void EnsurePdfTextPageMap(int pageIndex)
-    {
-        if (_pdfState == null || _pdfState.ManagedPdfDocument != null ||
-            (uint)pageIndex >= (uint)_pdfState.PageCount ||
-            _pdfTextPageMaps.ContainsKey(pageIndex) ||
-            !_pdfTextMapsLoading.Add(pageIndex))
-            return;
-
-        _ = LoadPdfTextPageMapAsync(_pdfState, pageIndex, _pdfTextMapGeneration, _cts?.Token ?? default);
-    }
-
-    private async Task LoadPdfTextPageMapAsync(
-        PdfDocumentState state,
-        int pageIndex,
-        int generation,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            PdfPageTextMap map = await PdfTextService.GetPageTextMapAsync(
-                state, pageIndex, cancellationToken);
-            if (!ReferenceEquals(_pdfState, state) || generation != _pdfTextMapGeneration)
-                return;
-
-            _pdfTextPageMaps[pageIndex] = map;
-            TrimPdfTextPageMaps();
-            TryStartPendingMouseSelection(pageIndex);
-            TryStartTouchSelection();
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-        }
-        catch (Exception ex)
-        {
-            Logger.Error($"[PDFSelection] Failed to load text geometry for page {pageIndex + 1}", ex);
-        }
-        finally
-        {
-            _pdfTextMapsLoading.Remove(pageIndex);
-        }
-    }
+        => PdfViewerControl.EnsureTextPageMap(pageIndex);
 
     private async Task<string?> GetPdfTextSelectionAsync()
     {
@@ -136,8 +92,10 @@ public sealed partial class ViewerPage
         if (_pdfSelectionTextCacheKey == key)
             return _pdfSelectionTextCache;
 
-        string text = await PdfTextService.GetTextRangeAsync(
-            state, page, start, end, _cts?.Token ?? default);
+        string? text = await PdfViewerControl.GetSelectedTextAsync(
+            page, _pdfSelectionAnchor, _pdfSelectionFocus, _cts?.Token ?? default);
+        if (text == null)
+            return null;
         if (!ReferenceEquals(_pdfState, state) ||
             state.Generation != generation ||
             !HasPdfTextSelection ||
@@ -157,24 +115,6 @@ public sealed partial class ViewerPage
         package.SetText(text);
         Clipboard.SetContent(package);
         Clipboard.Flush();
-    }
-
-    private void TrimPdfTextPageMaps()
-    {
-        if (_viewportState == null)
-            return;
-
-        int currentPage = _viewportState.CurrentPageIndex;
-        while (_pdfTextPageMaps.Count > PdfTextMapCacheCapacity)
-        {
-            int pageToRemove = _pdfTextPageMaps.Keys
-                .Where(page => page != currentPage && page != _pdfSelectionPage)
-                .OrderByDescending(page => Math.Abs(page - currentPage))
-                .FirstOrDefault(-1);
-            if (pageToRemove < 0)
-                break;
-            _pdfTextPageMaps.Remove(pageToRemove);
-        }
     }
 
     private void PdfTextCanvas_PointerPressed(object sender, PointerRoutedEventArgs e)
@@ -228,7 +168,7 @@ public sealed partial class ViewerPage
 
         if (e.Pointer.PointerDeviceType == PointerDeviceType.Touch)
         {
-            if (_pdfTextPageMaps.TryGetValue(page, out var map) &&
+            if (PdfViewerControl.TryGetTextPageMap(page, out var map) &&
                 TryExtendPdfSelection(point, page, map, e.Pointer))
             {
                 e.Handled = true;
@@ -239,7 +179,7 @@ public sealed partial class ViewerPage
             _touchOrigin = point;
             _touchSelectionRequested = false;
             _touchSelectionTimer.Start();
-            if (!_pdfTextPageMaps.ContainsKey(page))
+            if (!PdfViewerControl.HasTextPageMap(page))
                 EnsurePdfTextPageMap(page);
             return;
         }
@@ -247,7 +187,7 @@ public sealed partial class ViewerPage
         if (!e.GetCurrentPoint(PdfViewportCanvas).Properties.IsLeftButtonPressed)
             return;
 
-        if (!_pdfTextPageMaps.TryGetValue(page, out var pageMap))
+        if (!PdfViewerControl.TryGetTextPageMap(page, out var pageMap))
         {
             ClearPdfTextSelection();
             _pendingMousePointer = e.Pointer;
@@ -388,7 +328,7 @@ public sealed partial class ViewerPage
             return;
 
         int page = GetPdfTextPageAt(_touchOrigin.Y);
-        if (page < 0 || !_pdfTextPageMaps.TryGetValue(page, out var map))
+        if (page < 0 || !PdfViewerControl.TryGetTextPageMap(page, out var map))
             return;
 
         int glyph = HitTestPdfText(page, _touchOrigin, map);
@@ -407,7 +347,7 @@ public sealed partial class ViewerPage
     private void TryStartPendingMouseSelection(int page)
     {
         if (_pendingMousePointer == null || _pendingMousePage != page ||
-            !_pdfTextPageMaps.TryGetValue(page, out var map))
+            !PdfViewerControl.TryGetTextPageMap(page, out var map))
             return;
 
         int anchor = HitTestPdfText(page, _pendingMouseStart, map);
@@ -443,7 +383,7 @@ public sealed partial class ViewerPage
         int hit = map.HitTest(x, y);
         int start = Math.Min(_pdfSelectionAnchor, _pdfSelectionFocus);
         int end = Math.Max(_pdfSelectionAnchor, _pdfSelectionFocus);
-        if (hit < 0 || !map.GetSelectionRects(start, end + 1).Any(rect =>
+        if (hit < 0 || !PdfViewerControl.GetSelectionRects(page, start, end).Any(rect =>
                 x >= rect.X - 6 && x <= rect.X + rect.Width + 6 &&
                 y >= rect.Y - 6 && y <= rect.Y + rect.Height + 6))
             return false;
@@ -464,6 +404,7 @@ public sealed partial class ViewerPage
     {
         ClearPdfTextSelection();
         _pdfSelectionPage = page;
+        PdfViewerControl.SelectionPageIndex = page;
         _pdfSelectionAnchor = anchorOverride ?? glyph;
         _pdfSelectionFocus = glyph;
         _selectionOrigin = point;
@@ -490,7 +431,7 @@ public sealed partial class ViewerPage
     private void UpdatePdfTextSelection(Point point)
     {
         if (_pdfSelectionPage < 0 ||
-            !_pdfTextPageMaps.TryGetValue(_pdfSelectionPage, out var map))
+            !PdfViewerControl.TryGetTextPageMap(_pdfSelectionPage, out var map))
             return;
 
         int focus = HitTestPdfText(_pdfSelectionPage, point, map);
@@ -531,45 +472,29 @@ public sealed partial class ViewerPage
 
     private void DrawPdfTextSelection()
     {
-        ClearPdfTextSelectionOverlay();
         if (_pdfSelectionPage < 0 ||
-            !_pdfTextPageMaps.TryGetValue(_pdfSelectionPage, out var map))
+            !PdfViewerControl.TryGetTextPageMap(_pdfSelectionPage, out var map))
+        {
+            PdfViewerControl.ClearTextSelection();
             return;
+        }
 
         int start = Math.Min(_pdfSelectionAnchor, _pdfSelectionFocus);
         int end = Math.Max(_pdfSelectionAnchor, _pdfSelectionFocus) + 1;
-        var fill = new SolidColorBrush(Color.FromArgb(105, 0, 120, 215));
-        foreach (var rect in map.GetSelectionRects(start, end))
-        {
-            var overlay = new Rectangle
-            {
-                Width = rect.Width * PtToLp,
-                Height = rect.Height * PtToLp,
-                Fill = fill,
-                IsHitTestVisible = false,
-            };
-            Canvas.SetLeft(overlay, rect.X * PtToLp);
-            Canvas.SetTop(overlay, GetPageTopLp(_pdfSelectionPage) + rect.Y * PtToLp);
-            PdfSelectionCanvas.Children.Add(overlay);
-            _pdfSelectionOverlays.Add(overlay);
-        }
-    }
-
-    private void ClearPdfTextSelectionOverlay()
-    {
-        foreach (Rectangle overlay in _pdfSelectionOverlays)
-            PdfSelectionCanvas.Children.Remove(overlay);
-        _pdfSelectionOverlays.Clear();
+        PdfViewerControl.SetTextSelection(
+            _pdfSelectionPage,
+            PdfViewerControl.GetSelectionRects(_pdfSelectionPage, start, end - 1));
     }
 
     private void ClearPdfTextSelection()
     {
         _pdfSelectionPage = -1;
+        PdfViewerControl.SelectionPageIndex = -1;
         _pdfSelectionAnchor = -1;
         _pdfSelectionFocus = -1;
         _pdfSelectionTextCache = null;
         _pdfSelectionTextCacheKey = null;
-        ClearPdfTextSelectionOverlay();
+        PdfViewerControl.ClearTextSelection();
     }
 
     private void FinishPdfTextSelection(bool cancelled)
@@ -606,7 +531,8 @@ public sealed partial class ViewerPage
         PdfDocumentState state = _pdfState;
         int page = _pdfSelectionPage;
         Point menuPosition = e.GetPosition(PdfViewportCanvas);
-        IReadOnlyList<PdfSearchRect> rectangles = GetPdfSelectionRects();
+        IReadOnlyList<PdfSearchRect> rectangles = PdfViewerControl.GetSelectionRects(
+            page, _pdfSelectionAnchor, _pdfSelectionFocus);
         if (rectangles.Count == 0)
             return;
 
@@ -712,9 +638,7 @@ public sealed partial class ViewerPage
     {
         if (_pdfInkPointer != null)
             FinishPdfInkStroke(cancelled: true);
-        _pdfTextMapGeneration++;
-        _pdfTextPageMaps.Clear();
-        _pdfTextMapsLoading.Clear();
+        PdfViewerControl.ResetTextPageMaps();
         _touchSelectionTimer.Stop();
         _touchPointer = null;
         _touchSelectionRequested = false;

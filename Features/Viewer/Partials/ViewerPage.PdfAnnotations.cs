@@ -50,7 +50,7 @@ public sealed partial class ViewerPage
     {
         try
         {
-            SetOutlineItems(await PdfAnnotationService.GetOutlineAsync(state, cancellationToken));
+            SetOutlineItems(await PdfViewerControl.LoadOutlineAsync(cancellationToken));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -60,7 +60,7 @@ public sealed partial class ViewerPage
 
         try
         {
-            var annotations = await PdfAnnotationService.GetAnnotationsAsync(state, cancellationToken);
+            var annotations = await PdfViewerControl.LoadAnnotationsAsync(cancellationToken);
             if (!ReferenceEquals(_pdfState, state))
                 return;
             SetPdfAnnotations(annotations);
@@ -70,120 +70,6 @@ public sealed partial class ViewerPage
             Logger.Error("[PDFAnnotation] Could not load saved annotations", ex);
             SetPdfAnnotations(Array.Empty<PdfTextAnnotation>());
         }
-    }
-
-    private void DrawPdfAnnotationOverlays()
-    {
-        PdfAnnotationCanvas.Children.Clear();
-        if (_pdfState == null || _pdfAnnotations.Count == 0)
-            return;
-
-        const double PtToLp = 96.0 / 72.0;
-        foreach (var annotation in _pdfAnnotations)
-        {
-            if ((uint)annotation.PageIndex >= (uint)_pdfState.PageCount)
-                continue;
-            double pageTop = GetPageTopLp(annotation.PageIndex);
-            foreach (var rect in annotation.Rectangles)
-            {
-                double x = rect.X * PtToLp;
-                double y = pageTop + rect.Y * PtToLp;
-                double width = rect.Width * PtToLp;
-                double height = rect.Height * PtToLp;
-                if (width <= 0 || height <= 0)
-                    continue;
-
-                if (annotation.Kind == PdfTextAnnotationKind.Ink)
-                {
-                    var stroke = new Polyline
-                    {
-                        Stroke = new SolidColorBrush(Color.FromArgb(
-                            (byte)Math.Round(annotation.Opacity * 255),
-                            (byte)(annotation.ColorArgb >> 16),
-                            (byte)(annotation.ColorArgb >> 8),
-                            (byte)annotation.ColorArgb)),
-                        StrokeThickness = Math.Max(0.5, annotation.Width * PtToLp),
-                        StrokeLineJoin = PenLineJoin.Round,
-                        StrokeStartLineCap = PenLineCap.Round,
-                        StrokeEndLineCap = PenLineCap.Round,
-                        IsHitTestVisible = false,
-                    };
-                    foreach (var point in annotation.Points)
-                        stroke.Points.Add(new Windows.Foundation.Point(
-                            point.X * PtToLp, pageTop + point.Y * PtToLp));
-                    PdfAnnotationCanvas.Children.Add(stroke);
-                    break;
-                }
-
-                if (annotation.Kind == PdfTextAnnotationKind.Note)
-                {
-                    var noteIcon = new FontIcon
-                    {
-                        Glyph = "\uE70B",
-                        FontSize = 13,
-                        Foreground = new SolidColorBrush(Color.FromArgb(255, 180, 120, 0)),
-                    };
-                    Canvas.SetLeft(noteIcon, x);
-                    Canvas.SetTop(noteIcon, y);
-                    PdfAnnotationCanvas.Children.Add(noteIcon);
-                    continue;
-                }
-
-                if (annotation.Kind == PdfTextAnnotationKind.FreeText)
-                {
-                    var text = new TextBlock
-                    {
-                        Text = annotation.Contents,
-                        Width = width,
-                        Height = height,
-                        TextWrapping = TextWrapping.Wrap,
-                        Foreground = new SolidColorBrush(Color.FromArgb(
-                            (byte)Math.Round(annotation.Opacity * 255),
-                            (byte)(annotation.ColorArgb >> 16),
-                            (byte)(annotation.ColorArgb >> 8),
-                            (byte)annotation.ColorArgb)),
-                        IsHitTestVisible = false,
-                    };
-                    Canvas.SetLeft(text, x);
-                    Canvas.SetTop(text, y);
-                    PdfAnnotationCanvas.Children.Add(text);
-                    continue;
-                }
-
-                double lineHeight = Math.Clamp(height * 0.09, 1.25, 2.5);
-                Color annotationColor = Color.FromArgb(
-                    (byte)Math.Round(annotation.Opacity * 255),
-                    (byte)(annotation.ColorArgb >> 16),
-                    (byte)(annotation.ColorArgb >> 8),
-                    (byte)annotation.ColorArgb);
-                var mark = new Rectangle
-                {
-                    Width = width,
-                    Height = annotation.Kind == PdfTextAnnotationKind.Highlight ? height : lineHeight,
-                    IsHitTestVisible = false,
-                    Fill = new SolidColorBrush(annotationColor),
-                };
-                Canvas.SetLeft(mark, x);
-                Canvas.SetTop(mark, annotation.Kind switch
-                {
-                    PdfTextAnnotationKind.Underline => y + height - lineHeight,
-                    PdfTextAnnotationKind.Strikeout => y + (height - lineHeight) / 2,
-                    _ => y,
-                });
-                PdfAnnotationCanvas.Children.Add(mark);
-            }
-        }
-    }
-
-    private IReadOnlyList<PdfSearchRect> GetPdfSelectionRects()
-    {
-        if (!HasPdfTextSelection ||
-            !_pdfTextPageMaps.TryGetValue(_pdfSelectionPage, out var map))
-            return Array.Empty<PdfSearchRect>();
-
-        int start = Math.Min(_pdfSelectionAnchor, _pdfSelectionFocus);
-        int end = Math.Max(_pdfSelectionAnchor, _pdfSelectionFocus) + 1;
-        return map.GetSelectionRects(start, end);
     }
 
     private void AddPdfAnnotationMenuItem(
@@ -213,7 +99,8 @@ public sealed partial class ViewerPage
         int page = _pdfSelectionPage;
         int start = Math.Min(_pdfSelectionAnchor, _pdfSelectionFocus);
         int end = Math.Max(_pdfSelectionAnchor, _pdfSelectionFocus) + 1;
-        IReadOnlyList<PdfSearchRect> rectangles = GetPdfSelectionRects();
+        IReadOnlyList<PdfSearchRect> rectangles = PdfViewerControl.GetSelectionRects(
+            _pdfSelectionPage, _pdfSelectionAnchor, _pdfSelectionFocus);
         if (state == null || rectangles.Count == 0 || !HasPdfTextSelection)
             return;
 
@@ -244,7 +131,8 @@ public sealed partial class ViewerPage
     {
         PdfDocumentState? state = _pdfState;
         int page = _pdfSelectionPage;
-        IReadOnlyList<PdfSearchRect> rectangles = GetPdfSelectionRects();
+        IReadOnlyList<PdfSearchRect> rectangles = PdfViewerControl.GetSelectionRects(
+            _pdfSelectionPage, _pdfSelectionAnchor, _pdfSelectionFocus);
         if (state == null || rectangles.Count == 0 || !HasPdfTextSelection)
             return;
 
@@ -591,7 +479,8 @@ public sealed partial class ViewerPage
     {
         PdfDocumentState? state = _pdfState;
         int page = _pdfSelectionPage;
-        IReadOnlyList<PdfSearchRect> rectangles = GetPdfSelectionRects();
+        IReadOnlyList<PdfSearchRect> rectangles = PdfViewerControl.GetSelectionRects(
+            _pdfSelectionPage, _pdfSelectionAnchor, _pdfSelectionFocus);
         if (state == null || rectangles.Count == 0 || !HasPdfTextSelection)
             return;
 
@@ -653,9 +542,9 @@ public sealed partial class ViewerPage
                 workingDirectory, Guid.NewGuid().ToString("N") + ".pdf");
             await File.WriteAllBytesAsync(newWorkingPath, updatedPdf, _cts?.Token ?? default);
 
-            _renderCts?.Cancel();
+            PdfViewerControl.CancelPendingRenders();
             ClearPdfTextSelectionState();
-            PdfLoadResult loadResult = await _pdfService.ReplaceDocumentFromPathAsync(
+            PdfLoadResult loadResult = await PdfViewerControl.ReplaceDocumentFromPathAsync(
                 newWorkingPath, _cts?.Token ?? default);
             if (!loadResult.Success || loadResult.Document == null)
                 throw new InvalidOperationException(
@@ -667,8 +556,8 @@ public sealed partial class ViewerPage
             _pdfChangesPending = true;
             _pdfState = loadResult.Document;
             _total = loadResult.PageCount;
+            UpdateCanvasSize();
             await LoadPdfNavigationDataAsync(_pdfState, _cts?.Token ?? default);
-            DrawPdfAnnotationOverlays();
             _page = Math.Clamp(_page, 1, Math.Max(1, _total));
             if (_viewportState != null)
                 _viewportState.CurrentPageIndex = _page - 1;

@@ -22,7 +22,7 @@ public sealed partial class ViewerPage
         SidebarCard.Visibility = isOpen ? Visibility.Visible : Visibility.Collapsed;
         SidebarColumn.Width = isOpen ? new GridLength(240) : new GridLength(0);
         ViewModel.SidebarOpen = isOpen;
-        ReapplyFitMode();
+        ScheduleFitModeReapply();
     }
 
     private void Toolbar_GoToPageRequested(object? sender, int page)
@@ -74,6 +74,7 @@ public sealed partial class ViewerPage
     private void Rotate(double delta)
     {
         _rotation = (_rotation + delta + 360.0) % 360.0;
+        PdfViewerControl.PdfRotation = _rotation;
         ClearPdfTextSelection();
         ViewModel.Rotation = _rotation;
 

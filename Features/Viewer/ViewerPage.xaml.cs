@@ -12,6 +12,8 @@ using DocGlance.Services;
 using DocGlance.Core.Models;
 using DocGlance.Core.Enums;
 using DocGlance.Rendering.Pdf;
+using DocGlance.Rendering.Pdf.Models;
+using DocGlance.Rendering.Shared;
 using DocGlance.Rendering.Xlsx;
 using DocGlance.Features.Viewer.Formats.Text;
 using DocGlance.Infrastructure.Logging;
@@ -30,8 +32,16 @@ namespace DocGlance.Features.Viewer;
 public sealed partial class ViewerPage : Page
 {
     private readonly DocumentViewerRegistry _viewerRegistry = new(
-        new IDocumentViewerFactory[] { new TextViewerFactory(), new SpreadsheetViewerFactory() },
+        new IDocumentViewerFactory[]
+        {
+            new PdfViewerFactory(),
+            new TextViewerFactory(),
+            new SpreadsheetViewerFactory(),
+        },
         new FallbackViewerFactory());
+    private PdfViewer? _pdfViewerControl;
+    private PdfViewer PdfViewerControl =>
+        _pdfViewerControl ?? throw new InvalidOperationException("The PDF viewer has not been initialized.");
     private TextViewer TextViewerControl { get; set; } = null!;
     private SpreadsheetViewer SpreadsheetViewerControl { get; set; } = null!;
     private SpreadsheetDocument? _spreadsheetDocument => SpreadsheetViewerControl?.Document;
@@ -51,13 +61,32 @@ public sealed partial class ViewerPage : Page
     // These fields drive PDF rendering math. After every mutation call
     // SyncToViewModel() so XAML bindings (toolbar, title bar) stay in sync.
     internal DocumentItem?            _doc;
-    internal PdfDocumentState?        _pdfState;
+    internal PdfDocumentState? _pdfState
+    {
+        get => PdfViewerControl.DocumentState;
+        set => PdfViewerControl.DocumentState = value;
+    }
     internal double                   _zoom     = 1.0;
     internal int                      _page     = 1;
     internal int                      _total    = 1;
     internal double                   _rotation = 0;
     internal CancellationTokenSource? _cts;
     internal List<OutlineItem>        _outline  = new();
+    internal PdfViewportState? _viewportState
+    {
+        get => PdfViewerControl.ViewportState;
+        set => PdfViewerControl.ViewportState = value;
+    }
+    internal const double PtToLp = 96.0 / 72.0;
+    internal const double LpToPt = 72.0 / 96.0;
+
+    private void InitializeViewportRendering() => PdfViewerControl.InitializeViewportRendering();
+    private void CleanupViewportRendering() => PdfViewerControl.CleanupViewportRendering();
+    private void UpdateCanvasSize() => PdfViewerControl.UpdateCanvasSize();
+    private Task RenderPagesAsync() => PdfViewerControl.RenderPagesAsync();
+    private (double W, double H) GetRotatedPageSize(int pageIndex) =>
+        PdfViewerControl.GetRotatedPageSize(pageIndex);
+    private double GetPageTopLp(int pageIndex) => PdfViewerControl.GetPageTopLp(pageIndex);
 
     public ObservableCollection<PageThumbnailItem> Thumbnails { get; } = new();
 
@@ -68,6 +97,23 @@ public sealed partial class ViewerPage : Page
     public ViewerPage()
     {
         InitializeComponent();
+        _pdfViewerControl = (PdfViewer)_viewerRegistry.Resolve(".pdf").Create(ViewModel);
+        PdfViewerHost.Content = _pdfViewerControl;
+        PdfViewerControl.ZoomChanged += (_, zoom) =>
+        {
+            _zoom = zoom;
+            ZoomLabel.Text = $"{Math.Round(_zoom / NaturalZoom * 100.0)}%";
+            ViewModel.Zoom = _zoom;
+        };
+        PdfViewerControl.PageNavigationRequested += (_, page) => UpdateCurrentPage(page);
+        PdfViewerControl.OutlineNavigationRequested += (_, page) => GoToPage(page);
+        PdfViewerControl.PageChanged += (_, page) => UpdateCurrentPage(page);
+        PdfViewerControl.TextPageMapLoaded += (_, pageIndex) =>
+        {
+            TryStartPendingMouseSelection(pageIndex);
+            TryStartTouchSelection();
+        };
+        PdfViewerControl.ClearTextSelectionRequested += (_, _) => ClearPdfTextSelectionState();
         TextViewerControl = (TextViewer)_viewerRegistry.Resolve(".txt").Create(ViewModel);
         TextViewerHost.Content = TextViewerControl;
         SpreadsheetViewerControl = (SpreadsheetViewer)_viewerRegistry.Resolve(".xlsx").Create(ViewModel);
@@ -89,6 +135,7 @@ public sealed partial class ViewerPage : Page
         {
             ScheduleFitModeReapply();
         };
+        PdfViewerControl.SizeChanged += (_, _) => ScheduleFitModeReapply();
         SpreadsheetViewerControl.SizeChanged += (_, _) => ScheduleFitModeReapply();
         SpreadsheetViewerControl.ActiveSheetChanged += (_, sheetIndex) =>
         {
@@ -170,6 +217,8 @@ public sealed partial class ViewerPage : Page
             Toolbar.SidebarIsChecked = false;
             ViewModel.SidebarOpen = false;
         }
+
+        ScheduleFitModeReapply();
     }
 
     private void ScheduleFitModeReapply()
@@ -180,6 +229,8 @@ public sealed partial class ViewerPage : Page
             _resizeDebounceTimer.Tick += (_, _) =>
             {
                 _resizeDebounceTimer?.Stop();
+                PdfViewerControl.UpdateLayout();
+                DocumentScrollViewer.UpdateLayout();
                 ReapplyFitMode();
                 if (_pdfState != null) RenderPagesAsync().SafeFireAndForget("PdfViewportRender");
             };
@@ -251,10 +302,7 @@ public sealed partial class ViewerPage : Page
 
         // The per-page service owns the PDF document — closing it frees the native handle.
         // A fresh service keeps the page usable if it is reattached later.
-        if (_pdfService is IDisposable disposableService)
-            disposableService.Dispose();
-        _pdfService = new PdfViewerService();
-        _pdfState = null;
+        _ = PdfViewerControl.CleanupAsync();
         ViewModel.Reset();
     }
 
@@ -305,7 +353,7 @@ public sealed partial class ViewerPage : Page
 
     internal void ShowPdfViewer()
     {
-        _activeViewer = null;
+        _activeViewer = PdfViewerControl;
         TextViewerHost.Visibility = Visibility.Collapsed;
         DocumentScrollViewer.Visibility = Visibility.Visible;
         SpreadsheetViewerHost.Visibility = Visibility.Collapsed;

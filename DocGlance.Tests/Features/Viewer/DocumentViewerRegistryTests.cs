@@ -1,6 +1,7 @@
 using DocGlance.Features.Viewer;
 using DocGlance.Features.Viewer.Contracts;
 using DocGlance.Features.Viewer.Formats.Fallback;
+using DocGlance.Features.Viewer.Formats.Pdf;
 using DocGlance.Features.Viewer.Formats.Spreadsheet;
 using DocGlance.Features.Viewer.Formats.Text;
 
@@ -29,6 +30,18 @@ public sealed class DocumentViewerRegistryTests
 
         registry.Resolve(".CSV").Should().BeSameAs(text);
         registry.Resolve(".xlsx").Should().BeSameAs(spreadsheet);
+    }
+
+    [Fact]
+    public void Resolve_UsesPdfFactoryForPdfDocuments()
+    {
+        var pdf = new PdfViewerFactory();
+        var registry = new DocumentViewerRegistry(
+            new IDocumentViewerFactory[] { pdf },
+            new FallbackViewerFactory());
+
+        registry.Resolve(".pdf").Should().BeSameAs(pdf);
+        registry.Resolve(@"C:\documents\sample.PDF").Should().BeSameAs(pdf);
     }
 
     [Fact]

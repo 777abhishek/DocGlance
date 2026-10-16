@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using DocGlance.Rendering.Pdf;
 using DocGlance.Core.Enums;
+using DocGlance.Features.Viewer.Contracts;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -18,6 +19,8 @@ public sealed partial class ViewerPage
     private void SetFitMode(FitMode mode)
     {
         _fitMode = mode;
+        if (_activeViewer is ISupportsZoom zoomViewer)
+            zoomViewer.SetFitMode(mode);
         Toolbar.IsFitWidthChecked = mode == FitMode.FitWidth;
         Toolbar.IsFitPageChecked = mode == FitMode.FitPage;
     }
@@ -77,10 +80,9 @@ public sealed partial class ViewerPage
         SyncToViewModel();
 
         // PDF: let ScrollViewer scale the canvas, then re-render pages at new resolution
-        if (_pdfState != null)
+        if (_pdfState != null && _activeViewer is ISupportsZoom pdfZoom)
         {
-            DocumentScrollViewer.ChangeView(null, null, (float)_zoom, disableAnimation: false);
-            _ = RenderPagesAsync();
+            pdfZoom.SetZoom(_zoom);
             return;
         }
 
@@ -119,20 +121,7 @@ public sealed partial class ViewerPage
         // Handle PDF
         if (_pdfState != null && _viewportState != null)
         {
-            // Base width = page width at zoom 1.0 in layout px
-            var (ptW, _) = GetRotatedPageSize(0);
-            if (ptW <= 0) return;
-
-            double pageWidthLp = ptW * (96.0 / 72.0);
-
-            // Available width in viewport
-            const double sidePad = 28.0;
-            double avail = DocumentScrollViewer.ViewportWidth - sidePad * 2;
-            if (avail <= 0) return;
-
-            // Calculate zoom to fit width
-            double targetZoom = avail / pageWidthLp;
-            SetZoom(targetZoom);
+            PdfViewerControl.ApplyFitWidth();
             return;
         }
         
@@ -191,23 +180,7 @@ public sealed partial class ViewerPage
         // Handle PDF
         if (_pdfState != null && _viewportState != null)
         {
-            // Base dimensions = page size at zoom 1.0 in layout px
-            var (ptW, ptH) = GetRotatedPageSize(0);
-            if (ptW <= 0 || ptH <= 0) return;
-
-            double widthLp  = ptW * (96.0 / 72.0);
-            double heightLp = ptH * (96.0 / 72.0);
-
-            // Available space
-            const double sidePad = 28.0;
-            const double topPad  = 16.0;
-            double aw = DocumentScrollViewer.ViewportWidth  - sidePad * 2;
-            double ah = DocumentScrollViewer.ViewportHeight - topPad  * 2;
-            if (aw <= 0 || ah <= 0) return;
-
-            // Fit both dimensions
-            double targetZoom = Math.Min(aw / widthLp, ah / heightLp);
-            SetZoom(targetZoom);
+            PdfViewerControl.ApplyFitPage();
             return;
         }
         

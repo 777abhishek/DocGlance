@@ -21,6 +21,7 @@ using DocGlance.Interop.DeckCraft;
 using DocGlance.Features.Viewer.Components;
 using DocGlance.Features.Viewer.Formats.Text;
 using DocGlance.Features.Viewer.Formats.Fallback;
+using DocGlance.Features.Viewer.Formats.Pdf;
 using DocGlance.Features.Viewer.Formats.Spreadsheet;
 using DocGlance.Features.Viewer.Contracts;
 using System;
@@ -41,9 +42,6 @@ public sealed partial class ViewerPage
 
 
 
-
-    // ── PdfViewerService (Phase 1 foundation) ─────────────────────────────
-    private IPdfViewerService _pdfService = new PdfViewerService();
 
     private async Task LoadDocumentAsync(DocumentItem doc)
     {
@@ -92,8 +90,7 @@ public sealed partial class ViewerPage
         _pptxTextMaps.Clear();
         await SpreadsheetViewerControl.CleanupAsync();
         
-        // Service owns document lifecycle — just clear our reference
-        _pdfState = null;
+        await PdfViewerControl.CleanupAsync();
         
         _cts = new CancellationTokenSource();
         var ct = _cts.Token;
@@ -133,8 +130,9 @@ public sealed partial class ViewerPage
         ShowPdfViewer();
 
         string ext = System.IO.Path.GetExtension(doc.FilePath ?? "").ToLowerInvariant();
+        IDocumentViewerFactory factory = _viewerRegistry.Resolve(ext);
 
-        if (ext == ".pdf")
+        if (factory is PdfViewerFactory)
             await LoadPdfAsync(doc.FilePath ?? string.Empty, ct);
         else if (ext == ".docx" || ext == ".doc")
             await LoadDocxAsync(doc.FilePath ?? string.Empty, ct);
@@ -142,7 +140,6 @@ public sealed partial class ViewerPage
             await LoadPptxAsync(doc.FilePath ?? string.Empty, ct);
         else
         {
-            IDocumentViewerFactory factory = _viewerRegistry.Resolve(ext);
             if (factory is SpreadsheetViewerFactory)
                 await LoadXlsxAsync(doc.FilePath ?? string.Empty, ct);
             else if (factory is TextViewerFactory)
@@ -168,23 +165,14 @@ public sealed partial class ViewerPage
             Infrastructure.Logging.Logger.Log("[PDF] Calling PdfViewerService.LoadDocumentAsync");
             
             // Delegate PDF loading to service (Phase 2: LoadDocument extraction)
-            var result = await _pdfService.LoadDocumentAsync(
-                filePath,
-                ShowPasswordDialogAsync, // UI callback for password prompt
+            await PdfViewerControl.LoadAsync(
+                _doc ?? throw new InvalidOperationException("No document is active."),
                 ct);
-
-            Infrastructure.Logging.Logger.Log($"[PDF] LoadDocumentAsync result: Success={result.Success}, Error={result.ErrorMessage}");
-
-            if (!result.Success)
-            {
-                ShowErrorCard(result.ErrorMessage ?? "Cannot open PDF");
-                return;
-            }
 
             // Service owns the document lifecycle — ViewerPage just holds a reference
             // Do NOT dispose here (service handles it in CloseDocument)
-            _pdfState = result.Document;
-            _total = result.PageCount;
+            _pdfState = PdfViewerControl.DocumentState;
+            _total = _pdfState?.PageCount ?? 0;
             
             if (_pdfState == null)
             {
@@ -253,28 +241,15 @@ public sealed partial class ViewerPage
             }
 
             Infrastructure.Logging.Logger.Log("[PDF] Creating thumbnail placeholders");
-            
-            // Create thumbnail placeholders
-            const double thumbLogicalW = 200.0;
-            for (int i = 0; i < _total; i++)
-            {
-                var (ptW, ptH) = _pdfState.GetPageSize(i);
-                double aspect = ptH / Math.Max(1.0, ptW);
-                
-                Thumbnails.Add(new PageThumbnailItem
-                {
-                    PageNumber = i + 1,
-                    PageLabel  = $"{i + 1}",
-                    BoxHeight  = thumbLogicalW * aspect,
-                    IsSelected = i == 0,
-                });
-            }
+            foreach (PageThumbnailItem thumbnail in PdfViewerControl.Thumbnails)
+                Thumbnails.Add(thumbnail);
 
             Infrastructure.Logging.Logger.Log("[PDF] Initializing viewport rendering");
             
             // VIEWPORT RENDERING: Initialize viewport system
             InitializeViewportRendering();
-            
+            ScheduleFitModeReapply();
+
             Infrastructure.Logging.Logger.Log("[PDF] Hiding loading indicator");
             
             ShowLoading(false);
@@ -282,7 +257,9 @@ public sealed partial class ViewerPage
 
             Infrastructure.Logging.Logger.Log("[PDF] Starting thumbnail prefetch");
             
-            PrefetchThumbnailsAroundAsync(0, _pdfState, ct).SafeFireAndForget("PdfThumbnailPrefetch");
+            PdfViewerControl.PrefetchThumbnailsAroundAsync(
+                0, SidebarCard.Visibility == Visibility.Visible, ct)
+                .SafeFireAndForget("PdfThumbnailPrefetch");
             
             Infrastructure.Logging.Logger.Log("[PDF] LoadPdfAsync completed successfully");
         }
@@ -295,93 +272,6 @@ public sealed partial class ViewerPage
             ShowLoading(false); 
             Infrastructure.Logging.Logger.Log("[PDF] LoadPdfAsync finally block executed");
         }
-    }
-
-    // ── F5: Password dialog ───────────────────────────────────────────────────
-
-    private async Task<string?> ShowPasswordDialogAsync(string? errorMessage)
-    {
-        var dialog = new ContentDialog
-        {
-            Title = "Password Required",
-            Content = CreatePasswordDialogContent(errorMessage, out var passwordBox),
-            PrimaryButtonText = "Open",
-            CloseButtonText = "Cancel",
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = this.XamlRoot
-        };
-        ViewerPopupStyle.Apply(dialog);
-
-        var result = await dialog.ShowAsync();
-        return result == ContentDialogResult.Primary ? passwordBox.Password : null;
-    }
-
-    private StackPanel CreatePasswordDialogContent(string? errorMessage, out PasswordBox passwordBox)
-    {
-        var stack = new StackPanel { Spacing = 12 };
-
-        if (!string.IsNullOrWhiteSpace(errorMessage) && !errorMessage.Contains("password-protected", StringComparison.OrdinalIgnoreCase))
-        {
-            stack.Children.Add(new TextBlock
-            {
-                Text = errorMessage,
-                TextWrapping = TextWrapping.Wrap,
-                Foreground = new SolidColorBrush(Colors.IndianRed)
-            });
-        }
-
-        stack.Children.Add(new TextBlock
-        {
-            Text = "This PDF is password protected. Enter the password to open it:",
-            TextWrapping = TextWrapping.Wrap
-        });
-
-        passwordBox = new PasswordBox
-        {
-            PlaceholderText = "Enter password",
-            Width = 300
-        };
-        stack.Children.Add(passwordBox);
-
-        return stack;
-    }
-
-    // ── Thumbnail Rendering ───────────────────────────────────────────────────
-
-    private async Task PrefetchThumbnailsAroundAsync(
-        int centerPage, PdfDocumentState pdfState, CancellationToken ct)
-    {
-        if (SidebarCard.Visibility != Visibility.Visible) return;
-
-        int first = Math.Max(0, centerPage - 8);
-        int last  = Math.Min(pdfState.PageCount - 1, centerPage + 8);
-
-        var queue = new List<int> { centerPage };
-        for (int offset = 1; offset <= 8; offset++)
-        {
-            if (centerPage + offset <= last) queue.Add(centerPage + offset);
-            if (centerPage - offset >= first) queue.Add(centerPage - offset);
-        }
-
-        foreach (int pageIndex in queue)
-        {
-            ct.ThrowIfCancellationRequested();
-            await RenderThumbnailAsync(pdfState, pageIndex, ct);
-        }
-    }
-
-    /// <summary>Renders a single thumbnail via the service</summary>
-    private async Task RenderThumbnailAsync(PdfDocumentState pdfState, int pageIdx, CancellationToken ct)
-    {
-        var bmp = await _pdfService.RenderThumbnailAsync(pageIdx, ct);
-        if (bmp == null || ct.IsCancellationRequested) return;
-
-        DispatcherQueue.TryEnqueue(() =>
-        {
-            if (!ReferenceEquals(_pdfState, pdfState)) return;
-            if (pageIdx < Thumbnails.Count)
-                Thumbnails[pageIdx].Thumbnail = bmp;
-        });
     }
 
     // ── Non-PDF Viewers ───────────────────────────────────────────────────────

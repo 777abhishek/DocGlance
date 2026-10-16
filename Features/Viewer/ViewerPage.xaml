@@ -5,7 +5,6 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:models="using:DocGlance.Core.Models"
     xmlns:components="using:DocGlance.Features.Viewer.Components"
-    xmlns:pdf="using:DocGlance.Features.Viewer.Formats.Pdf"
     Background="Transparent"
 >
 
@@ -317,7 +316,9 @@
             <Grid Grid.Column="1" Background="Transparent"
                   HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
 
-                <pdf:PdfViewer x:Name="PdfViewerControl"/>
+                <ContentControl x:Name="PdfViewerHost"
+                    HorizontalContentAlignment="Stretch"
+                    VerticalContentAlignment="Stretch"/>
 
                 <ContentControl
                     x:Name="UnsupportedFileMessage"

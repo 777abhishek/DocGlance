@@ -5,6 +5,8 @@
     HorizontalAlignment="Stretch"
     VerticalAlignment="Stretch">
     <ScrollViewer x:Name="DocumentScrollViewer"
+        HorizontalAlignment="Stretch"
+        VerticalAlignment="Stretch"
         HorizontalScrollBarVisibility="Auto"
         VerticalScrollBarVisibility="Auto"
         ZoomMode="Enabled"

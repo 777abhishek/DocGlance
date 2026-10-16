@@ -5,6 +5,8 @@ using DocGlance.Core.Models;
 using DocGlance.Rendering.Docx;
 using DocGlance.Rendering.Pdf;
 using DocGlance.Features.Viewer.Components;
+using DocGlance.Features.Viewer.Contracts;
+using DocGlance.Infrastructure.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -19,7 +21,6 @@ public sealed partial class ViewerPage
 
     // Guard: prevents ThumbnailList.SelectedIndex assignment from re-firing ItemClick
     private bool _suppressThumbnailSync;
-    private IReadOnlyList<PdfTextAnnotation> _pdfAnnotations = Array.Empty<PdfTextAnnotation>();
 
     private void SetOutlineItems(IReadOnlyList<OutlineItem> items)
     {
@@ -39,7 +40,7 @@ public sealed partial class ViewerPage
 
     private void SetPdfAnnotations(IReadOnlyList<PdfTextAnnotation> annotations)
     {
-        _pdfAnnotations = annotations;
+        PdfViewerControl.SetAnnotations(annotations);
         NotesList.ItemsSource = annotations
             .Where(annotation => annotation.Kind == PdfTextAnnotationKind.Note)
             .Select(annotation => new PdfNoteListItem(annotation))
@@ -255,7 +256,9 @@ public sealed partial class ViewerPage
         if (_pdfState != null)
         {
             EnsurePdfTextPageMap(index);
-            _ = PrefetchThumbnailsAroundAsync(index, _pdfState, CancellationToken.None);
+            PdfViewerControl.PrefetchThumbnailsAroundAsync(
+                index, SidebarCard.Visibility == Visibility.Visible, CancellationToken.None)
+                .SafeFireAndForget("PdfThumbnailPrefetch");
         }
 
         SyncThumbnailSelection(index);
@@ -420,7 +423,12 @@ public sealed partial class ViewerPage
     {
         if (args.InvokedItem is TreeViewNode node &&
             node.Content is OutlineNodeContent c && c.Item.Page > 0)
-            GoToPage(c.Item.Page);
+        {
+            if (_activeViewer is ISupportsOutline outlineViewer)
+                outlineViewer.NavigateTo(c.Item);
+            else
+                GoToPage(c.Item.Page);
+        }
     }
 
     // ── Bookmark list ─────────────────────────────────────────────────────────
