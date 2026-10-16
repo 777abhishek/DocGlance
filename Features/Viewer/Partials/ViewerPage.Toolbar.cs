@@ -51,18 +51,15 @@ public sealed partial class ViewerPage
             Toolbar.SetSelectedPdfTool(null);
             return;
         }
-        _activePdfAnnotationTool = tool;
-        _pdfMarkupToolActive = tool == PdfAnnotationTool.Markup;
+        PdfViewerControl.SetAnnotationTool(tool);
         if (tool != PdfAnnotationTool.Markup)
             ClearPdfTextSelection();
     }
 
     private void Toolbar_MarkupSettingsChanged(object? sender, EventArgs e)
     {
-        _pdfMarkupColorArgb = Toolbar.MarkupColorArgb;
-        _pdfMarkupOpacity = Toolbar.MarkupOpacity;
-        _pdfMarkupKind = (PdfTextAnnotationKind)Math.Min(
-            Toolbar.MarkupKind, (uint)PdfTextAnnotationKind.Strikeout);
+        PdfViewerControl.SetMarkupSettings(
+            Toolbar.MarkupColorArgb, Toolbar.MarkupOpacity, Toolbar.MarkupKind);
     }
 
     private void Toolbar_UndoAnnotationRequested(object? sender, EventArgs e) =>

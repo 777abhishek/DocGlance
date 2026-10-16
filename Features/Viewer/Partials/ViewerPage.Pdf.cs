@@ -95,8 +95,6 @@ public sealed partial class ViewerPage
         _cts = new CancellationTokenSource();
         var ct = _cts.Token;
 
-        // Clean up old viewport rendering
-        CleanupViewportRendering();
         DocumentScrollViewer.ViewChanged -= OnPptxViewportChanged;
         DocumentScrollViewer.ViewChanged -= OnDocxViewportChanged;
         ClearPptxCache();

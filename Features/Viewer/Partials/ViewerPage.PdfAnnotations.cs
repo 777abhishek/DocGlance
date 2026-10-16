@@ -25,11 +25,6 @@ namespace DocGlance.Features.Viewer;
 
 public sealed partial class ViewerPage
 {
-    private uint _pdfMarkupColorArgb = 0xFFFFDC28;
-    private float _pdfMarkupOpacity = 0.35f;
-    private PdfTextAnnotationKind _pdfMarkupKind = PdfTextAnnotationKind.Highlight;
-    private bool _pdfMarkupToolActive;
-    private PdfAnnotationTool? _activePdfAnnotationTool;
     private readonly List<(double X, double Y)> _pdfInkPoints = new();
     private readonly List<string> _pdfUndoSnapshots = new();
     private readonly List<string> _pdfRedoSnapshots = new();
@@ -60,10 +55,9 @@ public sealed partial class ViewerPage
 
         try
         {
-            var annotations = await PdfViewerControl.LoadAnnotationsAsync(cancellationToken);
+            await PdfViewerControl.LoadAnnotationsAsync(cancellationToken);
             if (!ReferenceEquals(_pdfState, state))
                 return;
-            SetPdfAnnotations(annotations);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -96,26 +90,25 @@ public sealed partial class ViewerPage
     private async Task AddPdfMarkupAsync(PdfTextAnnotationKind kind)
     {
         PdfDocumentState? state = _pdfState;
-        int page = _pdfSelectionPage;
-        int start = Math.Min(_pdfSelectionAnchor, _pdfSelectionFocus);
-        int end = Math.Max(_pdfSelectionAnchor, _pdfSelectionFocus) + 1;
+        int page = PdfViewerControl.SelectedTextPageIndex;
         IReadOnlyList<PdfSearchRect> rectangles = PdfViewerControl.GetSelectionRects(
-            _pdfSelectionPage, _pdfSelectionAnchor, _pdfSelectionFocus);
-        if (state == null || rectangles.Count == 0 || !HasPdfTextSelection)
+            PdfViewerControl.SelectedTextPageIndex, PdfViewerControl.SelectionAnchor, PdfViewerControl.SelectionFocus);
+        if (state == null || rectangles.Count == 0 || !PdfViewerControl.HasTextSelection)
             return;
 
         try
         {
-            string selectedText = await PdfTextService.GetTextRangeAsync(
-                state, page, start, end, _cts?.Token ?? default);
-            if (selectedText.Length == 0)
+            string? selectedText = await PdfViewerControl.GetSelectedTextAsync(
+                page, PdfViewerControl.SelectionAnchor, PdfViewerControl.SelectionFocus,
+                _cts?.Token ?? default);
+            if (string.IsNullOrEmpty(selectedText))
                 throw new InvalidOperationException("No text was found in the current selection.");
             if (!ReferenceEquals(_pdfState, state))
                 return;
 
-            byte[] updatedPdf = await PdfAnnotationService.AddAsync(
+            byte[] updatedPdf = await PdfViewerControl.AddAnnotationAsync(
                 state, page, kind, rectangles, selectedText,
-                _pdfMarkupColorArgb, _pdfMarkupOpacity, _cts?.Token ?? default);
+                PdfViewerControl.MarkupColorArgb, PdfViewerControl.MarkupOpacity, _cts?.Token ?? default);
             await SaveAndReloadAnnotatedPdfAsync(state, updatedPdf);
         }
         catch (OperationCanceledException) when (_cts?.IsCancellationRequested == true)
@@ -130,10 +123,10 @@ public sealed partial class ViewerPage
     private async Task AddPdfNoteAsync()
     {
         PdfDocumentState? state = _pdfState;
-        int page = _pdfSelectionPage;
+        int page = PdfViewerControl.SelectedTextPageIndex;
         IReadOnlyList<PdfSearchRect> rectangles = PdfViewerControl.GetSelectionRects(
-            _pdfSelectionPage, _pdfSelectionAnchor, _pdfSelectionFocus);
-        if (state == null || rectangles.Count == 0 || !HasPdfTextSelection)
+            PdfViewerControl.SelectedTextPageIndex, PdfViewerControl.SelectionAnchor, PdfViewerControl.SelectionFocus);
+        if (state == null || rectangles.Count == 0 || !PdfViewerControl.HasTextSelection)
             return;
 
         var noteInput = new TextBox
@@ -163,9 +156,9 @@ public sealed partial class ViewerPage
 
         try
         {
-            byte[] updatedPdf = await PdfAnnotationService.AddAsync(
+            byte[] updatedPdf = await PdfViewerControl.AddAnnotationAsync(
                 state, page, PdfTextAnnotationKind.Note, rectangles,
-                noteInput.Text.Trim(), _pdfMarkupColorArgb, _pdfMarkupOpacity,
+                noteInput.Text.Trim(), PdfViewerControl.MarkupColorArgb, PdfViewerControl.MarkupOpacity,
                 _cts?.Token ?? default);
             await SaveAndReloadAnnotatedPdfAsync(state, updatedPdf);
         }
@@ -208,10 +201,10 @@ public sealed partial class ViewerPage
                 return;
             try
             {
-                byte[] updatedPdf = await PdfAnnotationService.AddAsync(
+                byte[] updatedPdf = await PdfViewerControl.AddAnnotationAsync(
                     state, page, PdfTextAnnotationKind.Note,
                     new[] { new PdfSearchRect(x, y, 1, 1) },
-                    noteInput.Text.Trim(), _pdfMarkupColorArgb, _pdfMarkupOpacity,
+                    noteInput.Text.Trim(), PdfViewerControl.MarkupColorArgb, PdfViewerControl.MarkupOpacity,
                     _cts?.Token ?? default);
                 await SaveAndReloadAnnotatedPdfAsync(state, updatedPdf);
             }
@@ -254,10 +247,10 @@ public sealed partial class ViewerPage
                 return;
             try
             {
-                byte[] updatedPdf = await PdfAnnotationService.AddAsync(
+                byte[] updatedPdf = await PdfViewerControl.AddAnnotationAsync(
                     state, page, PdfTextAnnotationKind.FreeText,
                     new[] { new PdfSearchRect(x, y, 180, 48) },
-                    textInput.Text.Trim(), _pdfMarkupColorArgb, 1,
+                    textInput.Text.Trim(), PdfViewerControl.MarkupColorArgb, 1,
                     _cts?.Token ?? default);
                 await SaveAndReloadAnnotatedPdfAsync(state, updatedPdf);
             }
@@ -334,9 +327,8 @@ public sealed partial class ViewerPage
                 imageWidth = Math.Min(imageWidth, imageHeight * pixelWidth / pixelHeight);
                 x = Math.Clamp(x, 0, Math.Max(0, pageWidth - imageWidth));
                 y = Math.Clamp(y, 0, Math.Max(0, pageHeight - imageHeight));
-                byte[] updatedPdf = await PdfAnnotationService.AddImageAsync(
-                    state,
-                    page,
+                byte[] updatedPdf = await PdfViewerControl.AddImageAnnotationAsync(
+                    state, page,
                     new PdfSearchRect(x, y, imageWidth, imageHeight),
                     jpegBytes,
                     pixelWidth,
@@ -359,15 +351,15 @@ public sealed partial class ViewerPage
             _pdfInkPoints.Clear();
             _pdfInkPoints.Add(ToPdfTextPoint(page, point));
             PdfViewportCanvas.CapturePointer(pointer);
-            if (_activePdfAnnotationTool is PdfAnnotationTool.Pen or PdfAnnotationTool.Signature)
+            if (PdfViewerControl.ActiveAnnotationTool is PdfAnnotationTool.Pen or PdfAnnotationTool.Signature)
             {
                 _pdfInkPreview = new Polyline
                 {
                     Stroke = new SolidColorBrush(Color.FromArgb(
-                        (byte)Math.Round(_pdfMarkupOpacity * 255),
-                        (byte)(_pdfMarkupColorArgb >> 16),
-                        (byte)(_pdfMarkupColorArgb >> 8),
-                        (byte)_pdfMarkupColorArgb)),
+                        (byte)Math.Round(PdfViewerControl.MarkupOpacity * 255),
+                        (byte)(PdfViewerControl.MarkupColorArgb >> 16),
+                        (byte)(PdfViewerControl.MarkupColorArgb >> 8),
+                        (byte)PdfViewerControl.MarkupColorArgb)),
                     StrokeThickness = PdfPenWidthPt * PtToLp,
                     StrokeLineJoin = PenLineJoin.Round,
                     StrokeStartLineCap = PenLineCap.Round,
@@ -384,7 +376,7 @@ public sealed partial class ViewerPage
             if (_pdfInkPointer == null || _pdfInkPage < 0)
                 return;
 
-            if (_activePdfAnnotationTool is PdfAnnotationTool.Pen or PdfAnnotationTool.Signature)
+            if (PdfViewerControl.ActiveAnnotationTool is PdfAnnotationTool.Pen or PdfAnnotationTool.Signature)
             {
                 var previous = _pdfInkPreview?.Points.LastOrDefault() ?? point;
                 if (Math.Abs(point.X - previous.X) + Math.Abs(point.Y - previous.Y) < 1.5)
@@ -399,7 +391,7 @@ public sealed partial class ViewerPage
             Pointer? pointer = _pdfInkPointer;
             int page = _pdfInkPage;
             bool shouldPersist = !cancelled && _pdfInkPoints.Count > 0;
-            bool erase = _activePdfAnnotationTool == PdfAnnotationTool.Eraser;
+            bool erase = PdfViewerControl.ActiveAnnotationTool == PdfAnnotationTool.Eraser;
             var points = _pdfInkPoints.ToArray();
             _pdfInkPointer = null;
             _pdfInkPage = -1;
@@ -428,8 +420,8 @@ public sealed partial class ViewerPage
 
             try
             {
-                byte[] updatedPdf = await PdfAnnotationService.AddInkAsync(
-                    state, page, points, _pdfMarkupColorArgb, _pdfMarkupOpacity,
+                byte[] updatedPdf = await PdfViewerControl.AddInkAnnotationAsync(
+                    state, page, points, PdfViewerControl.MarkupColorArgb, PdfViewerControl.MarkupOpacity,
                     PdfPenWidthPt, _cts?.Token ?? default);
                 await SaveAndReloadAnnotatedPdfAsync(state, updatedPdf);
             }
@@ -459,11 +451,11 @@ public sealed partial class ViewerPage
 
             try
             {
-                int count = await PdfAnnotationService.CountRemovableAsync(
+                int count = await PdfViewerControl.CountRemovableAnnotationsAsync(
                     state, page, hitRegions, _cts?.Token ?? default);
                 if (count == 0 || !ReferenceEquals(_pdfState, state))
                     return;
-                byte[] updatedPdf = await PdfAnnotationService.DeleteAsync(
+                byte[] updatedPdf = await PdfViewerControl.DeleteAnnotationsAsync(
                     state, page, hitRegions, _cts?.Token ?? default);
                 await SaveAndReloadAnnotatedPdfAsync(state, updatedPdf);
             }
@@ -478,15 +470,15 @@ public sealed partial class ViewerPage
     private async Task DeletePdfAnnotationsAsync()
     {
         PdfDocumentState? state = _pdfState;
-        int page = _pdfSelectionPage;
+        int page = PdfViewerControl.SelectedTextPageIndex;
         IReadOnlyList<PdfSearchRect> rectangles = PdfViewerControl.GetSelectionRects(
-            _pdfSelectionPage, _pdfSelectionAnchor, _pdfSelectionFocus);
-        if (state == null || rectangles.Count == 0 || !HasPdfTextSelection)
+            PdfViewerControl.SelectedTextPageIndex, PdfViewerControl.SelectionAnchor, PdfViewerControl.SelectionFocus);
+        if (state == null || rectangles.Count == 0 || !PdfViewerControl.HasTextSelection)
             return;
 
         try
         {
-            byte[] updatedPdf = await PdfAnnotationService.DeleteAsync(
+            byte[] updatedPdf = await PdfViewerControl.DeleteAnnotationsAsync(
                 state, page, rectangles, _cts?.Token ?? default);
             await SaveAndReloadAnnotatedPdfAsync(state, updatedPdf);
         }

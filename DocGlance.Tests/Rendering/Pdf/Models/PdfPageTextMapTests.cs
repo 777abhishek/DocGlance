@@ -29,6 +29,22 @@ public sealed class PdfPageTextMapTests
     }
 
     [Fact]
+    public void HitTest_AllowsSelectionEndpointToReachShorterNextLine()
+    {
+        var map = new PdfPageTextMap(0, new[]
+        {
+            new PdfSearchRect(10, 10, 10, 10),
+            new PdfSearchRect(22, 10, 10, 10),
+            new PdfSearchRect(34, 10, 10, 10),
+            new PdfSearchRect(10, 24, 10, 10),
+            new PdfSearchRect(22, 24, 10, 10),
+        });
+
+        map.HitTest(40, 25).Should().Be(-1);
+        map.HitTest(40, 25, allowDistantHorizontalHit: true).Should().Be(4);
+    }
+
+    [Fact]
     public void GetSelectionRects_MergesGlyphsByLineAndSeparatesWrappedLines()
     {
         var map = new PdfPageTextMap(0, new[]

@@ -90,7 +90,7 @@ public sealed partial class ViewerPage
             return;
 
         Point point = e.GetCurrentPoint(PdfViewportCanvas).Position;
-        if (TryGetOfficeTextPosition(point, out OfficeTextPosition position))
+        if (TryGetOfficeTextPosition(point, out OfficeTextPosition position, extendSelection: true))
         {
             _officeSelectionFocus = position;
             UpdateOfficeDragOverlay();
@@ -106,7 +106,7 @@ public sealed partial class ViewerPage
             element.ReleasePointerCapture(e.Pointer);
 
         Point point = e.GetCurrentPoint(PdfViewportCanvas).Position;
-        if (TryGetOfficeTextPosition(point, out OfficeTextPosition position))
+        if (TryGetOfficeTextPosition(point, out OfficeTextPosition position, extendSelection: true))
             _officeSelectionFocus = position;
 
         _isSelectingOfficeText = false;
@@ -120,7 +120,10 @@ public sealed partial class ViewerPage
             _isSelectingOfficeText = false;
     }
 
-    private bool TryGetOfficeTextPosition(Point canvasPoint, out OfficeTextPosition position)
+    private bool TryGetOfficeTextPosition(
+        Point canvasPoint,
+        out OfficeTextPosition position,
+        bool extendSelection = false)
     {
         const double PtToLp = 96.0 / 72.0;
 
@@ -153,7 +156,10 @@ public sealed partial class ViewerPage
             int slideIndex = Math.Clamp((int)Math.Floor((canvasPoint.Y - 20) / stride), 0, _pptxDocument.SlideCount - 1);
             double slideTop = 20 + slideIndex * stride;
             var map = GetPptxTextMap(slideIndex);
-            int offset = map.HitTest(canvasPoint.X / PtToLp, (canvasPoint.Y - slideTop) / PtToLp);
+            int offset = map.HitTest(
+                canvasPoint.X / PtToLp,
+                (canvasPoint.Y - slideTop) / PtToLp,
+                allowDistantHorizontalHit: extendSelection);
             if (offset < 0)
             {
                 position = default;
@@ -287,6 +293,7 @@ public sealed partial class ViewerPage
 
             ClearOfficeSelection();
             var text = new StringBuilder();
+            int selectedRectangles = 0;
             for (int page = start.PageIndex; page <= end.PageIndex; page++)
             {
                 int offsetCount = _docxDocument != null
@@ -309,18 +316,30 @@ public sealed partial class ViewerPage
                 if (_docxDocument != null)
                 {
                     foreach (var rect in _docxDocument.GetSelectionRects(page, rangeStart, rangeEnd))
+                    {
+                        selectedRectangles++;
                         AddDocxSelectionOverlay(rect);
+                    }
                 }
                 else
                 {
                     foreach (var rect in GetPptxTextMap(page).GetSelectionRects(rangeStart, rangeEnd))
+                    {
+                        selectedRectangles++;
                         AddPptxSelectionOverlay(page, rect);
+                    }
                 }
             }
 
             _selectedText = text.ToString();
             if (!string.IsNullOrEmpty(_selectedText))
+            {
+                Logger.Log(
+                    $"[OfficeSelection] Copied start={start.PageIndex}:{start.Offset}, end={end.PageIndex}:{end.Offset}, " +
+                    $"selectionRects={selectedRectangles}, copiedLines={_selectedText.Count(character => character == '\n') + 1}, " +
+                    $"chars={_selectedText.Length}");
                 CopyOfficeTextToClipboard();
+            }
         }
         catch (Exception ex)
         {

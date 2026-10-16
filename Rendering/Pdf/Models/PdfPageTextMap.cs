@@ -19,10 +19,14 @@ public sealed class PdfPageTextMap
             _glyphRects[i] = glyphRects[i];
     }
 
-    public int HitTest(double x, double y, double tolerance = 6)
+    public int HitTest(
+        double x,
+        double y,
+        double tolerance = 6,
+        bool allowDistantHorizontalHit = false)
     {
-        int nearest = -1;
-        double nearestDistance = double.MaxValue;
+        int nearestVerticalGlyph = -1;
+        double nearestVerticalDistance = double.MaxValue;
 
         for (int i = 0; i < _glyphRects.Length; i++)
         {
@@ -30,23 +34,43 @@ public sealed class PdfPageTextMap
             if (rect.Width <= 0 || rect.Height <= 0)
                 continue;
 
-            double dx = x < rect.X ? rect.X - x :
-                x > rect.X + rect.Width ? x - (rect.X + rect.Width) : 0;
             double dy = y < rect.Y ? rect.Y - y :
                 y > rect.Y + rect.Height ? y - (rect.Y + rect.Height) : 0;
-
-            if (dx == 0 && dy == 0)
-                return i;
-
-            double distance = Math.Max(dx, dy);
-            if (distance <= tolerance && distance < nearestDistance)
+            if (dy < nearestVerticalDistance)
             {
-                nearest = i;
-                nearestDistance = distance;
+                nearestVerticalGlyph = i;
+                nearestVerticalDistance = dy;
             }
         }
 
-        return nearest;
+        if (nearestVerticalGlyph < 0)
+            return -1;
+
+        PdfSearchRect nearestLine = _glyphRects[nearestVerticalGlyph];
+        int nearest = -1;
+        double nearestHorizontalDistance = double.MaxValue;
+        for (int i = 0; i < _glyphRects.Length; i++)
+        {
+            var rect = _glyphRects[i];
+            if (rect.Width <= 0 || rect.Height <= 0 ||
+                !VerticallyOverlaps(nearestLine, rect))
+                continue;
+
+            double dx = x < rect.X ? rect.X - x :
+                x > rect.X + rect.Width ? x - (rect.X + rect.Width) : 0;
+            if (dx < nearestHorizontalDistance)
+            {
+                nearest = i;
+                nearestHorizontalDistance = dx;
+            }
+        }
+
+        if (allowDistantHorizontalHit && nearestVerticalDistance <= tolerance)
+            return nearest;
+
+        return Math.Max(nearestHorizontalDistance, nearestVerticalDistance) <= tolerance
+            ? nearest
+            : -1;
     }
 
     /// <summary>Returns merged per-line rectangles for a half-open glyph range.</summary>

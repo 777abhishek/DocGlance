@@ -41,6 +41,11 @@ public sealed partial class ViewerPage
     private void SetPdfAnnotations(IReadOnlyList<PdfTextAnnotation> annotations)
     {
         PdfViewerControl.SetAnnotations(annotations);
+    }
+
+    private void UpdatePdfNoteList()
+    {
+        IReadOnlyList<PdfTextAnnotation> annotations = PdfViewerControl.Annotations;
         NotesList.ItemsSource = annotations
             .Where(annotation => annotation.Kind == PdfTextAnnotationKind.Note)
             .Select(annotation => new PdfNoteListItem(annotation))

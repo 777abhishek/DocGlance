@@ -573,11 +573,29 @@ pub extern "C" fn wc_hit_test(
             return false;
         }
         
-        let Some(pos) = doc.layout.hit(page_index, x as f32, y as f32, StoryRef::Body) else {
+        let page = &doc.layout.pages[page_index];
+        let pos = wordcraft_layout::hit::page_lines(page, StoryRef::Body)
+            .into_iter()
+            .min_by(|left, right| {
+                let left_distance =
+                    line_hit_distance(left.top, left.bottom, left.left, left.right, x, y);
+                let right_distance =
+                    line_hit_distance(right.top, right.bottom, right.left, right.right, x, y);
+                left_distance
+                    .0
+                    .total_cmp(&right_distance.0)
+                    .then_with(|| left_distance.1.total_cmp(&right_distance.1))
+            })
+            .map(|line| Pos {
+                story: line.story,
+                path: line.path.clone(),
+                off: line.para.off_at_x(line.li, x as f32 - line.x),
+            })
+            .or_else(|| doc.layout.hit(page_index, x as f32, y as f32, StoryRef::Body));
+        let Some(pos) = pos else {
             return false;
         };
 
-        let page = &doc.layout.pages[page_index];
         let mut current_offset = 0u32;
         for item in &page.items {
             if let Placed::Lines { story, path, para, l0, l1, .. } = item {
@@ -860,6 +878,31 @@ pub extern "C" fn wc_get_text_range(
     })
 }
 
+fn line_hit_distance(
+    top: f32,
+    bottom: f32,
+    left: f32,
+    right: f32,
+    x: f64,
+    y: f64,
+) -> (f64, f64) {
+    let vertical = if y < top as f64 {
+        top as f64 - y
+    } else if y > bottom as f64 {
+        y - bottom as f64
+    } else {
+        0.0
+    };
+    let horizontal = if x < left as f64 {
+        left as f64 - x
+    } else if x > right as f64 {
+        x - right as f64
+    } else {
+        0.0
+    };
+    (vertical, horizontal)
+}
+
 #[cfg(test)]
 mod text_selection_tests {
     use super::*;
@@ -878,6 +921,14 @@ mod text_selection_tests {
         let mut pos = WcTextPosition::null();
         let result = wc_hit_test(std::ptr::null(), 0, 0.0, 0.0, &mut pos);
         assert!(!result);
+    }
+
+    #[test]
+    fn hit_test_prefers_nearest_line_over_horizontal_proximity() {
+        let first_line = line_hit_distance(10.0, 20.0, 70.0, 220.0, 80.0, 25.0);
+        let shorter_second_line = line_hit_distance(24.0, 34.0, 20.0, 50.0, 80.0, 25.0);
+
+        assert!(shorter_second_line < first_line);
     }
 
     #[test]

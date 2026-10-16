@@ -81,7 +81,6 @@ public sealed partial class ViewerPage : Page
     internal const double LpToPt = 72.0 / 96.0;
 
     private void InitializeViewportRendering() => PdfViewerControl.InitializeViewportRendering();
-    private void CleanupViewportRendering() => PdfViewerControl.CleanupViewportRendering();
     private void UpdateCanvasSize() => PdfViewerControl.UpdateCanvasSize();
     private Task RenderPagesAsync() => PdfViewerControl.RenderPagesAsync();
     private (double W, double H) GetRotatedPageSize(int pageIndex) =>
@@ -107,6 +106,7 @@ public sealed partial class ViewerPage : Page
         };
         PdfViewerControl.PageNavigationRequested += (_, page) => UpdateCurrentPage(page);
         PdfViewerControl.OutlineNavigationRequested += (_, page) => GoToPage(page);
+        PdfViewerControl.AnnotationsChanged += (_, _) => UpdatePdfNoteList();
         PdfViewerControl.PageChanged += (_, page) => UpdateCurrentPage(page);
         PdfViewerControl.TextPageMapLoaded += (_, pageIndex) =>
         {
@@ -268,7 +268,6 @@ public sealed partial class ViewerPage : Page
     protected override void OnNavigatedFrom(NavigationEventArgs e)
     {
         base.OnNavigatedFrom(e);
-        CleanupViewportRendering();
         CancelLoad();
     }
 
@@ -283,7 +282,6 @@ public sealed partial class ViewerPage : Page
         // Release every native document this page owns. Without this, closing a tab
         // leaked the Rust-side document (whole file buffer + renderer + font caches)
         // until GC — the reported "memory grows when opening documents" symptom.
-        CleanupViewportRendering();
         _ = TextViewerControl.CleanupAsync();
         ClearPptxCache();
         ClearDocxCache();

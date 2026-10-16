@@ -30,6 +30,7 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
     private int _activeSearchIndex = -1;
     private IReadOnlyList<PdfTextAnnotation> _annotations = Array.Empty<PdfTextAnnotation>();
     private readonly ObservableCollection<PageThumbnailItem> _thumbnails = new();
+    private readonly object _thumbnailPrefetchSync = new();
     private CancellationTokenSource? _thumbnailPrefetchCts;
     private Task? _thumbnailPrefetchTask;
     private IReadOnlyList<OutlineItem> _outline = Array.Empty<OutlineItem>();
@@ -40,6 +41,8 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
     private int _textMapGeneration;
     private const int TextMapCacheCapacity = 12;
     private PdfDocumentState? _documentState;
+    private string? _selectedTextCache;
+    private (PdfDocumentState State, int Page, int Start, int End, int Generation)? _selectedTextCacheKey;
 
     public PdfViewer()
     {
@@ -58,10 +61,16 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
     public event EventHandler<double>? ZoomChanged;
     public event EventHandler<int>? PageNavigationRequested;
     public event EventHandler<int>? OutlineNavigationRequested;
+    internal event EventHandler? AnnotationsChanged;
     internal event EventHandler<int>? TextPageMapLoaded;
     public double CurrentZoom => _currentZoom;
     public FitMode CurrentFitMode => _currentFitMode;
     public bool MatchCase { get; set; }
+    internal PdfAnnotationTool? ActiveAnnotationTool { get; private set; }
+    internal uint MarkupColorArgb { get; private set; } = 0xFFFFDC28;
+    internal float MarkupOpacity { get; private set; } = 0.35f;
+    internal PdfTextAnnotationKind MarkupKind { get; private set; } = PdfTextAnnotationKind.Highlight;
+    internal bool IsMarkupToolActive => ActiveAnnotationTool == PdfAnnotationTool.Markup;
     internal double PdfRotation { get; set; }
     internal PdfViewportState? ViewportState { get; set; }
 
@@ -77,7 +86,21 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
             ResetTextPageMaps();
         }
     }
-    internal int SelectionPageIndex { get; set; } = -1;
+    internal int SelectedTextPageIndex { get; private set; } = -1;
+    internal int SelectionAnchor { get; private set; } = -1;
+    internal int SelectionFocus { get; private set; } = -1;
+    internal bool HasTextSelection =>
+        SelectedTextPageIndex >= 0 && SelectionAnchor >= 0 && SelectionFocus >= 0;
+    internal void UpdateTextSelectionRange(int pageIndex, int anchor, int focus)
+    {
+        SelectedTextPageIndex = pageIndex;
+        SelectionAnchor = anchor;
+        SelectionFocus = focus;
+        _selectedTextCache = null;
+        _selectedTextCacheKey = null;
+    }
+
+    internal void ClearTextSelectionRange() => UpdateTextSelectionRange(-1, -1, -1);
 
     internal void EnsureTextPageMap(int pageIndex)
     {
@@ -118,12 +141,21 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
             return null;
 
         int generation = state.Generation;
+        var key = (state, pageIndex, start, end, generation);
+        if (_selectedTextCacheKey == key)
+            return _selectedTextCache;
+
         string text = await PdfTextService.GetTextRangeAsync(
             state, pageIndex, start, end, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
-        if (!ReferenceEquals(DocumentState, state) || state.Generation != generation)
+        if (!ReferenceEquals(DocumentState, state) || state.Generation != generation ||
+            !HasTextSelection || SelectedTextPageIndex != pageIndex ||
+            Math.Min(SelectionAnchor, SelectionFocus) != start ||
+            Math.Max(SelectionAnchor, SelectionFocus) + 1 != end)
             return null;
 
+        _selectedTextCache = text;
+        _selectedTextCacheKey = key;
         return text;
     }
 
@@ -168,7 +200,7 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
         while (_textPageMaps.Count > TextMapCacheCapacity)
         {
             int pageToRemove = _textPageMaps.Keys
-                .Where(page => page != currentPage && page != SelectionPageIndex)
+                .Where(page => page != currentPage && page != SelectedTextPageIndex)
                 .OrderByDescending(page => Math.Abs(page - currentPage))
                 .FirstOrDefault(-1);
             if (pageToRemove < 0)
@@ -187,13 +219,24 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
         _textMapGeneration++;
         _textPageMaps.Clear();
         _textPageMapsLoading.Clear();
-        SelectionPageIndex = -1;
+        ClearTextSelectionRange();
     }
 
     internal void SetAnnotations(IReadOnlyList<PdfTextAnnotation> annotations)
     {
         _annotations = annotations ?? throw new ArgumentNullException(nameof(annotations));
         DrawAnnotationOverlays();
+        AnnotationsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    internal void SetAnnotationTool(PdfAnnotationTool? tool) => ActiveAnnotationTool = tool;
+
+    internal void SetMarkupSettings(uint colorArgb, float opacity, uint kind)
+    {
+        MarkupColorArgb = colorArgb;
+        MarkupOpacity = opacity;
+        MarkupKind = (PdfTextAnnotationKind)Math.Min(
+            kind, (uint)PdfTextAnnotationKind.Strikeout);
     }
 
     internal void SetTextSelection(int pageIndex, IReadOnlyList<PdfSearchRect> rectangles)
@@ -333,6 +376,7 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
     public FrameworkElement Control => this;
     public IReadOnlyList<PageThumbnailItem> Thumbnails => _thumbnails;
     public IReadOnlyList<OutlineItem> Outline => _outline;
+    internal IReadOnlyList<PdfTextAnnotation> Annotations => _annotations;
 
     public void NavigateTo(OutlineItem item)
     {
@@ -367,7 +411,68 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
         if (!ReferenceEquals(DocumentState, state))
             throw new OperationCanceledException("The PDF document changed while loading annotations.");
 
+        SetAnnotations(annotations);
         return annotations;
+    }
+
+    internal Task<byte[]> AddAnnotationAsync(
+        PdfDocumentState expectedState,
+        int pageIndex,
+        PdfTextAnnotationKind kind,
+        IReadOnlyList<PdfSearchRect> rectangles,
+        string contents,
+        uint colorArgb,
+        float opacity,
+        CancellationToken cancellationToken) =>
+        PdfAnnotationService.AddAsync(
+            RequireDocumentState(expectedState), pageIndex, kind, rectangles, contents,
+            colorArgb, opacity, cancellationToken);
+
+    internal Task<byte[]> AddImageAnnotationAsync(
+        PdfDocumentState expectedState,
+        int pageIndex,
+        PdfSearchRect placement,
+        byte[] jpegBytes,
+        uint pixelWidth,
+        uint pixelHeight,
+        CancellationToken cancellationToken) =>
+        PdfAnnotationService.AddImageAsync(
+            RequireDocumentState(expectedState), pageIndex, placement, jpegBytes,
+            pixelWidth, pixelHeight, cancellationToken);
+
+    internal Task<byte[]> AddInkAnnotationAsync(
+        PdfDocumentState expectedState,
+        int pageIndex,
+        IReadOnlyList<(double X, double Y)> points,
+        uint colorArgb,
+        float opacity,
+        float width,
+        CancellationToken cancellationToken) =>
+        PdfAnnotationService.AddInkAsync(
+            RequireDocumentState(expectedState), pageIndex, points, colorArgb, opacity, width, cancellationToken);
+
+    internal Task<int> CountRemovableAnnotationsAsync(
+        PdfDocumentState expectedState,
+        int pageIndex,
+        IReadOnlyList<PdfSearchRect> rectangles,
+        CancellationToken cancellationToken) =>
+        PdfAnnotationService.CountRemovableAsync(
+            RequireDocumentState(expectedState), pageIndex, rectangles, cancellationToken);
+
+    internal Task<byte[]> DeleteAnnotationsAsync(
+        PdfDocumentState expectedState,
+        int pageIndex,
+        IReadOnlyList<PdfSearchRect> rectangles,
+        CancellationToken cancellationToken) =>
+        PdfAnnotationService.DeleteAsync(
+            RequireDocumentState(expectedState), pageIndex, rectangles, cancellationToken);
+
+    private PdfDocumentState RequireDocumentState(PdfDocumentState expectedState)
+    {
+        ArgumentNullException.ThrowIfNull(expectedState);
+        if (!ReferenceEquals(DocumentState, expectedState))
+            throw new InvalidOperationException("The active PDF document changed before the annotation operation began.");
+        return expectedState;
     }
 
     public void SetZoom(double zoom)
@@ -581,11 +686,15 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
         if (!sidebarVisible || documentState == null)
             return Task.CompletedTask;
 
-        CancelThumbnailPrefetch();
         var prefetchCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        _thumbnailPrefetchCts = prefetchCts;
-        Task task = PrefetchThumbnailsCoreAsync(centerPage, documentState, prefetchCts);
-        _thumbnailPrefetchTask = task;
+        Task task;
+        lock (_thumbnailPrefetchSync)
+        {
+            CancelThumbnailPrefetchLocked();
+            _thumbnailPrefetchCts = prefetchCts;
+            task = PrefetchThumbnailsCoreAsync(centerPage, documentState, prefetchCts);
+            _thumbnailPrefetchTask = task;
+        }
         return task;
     }
 
@@ -631,24 +740,38 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
         }
         finally
         {
-            prefetchCts.Dispose();
+            lock (_thumbnailPrefetchSync)
+            {
+                if (ReferenceEquals(_thumbnailPrefetchCts, prefetchCts))
+                    _thumbnailPrefetchCts = null;
+                prefetchCts.Dispose();
+            }
         }
     }
 
-    private void CancelThumbnailPrefetch()
+    private void CancelThumbnailPrefetchLocked()
     {
-        _thumbnailPrefetchCts?.Cancel();
+        CancellationTokenSource? prefetchCts = _thumbnailPrefetchCts;
         _thumbnailPrefetchCts = null;
+        prefetchCts?.Cancel();
     }
 
     private async Task StopThumbnailPrefetchAsync()
     {
-        Task? prefetchTask = _thumbnailPrefetchTask;
-        CancelThumbnailPrefetch();
+        Task? prefetchTask;
+        lock (_thumbnailPrefetchSync)
+        {
+            prefetchTask = _thumbnailPrefetchTask;
+            CancelThumbnailPrefetchLocked();
+        }
+
         if (prefetchTask != null)
             await prefetchTask;
-        if (ReferenceEquals(_thumbnailPrefetchTask, prefetchTask))
-            _thumbnailPrefetchTask = null;
+        lock (_thumbnailPrefetchSync)
+        {
+            if (ReferenceEquals(_thumbnailPrefetchTask, prefetchTask))
+                _thumbnailPrefetchTask = null;
+        }
     }
 
     internal Task<PdfLoadResult> ReplaceDocumentFromPathAsync(
@@ -670,7 +793,7 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
         CleanupViewportRendering();
         await StopThumbnailPrefetchAsync();
         ResetTextPageMaps();
-        _annotations = Array.Empty<PdfTextAnnotation>();
+        SetAnnotations(Array.Empty<PdfTextAnnotation>());
         _outline = Array.Empty<OutlineItem>();
         _thumbnails.Clear();
         ClearTextSelection();

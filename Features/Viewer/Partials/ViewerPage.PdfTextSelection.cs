@@ -26,11 +26,6 @@ public sealed partial class ViewerPage
 {
     private readonly DispatcherTimer _touchSelectionTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
 
-    private int _pdfSelectionPage = -1;
-    private int _pdfSelectionAnchor = -1;
-    private int _pdfSelectionFocus = -1;
-    private string? _pdfSelectionTextCache;
-    private (PdfDocumentState State, int Page, int Start, int End, int Generation)? _pdfSelectionTextCacheKey;
     private bool _isPdfSelecting;
     private bool _pdfSelectionMoved;
     private bool _touchSelectionRequested;
@@ -46,9 +41,6 @@ public sealed partial class ViewerPage
     private Point _pendingMouseStart;
     private Point _pendingMouseEnd;
     private bool _pendingMouseReleased;
-
-    private bool HasPdfTextSelection =>
-        _pdfSelectionPage >= 0 && _pdfSelectionAnchor >= 0 && _pdfSelectionFocus >= 0;
 
     private void InitializePdfTextSelection()
     {
@@ -67,7 +59,7 @@ public sealed partial class ViewerPage
         };
         copyAccelerator.Invoked += (sender, args) =>
         {
-            if (!HasPdfTextSelection || _pdfState == null)
+            if (!PdfViewerControl.HasTextSelection || _pdfState == null)
                 return;
             _ = CopyPdfTextSelectionAsync();
             args.Handled = true;
@@ -78,36 +70,12 @@ public sealed partial class ViewerPage
     private void EnsurePdfTextPageMap(int pageIndex)
         => PdfViewerControl.EnsureTextPageMap(pageIndex);
 
-    private async Task<string?> GetPdfTextSelectionAsync()
-    {
-        PdfDocumentState? state = _pdfState;
-        int page = _pdfSelectionPage;
-        int start = Math.Min(_pdfSelectionAnchor, _pdfSelectionFocus);
-        int end = Math.Max(_pdfSelectionAnchor, _pdfSelectionFocus) + 1;
-        if (state == null || page < 0 || start < 0 || end <= start)
-            return null;
-
-        int generation = state.Generation;
-        var key = (state, page, start, end, generation);
-        if (_pdfSelectionTextCacheKey == key)
-            return _pdfSelectionTextCache;
-
-        string? text = await PdfViewerControl.GetSelectedTextAsync(
-            page, _pdfSelectionAnchor, _pdfSelectionFocus, _cts?.Token ?? default);
-        if (text == null)
-            return null;
-        if (!ReferenceEquals(_pdfState, state) ||
-            state.Generation != generation ||
-            !HasPdfTextSelection ||
-            _pdfSelectionPage != page ||
-            Math.Min(_pdfSelectionAnchor, _pdfSelectionFocus) != start ||
-            Math.Max(_pdfSelectionAnchor, _pdfSelectionFocus) + 1 != end)
-            return null;
-
-        _pdfSelectionTextCache = text;
-        _pdfSelectionTextCacheKey = key;
-        return text;
-    }
+    private Task<string?> GetPdfTextSelectionAsync() =>
+        PdfViewerControl.GetSelectedTextAsync(
+            PdfViewerControl.SelectedTextPageIndex,
+            PdfViewerControl.SelectionAnchor,
+            PdfViewerControl.SelectionFocus,
+            _cts?.Token ?? default);
 
     private static void CopyPdfTextToClipboard(string text)
     {
@@ -127,13 +95,13 @@ public sealed partial class ViewerPage
         if (page < 0)
             return;
 
-        if (_activePdfAnnotationTool is PdfAnnotationTool.Note or PdfAnnotationTool.Text)
+        if (PdfViewerControl.ActiveAnnotationTool is PdfAnnotationTool.Note or PdfAnnotationTool.Text)
         {
             if (e.Pointer.PointerDeviceType == PointerDeviceType.Touch ||
                 e.GetCurrentPoint(PdfViewportCanvas).Properties.IsLeftButtonPressed)
             {
                 var (x, y) = ToPdfTextPoint(page, point);
-                if (_activePdfAnnotationTool == PdfAnnotationTool.Note)
+                if (PdfViewerControl.ActiveAnnotationTool == PdfAnnotationTool.Note)
                     _ = AddPdfNoteAtAsync(page, x, y);
                 else
                     _ = AddPdfTextAtAsync(page, x, y);
@@ -142,7 +110,7 @@ public sealed partial class ViewerPage
             return;
         }
 
-        if (_activePdfAnnotationTool == PdfAnnotationTool.Image)
+        if (PdfViewerControl.ActiveAnnotationTool == PdfAnnotationTool.Image)
         {
             if (e.Pointer.PointerDeviceType == PointerDeviceType.Touch ||
                 e.GetCurrentPoint(PdfViewportCanvas).Properties.IsLeftButtonPressed)
@@ -154,7 +122,7 @@ public sealed partial class ViewerPage
             return;
         }
 
-        if (_activePdfAnnotationTool is PdfAnnotationTool.Pen or
+        if (PdfViewerControl.ActiveAnnotationTool is PdfAnnotationTool.Pen or
             PdfAnnotationTool.Signature or PdfAnnotationTool.Eraser)
         {
             if (e.Pointer.PointerDeviceType == PointerDeviceType.Touch ||
@@ -376,13 +344,13 @@ public sealed partial class ViewerPage
 
     private bool TryExtendPdfSelection(Point point, int page, PdfPageTextMap map, Pointer pointer)
     {
-        if (!HasPdfTextSelection || page != _pdfSelectionPage)
+        if (!PdfViewerControl.HasTextSelection || page != PdfViewerControl.SelectedTextPageIndex)
             return false;
 
         var (x, y) = ToPdfTextPoint(page, point);
         int hit = map.HitTest(x, y);
-        int start = Math.Min(_pdfSelectionAnchor, _pdfSelectionFocus);
-        int end = Math.Max(_pdfSelectionAnchor, _pdfSelectionFocus);
+        int start = Math.Min(PdfViewerControl.SelectionAnchor, PdfViewerControl.SelectionFocus);
+        int end = Math.Max(PdfViewerControl.SelectionAnchor, PdfViewerControl.SelectionFocus);
         if (hit < 0 || !PdfViewerControl.GetSelectionRects(page, start, end).Any(rect =>
                 x >= rect.X - 6 && x <= rect.X + rect.Width + 6 &&
                 y >= rect.Y - 6 && y <= rect.Y + rect.Height + 6))
@@ -403,10 +371,7 @@ public sealed partial class ViewerPage
         bool capturePointer = true)
     {
         ClearPdfTextSelection();
-        _pdfSelectionPage = page;
-        PdfViewerControl.SelectionPageIndex = page;
-        _pdfSelectionAnchor = anchorOverride ?? glyph;
-        _pdfSelectionFocus = glyph;
+        PdfViewerControl.UpdateTextSelectionRange(page, anchorOverride ?? glyph, glyph);
         _selectionOrigin = point;
         _pdfSelectionMoved = false;
         _activePdfPointer = pointer;
@@ -430,15 +395,17 @@ public sealed partial class ViewerPage
 
     private void UpdatePdfTextSelection(Point point)
     {
-        if (_pdfSelectionPage < 0 ||
-            !PdfViewerControl.TryGetTextPageMap(_pdfSelectionPage, out var map))
+        if (PdfViewerControl.SelectedTextPageIndex < 0 ||
+            !PdfViewerControl.TryGetTextPageMap(PdfViewerControl.SelectedTextPageIndex, out var map))
             return;
 
-        int focus = HitTestPdfText(_pdfSelectionPage, point, map);
+        var (x, y) = ToPdfTextPoint(PdfViewerControl.SelectedTextPageIndex, point);
+        int focus = map.HitTest(x, y, allowDistantHorizontalHit: true);
         if (focus < 0)
             return;
 
-        _pdfSelectionFocus = focus;
+        PdfViewerControl.UpdateTextSelectionRange(
+            PdfViewerControl.SelectedTextPageIndex, PdfViewerControl.SelectionAnchor, focus);
         DrawPdfTextSelection();
     }
 
@@ -472,28 +439,23 @@ public sealed partial class ViewerPage
 
     private void DrawPdfTextSelection()
     {
-        if (_pdfSelectionPage < 0 ||
-            !PdfViewerControl.TryGetTextPageMap(_pdfSelectionPage, out var map))
+        if (PdfViewerControl.SelectedTextPageIndex < 0 ||
+            !PdfViewerControl.TryGetTextPageMap(PdfViewerControl.SelectedTextPageIndex, out var map))
         {
             PdfViewerControl.ClearTextSelection();
             return;
         }
 
-        int start = Math.Min(_pdfSelectionAnchor, _pdfSelectionFocus);
-        int end = Math.Max(_pdfSelectionAnchor, _pdfSelectionFocus) + 1;
+        int start = Math.Min(PdfViewerControl.SelectionAnchor, PdfViewerControl.SelectionFocus);
+        int end = Math.Max(PdfViewerControl.SelectionAnchor, PdfViewerControl.SelectionFocus) + 1;
         PdfViewerControl.SetTextSelection(
-            _pdfSelectionPage,
-            PdfViewerControl.GetSelectionRects(_pdfSelectionPage, start, end - 1));
+            PdfViewerControl.SelectedTextPageIndex,
+            PdfViewerControl.GetSelectionRects(PdfViewerControl.SelectedTextPageIndex, start, end - 1));
     }
 
     private void ClearPdfTextSelection()
     {
-        _pdfSelectionPage = -1;
-        PdfViewerControl.SelectionPageIndex = -1;
-        _pdfSelectionAnchor = -1;
-        _pdfSelectionFocus = -1;
-        _pdfSelectionTextCache = null;
-        _pdfSelectionTextCacheKey = null;
+        PdfViewerControl.ClearTextSelectionRange();
         PdfViewerControl.ClearTextSelection();
     }
 
@@ -518,21 +480,21 @@ public sealed partial class ViewerPage
         }
 
         DrawPdfTextSelection();
-        if (_pdfMarkupToolActive && HasPdfTextSelection)
-            _ = AddPdfMarkupAsync(_pdfMarkupKind);
+        if (PdfViewerControl.IsMarkupToolActive && PdfViewerControl.HasTextSelection)
+            _ = AddPdfMarkupAsync(PdfViewerControl.MarkupKind);
     }
 
     private async void PdfTextCanvas_RightTapped(object sender, RightTappedRoutedEventArgs e)
     {
-        if (!HasPdfTextSelection || _pdfState == null)
+        if (!PdfViewerControl.HasTextSelection || _pdfState == null)
             return;
 
         e.Handled = true;
         PdfDocumentState state = _pdfState;
-        int page = _pdfSelectionPage;
+        int page = PdfViewerControl.SelectedTextPageIndex;
         Point menuPosition = e.GetPosition(PdfViewportCanvas);
         IReadOnlyList<PdfSearchRect> rectangles = PdfViewerControl.GetSelectionRects(
-            page, _pdfSelectionAnchor, _pdfSelectionFocus);
+            page, PdfViewerControl.SelectionAnchor, PdfViewerControl.SelectionFocus);
         if (rectangles.Count == 0)
             return;
 
@@ -554,14 +516,14 @@ public sealed partial class ViewerPage
 
         if (string.IsNullOrWhiteSpace(selectedText) ||
             !ReferenceEquals(_pdfState, state) ||
-            !HasPdfTextSelection ||
-            _pdfSelectionPage != page)
+            !PdfViewerControl.HasTextSelection ||
+            PdfViewerControl.SelectedTextPageIndex != page)
             return;
 
         int deletableCount = 0;
         try
         {
-            deletableCount = await PdfAnnotationService.CountRemovableAsync(
+            deletableCount = await PdfViewerControl.CountRemovableAnnotationsAsync(
                 state, page, rectangles, _cts?.Token ?? default);
         }
         catch (OperationCanceledException) when (_cts?.IsCancellationRequested == true)
@@ -573,8 +535,8 @@ public sealed partial class ViewerPage
             await ShowPdfAnnotationErrorAsync("Could not inspect annotations", ex);
         }
 
-        if (!ReferenceEquals(_pdfState, state) || !HasPdfTextSelection ||
-            _pdfSelectionPage != page)
+        if (!ReferenceEquals(_pdfState, state) || !PdfViewerControl.HasTextSelection ||
+            PdfViewerControl.SelectedTextPageIndex != page)
             return;
 
         var menu = new MenuFlyout();
@@ -619,11 +581,22 @@ public sealed partial class ViewerPage
 
     private async Task CopyPdfTextSelectionAsync()
     {
+        int page = PdfViewerControl.SelectedTextPageIndex;
+        int anchor = PdfViewerControl.SelectionAnchor;
+        int focus = PdfViewerControl.SelectionFocus;
         try
         {
-            string? text = await GetPdfTextSelectionAsync();
+            string? text = await PdfViewerControl.GetSelectedTextAsync(
+                page, anchor, focus, _cts?.Token ?? default);
             if (!string.IsNullOrEmpty(text))
+            {
                 CopyPdfTextToClipboard(text);
+                int selectedLines = PdfViewerControl.GetSelectionRects(page, anchor, focus).Count;
+                int copiedLines = text.Count(character => character == '\n') + 1;
+                Logger.Log(
+                    $"[PDFSelection] Copied page={page + 1}, glyphRange={Math.Min(anchor, focus)}-{Math.Max(anchor, focus) + 1}, " +
+                    $"selectionRects={selectedLines}, copiedLines={copiedLines}, chars={text.Length}");
+            }
         }
         catch (OperationCanceledException) when (_cts?.IsCancellationRequested == true)
         {
