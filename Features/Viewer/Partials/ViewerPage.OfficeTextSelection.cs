@@ -433,13 +433,6 @@ public sealed partial class ViewerPage
         };
         copyItem.Click += (_, _) => CopyOfficeTextToClipboard();
         flyout.Items.Add(copyItem);
-        var translateItem = new MenuFlyoutItem
-        {
-            Text = "Translate selection",
-            Icon = new SymbolIcon(Symbol.Globe),
-        };
-        translateItem.Click += (_, _) => _ = ShowTranslationDialogAsync(_selectedText);
-        flyout.Items.Add(translateItem);
         var highlightItem = new MenuFlyoutItem
         {
             Text = "Highlight",

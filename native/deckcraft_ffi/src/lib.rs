@@ -37,14 +37,19 @@ pub struct DcDocument {
 #[repr(C)]
 pub struct DcImage {
     pub pixels: *mut u8,
-    pub width:  u32,
+    pub width: u32,
     pub height: u32,
-    pub len:    usize,   // == width * height * 4
+    pub len: usize, // == width * height * 4
 }
 
 impl DcImage {
     fn null() -> Self {
-        DcImage { pixels: std::ptr::null_mut(), width: 0, height: 0, len: 0 }
+        DcImage {
+            pixels: std::ptr::null_mut(),
+            width: 0,
+            height: 0,
+            len: 0,
+        }
     }
 }
 
@@ -54,7 +59,7 @@ impl DcImage {
 macro_rules! catch {
     ($fallback:expr, $body:block) => {
         match panic::catch_unwind(panic::AssertUnwindSafe(|| $body)) {
-            Ok(v)  => v,
+            Ok(v) => v,
             Err(_) => $fallback,
         }
     };
@@ -71,42 +76,73 @@ struct SearchRect {
 struct SlideText {
     text: String,
     char_rects: Vec<Option<SearchRect>>,
+    line_break_before: Vec<bool>,
 }
 
-fn extract_slide_search_data(presentation: &deckcraft_model::Presentation, index: usize) -> SlideText {
+fn extract_slide_search_data(
+    presentation: &deckcraft_model::Presentation,
+    index: usize,
+) -> SlideText {
     let placed = deckcraft_render::place_slide(presentation, index);
     let mut text = String::new();
     let mut char_rects = Vec::new();
+    let mut line_break_before = Vec::new();
 
     for text_block in &placed.texts {
+        let mut previous_line = None;
         for run in &text_block.layout.runs {
             for (char_index, ch) in &run.cells {
-                text.push(*ch);
-                let rect = text_block.layout.lines.iter()
-                    .find(|line| line.para == run.para && *char_index >= line.start && *char_index < line.end)
-                    .and_then(|line| {
-                        let (x0, x1) = line.edges.get(*char_index - line.start)?;
-                        let local = deckcraft_geom::Rect::new(*x0, line.top, *x1, line.bottom);
-                        let slide = text_block.transform.transform_rect_bbox(local);
-                        (slide.width() > 0.0 && slide.height() > 0.0).then_some(SearchRect {
-                            x: slide.x0,
-                            y: slide.y0,
-                            width: slide.width(),
-                            height: slide.height(),
-                        })
+                let line = text_block
+                    .layout
+                    .lines
+                    .iter()
+                    .enumerate()
+                    .find(|(_, line)| {
+                        line.para == run.para && *char_index >= line.start && *char_index < line.end
                     });
+                let starts_new_line = line
+                    .map(|(line_index, _)| {
+                        previous_line
+                            .replace(line_index)
+                            .is_some_and(|previous| previous != line_index)
+                    })
+                    .unwrap_or(false);
+                let rect = line.and_then(|(_, line)| {
+                    let (x0, x1) = line.edges.get(*char_index - line.start)?;
+                    let local = deckcraft_geom::Rect::new(*x0, line.top, *x1, line.bottom);
+                    let slide = text_block.transform.transform_rect_bbox(local);
+                    (slide.width() > 0.0 && slide.height() > 0.0).then_some(SearchRect {
+                        x: slide.x0,
+                        y: slide.y0,
+                        width: slide.width(),
+                        height: slide.height(),
+                    })
+                });
+                line_break_before.push(starts_new_line && !text.ends_with('\n'));
+                text.push(*ch);
                 char_rects.push(rect);
             }
         }
         text.push('\n');
         char_rects.push(None);
+        line_break_before.push(false);
     }
 
-    SlideText { text, char_rects }
+    SlideText {
+        text,
+        char_rects,
+        line_break_before,
+    }
 }
 
-fn slide_text<'a>(doc: &'a DcDocument, index: usize) -> Option<std::sync::MutexGuard<'a, Vec<Option<SlideText>>>> {
-    let mut cache = doc.slide_text_cache.lock().unwrap_or_else(|e| e.into_inner());
+fn slide_text<'a>(
+    doc: &'a DcDocument,
+    index: usize,
+) -> Option<std::sync::MutexGuard<'a, Vec<Option<SlideText>>>> {
+    let mut cache = doc
+        .slide_text_cache
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     if index >= cache.len() {
         return None;
     }
@@ -116,11 +152,28 @@ fn slide_text<'a>(doc: &'a DcDocument, index: usize) -> Option<std::sync::MutexG
     Some(cache)
 }
 
-fn text_char_range(text: &str, start: usize, end: usize) -> Option<String> {
+fn text_char_range(
+    text: &str,
+    line_break_before: &[bool],
+    start: usize,
+    end: usize,
+) -> Option<String> {
     if start > end || end > text.chars().count() {
         return None;
     }
-    Some(text.chars().skip(start).take(end - start).collect())
+    Some(text.chars().enumerate().skip(start).take(end - start).fold(
+        String::new(),
+        |mut selected, (index, character)| {
+            if !selected.is_empty()
+                && line_break_before.get(index).copied().unwrap_or(false)
+                && !selected.ends_with('\n')
+            {
+                selected.push('\n');
+            }
+            selected.push(character);
+            selected
+        },
+    ))
 }
 
 fn rgba_to_premul_bgra_inplace(buf: &mut [u8]) {
@@ -169,7 +222,9 @@ fn find_matches(text: &str, query: &str, case_sensitive: bool) -> Vec<(usize, us
     let mut start_pos = 0;
 
     while start_pos < search_text.len() {
-        let Some(relative_pos) = search_text[start_pos..].find(search_query) else { break; };
+        let Some(relative_pos) = search_text[start_pos..].find(search_query) else {
+            break;
+        };
         let actual_pos = start_pos + relative_pos;
         let folded_char_index = search_text[..actual_pos].chars().count();
         if case_sensitive {
@@ -209,7 +264,7 @@ pub extern "C" fn dc_open_pptx(data: *const u8, len: usize) -> *mut DcDocument {
         let bytes = unsafe { slice::from_raw_parts(data, len) };
 
         let presentation = match deckcraft_pptx::import(bytes) {
-            Ok(p)  => p,
+            Ok(p) => p,
             Err(_) => return std::ptr::null_mut(),
         };
 
@@ -227,7 +282,9 @@ pub extern "C" fn dc_open_pptx(data: *const u8, len: usize) -> *mut DcDocument {
 #[no_mangle]
 pub extern "C" fn dc_slide_count(doc: *const DcDocument) -> u32 {
     catch!(0, {
-        if doc.is_null() { return 0; }
+        if doc.is_null() {
+            return 0;
+        }
         let doc = unsafe { &*doc };
         doc.presentation.slides.len() as u32
     })
@@ -237,13 +294,15 @@ pub extern "C" fn dc_slide_count(doc: *const DcDocument) -> u32 {
 /// Standard PowerPoint widescreen = 9144000 EMU = 720 pt wide, 405 pt tall.
 #[no_mangle]
 pub extern "C" fn dc_get_slide_size(
-    doc:       *const DcDocument,
-    _index:    u32,
-    width_pt:  *mut f64,
+    doc: *const DcDocument,
+    _index: u32,
+    width_pt: *mut f64,
     height_pt: *mut f64,
 ) {
     catch!((), {
-        if doc.is_null() || width_pt.is_null() || height_pt.is_null() { return; }
+        if doc.is_null() || width_pt.is_null() || height_pt.is_null() {
+            return;
+        }
         let doc = unsafe { &*doc };
         let pres = &doc.presentation;
 
@@ -252,7 +311,7 @@ pub extern "C" fn dc_get_slide_size(
         let h = pres.slide_size.height as f64;
 
         unsafe {
-            *width_pt  = w;
+            *width_pt = w;
             *height_pt = h;
         }
     });
@@ -268,13 +327,11 @@ pub extern "C" fn dc_get_slide_size(
 /// C# MUST call dc_free_image after copying to a WriteableBitmap.
 /// Returns DcImage::null() on error.
 #[no_mangle]
-pub extern "C" fn dc_render_slide(
-    doc:   *const DcDocument,
-    index: u32,
-    scale: f64,
-) -> DcImage {
+pub extern "C" fn dc_render_slide(doc: *const DcDocument, index: u32, scale: f64) -> DcImage {
     catch!(DcImage::null(), {
-        if doc.is_null() { return DcImage::null(); }
+        if doc.is_null() {
+            return DcImage::null();
+        }
         let doc = unsafe { &*doc };
         let pres = &doc.presentation;
 
@@ -300,7 +357,12 @@ pub extern "C" fn dc_render_slide(
         let ptr = pixels.as_mut_ptr();
         std::mem::forget(pixels);
 
-        DcImage { pixels: ptr, width: w, height: h, len }
+        DcImage {
+            pixels: ptr,
+            width: w,
+            height: h,
+            len,
+        }
     })
 }
 
@@ -308,20 +370,23 @@ pub extern "C" fn dc_render_slide(
 /// Returns the number of bytes written (0 if no title or buffer too small).
 #[no_mangle]
 pub extern "C" fn dc_get_slide_title(
-    doc:     *const DcDocument,
-    index:   u32,
-    buf:     *mut u8,
+    doc: *const DcDocument,
+    index: u32,
+    buf: *mut u8,
     buf_len: usize,
 ) -> usize {
     catch!(0, {
-        if doc.is_null() || buf.is_null() || buf_len == 0 { return 0; }
+        if doc.is_null() || buf.is_null() || buf_len == 0 {
+            return 0;
+        }
         let doc = unsafe { &*doc };
 
         // Use place_slide to extract laid-out text; first text block is usually the title.
         let placed = deckcraft_render::place_slide(&doc.presentation, index as usize);
 
         // Collect text from all runs (cells contain (glyph_index, char) tuples)
-        let title: String = placed.texts
+        let title: String = placed
+            .texts
             .iter()
             .flat_map(|t| t.layout.runs.iter())
             .flat_map(|r| {
@@ -331,11 +396,15 @@ pub extern "C" fn dc_get_slide_title(
             .take(256)
             .collect();
 
-        let bytes  = title.as_bytes();
-        let copy   = bytes.len().min(buf_len);
-        if copy == 0 { return 0; }
+        let bytes = title.as_bytes();
+        let copy = bytes.len().min(buf_len);
+        if copy == 0 {
+            return 0;
+        }
 
-        unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf, copy); }
+        unsafe {
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf, copy);
+        }
         copy
     })
 }
@@ -345,25 +414,37 @@ pub extern "C" fn dc_get_slide_title(
 /// Includes all text shapes, tables, and notes.
 #[no_mangle]
 pub extern "C" fn dc_extract_slide_text(
-    doc:     *const DcDocument,
-    index:   u32,
-    buf:     *mut u8,
+    doc: *const DcDocument,
+    index: u32,
+    buf: *mut u8,
     buf_len: usize,
 ) -> usize {
     catch!(0, {
-        if doc.is_null() || buf.is_null() || buf_len == 0 { return 0; }
+        if doc.is_null() || buf.is_null() || buf_len == 0 {
+            return 0;
+        }
         let doc = unsafe { &*doc };
-        
-        if index as usize >= doc.presentation.slides.len() { return 0; }
 
-        let Some(cache) = slide_text(doc, index as usize) else { return 0; };
-        let Some(slide_text) = cache.get(index as usize).and_then(|s| s.as_ref()) else { return 0; };
+        if index as usize >= doc.presentation.slides.len() {
+            return 0;
+        }
+
+        let Some(cache) = slide_text(doc, index as usize) else {
+            return 0;
+        };
+        let Some(slide_text) = cache.get(index as usize).and_then(|s| s.as_ref()) else {
+            return 0;
+        };
 
         let bytes = slide_text.text.as_bytes();
         let copy = bytes.len().min(buf_len);
-        if copy == 0 { return 0; }
+        if copy == 0 {
+            return 0;
+        }
 
-        unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf, copy); }
+        unsafe {
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf, copy);
+        }
         copy
     })
 }
@@ -372,10 +453,15 @@ pub extern "C" fn dc_extract_slide_text(
 #[no_mangle]
 pub extern "C" fn dc_get_slide_char_count(doc: *const DcDocument, index: u32) -> usize {
     catch!(0, {
-        if doc.is_null() { return 0; }
+        if doc.is_null() {
+            return 0;
+        }
         let doc = unsafe { &*doc };
-        let Some(cache) = slide_text(doc, index as usize) else { return 0; };
-        cache.get(index as usize)
+        let Some(cache) = slide_text(doc, index as usize) else {
+            return 0;
+        };
+        cache
+            .get(index as usize)
             .and_then(|slide| slide.as_ref())
             .map_or(0, |slide| slide.char_rects.len())
     })
@@ -393,9 +479,13 @@ pub extern "C" fn dc_get_slide_char_rects(
     buf_capacity: usize,
 ) -> usize {
     catch!(0, {
-        if doc.is_null() { return 0; }
+        if doc.is_null() {
+            return 0;
+        }
         let doc = unsafe { &*doc };
-        let Some(cache) = slide_text(doc, index as usize) else { return 0; };
+        let Some(cache) = slide_text(doc, index as usize) else {
+            return 0;
+        };
         let Some(slide) = cache.get(index as usize).and_then(|slide| slide.as_ref()) else {
             return 0;
         };
@@ -436,13 +526,22 @@ pub extern "C" fn dc_get_slide_text_range(
     buf_len: usize,
 ) -> usize {
     catch!(0, {
-        if doc.is_null() { return 0; }
+        if doc.is_null() {
+            return 0;
+        }
         let doc = unsafe { &*doc };
-        let Some(cache) = slide_text(doc, index as usize) else { return 0; };
+        let Some(cache) = slide_text(doc, index as usize) else {
+            return 0;
+        };
         let Some(slide) = cache.get(index as usize).and_then(|slide| slide.as_ref()) else {
             return 0;
         };
-        let Some(text) = text_char_range(&slide.text, start as usize, end as usize) else {
+        let Some(text) = text_char_range(
+            &slide.text,
+            &slide.line_break_before,
+            start as usize,
+            end as usize,
+        ) else {
             return 0;
         };
         let bytes = text.as_bytes();
@@ -450,7 +549,9 @@ pub extern "C" fn dc_get_slide_text_range(
             return bytes.len();
         }
         if !bytes.is_empty() {
-            unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf, bytes.len()); }
+            unsafe {
+                std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf, bytes.len());
+            }
         }
         bytes.len()
     })
@@ -463,34 +564,47 @@ pub extern "C" fn dc_get_slide_text_range(
 /// if `buf` is too small.
 #[no_mangle]
 pub extern "C" fn dc_search_text(
-    doc:        *const DcDocument,
-    query:      *const u8,
-    query_len:  usize,
+    doc: *const DcDocument,
+    query: *const u8,
+    query_len: usize,
     case_sensitive: bool,
-    buf:        *mut u8,
-    buf_len:    usize,
+    buf: *mut u8,
+    buf_len: usize,
 ) -> usize {
     catch!(0, {
-        if doc.is_null() || query.is_null() || buf.is_null() { return 0; }
-        if query_len == 0 || buf_len == 0 { return 0; }
-        
+        if doc.is_null() || query.is_null() || buf.is_null() {
+            return 0;
+        }
+        if query_len == 0 || buf_len == 0 {
+            return 0;
+        }
+
         let doc = unsafe { &*doc };
         let query_bytes = unsafe { slice::from_raw_parts(query, query_len) };
         let query_str = match std::str::from_utf8(query_bytes) {
             Ok(s) => s,
             Err(_) => return 0,
         };
-        
+
         let mut results = Vec::new();
         let slide_count = doc.presentation.slides.len();
 
         for slide_idx in 0..slide_count {
-            let Some(cache) = slide_text(doc, slide_idx) else { continue; };
-            let Some(slide_text) = cache.get(slide_idx).and_then(|s| s.as_ref()) else { continue; };
+            let Some(cache) = slide_text(doc, slide_idx) else {
+                continue;
+            };
+            let Some(slide_text) = cache.get(slide_idx).and_then(|s| s.as_ref()) else {
+                continue;
+            };
             for (char_index, length) in find_matches(&slide_text.text, query_str, case_sensitive) {
-                let match_end = char_index.saturating_add(length).min(slide_text.char_rects.len());
+                let match_end = char_index
+                    .saturating_add(length)
+                    .min(slide_text.char_rects.len());
                 let mut rects: Vec<SearchRect> = Vec::new();
-                for rect in slide_text.char_rects[char_index.min(match_end)..match_end].iter().flatten() {
+                for rect in slide_text.char_rects[char_index.min(match_end)..match_end]
+                    .iter()
+                    .flatten()
+                {
                     if let Some(last) = rects.last_mut() {
                         let same_line = (last.y - rect.y).abs() < 1.0
                             && (last.height - rect.height).abs() < 1.0;
@@ -516,14 +630,20 @@ pub extern "C" fn dc_search_text(
                 }
             }
         }
-        
+
         let result_str = results.join(";");
         let bytes = result_str.as_bytes();
-        if bytes.len() > buf_len { return bytes.len(); }
+        if bytes.len() > buf_len {
+            return bytes.len();
+        }
         let copy = bytes.len().min(buf_len);
-        if copy == 0 { return 0; }
-        
-        unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf, copy); }
+        if copy == 0 {
+            return 0;
+        }
+
+        unsafe {
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf, copy);
+        }
         copy
     })
 }
@@ -532,16 +652,24 @@ pub extern "C" fn dc_search_text(
 /// MUST be called after C# has finished copying from DcImage.pixels.
 #[no_mangle]
 pub extern "C" fn dc_free_image(img: DcImage) {
-    if img.pixels.is_null() || img.len == 0 { return; }
+    if img.pixels.is_null() || img.len == 0 {
+        return;
+    }
     // SAFETY: pixels was allocated by Rust Vec<u8> with capacity == len.
-    unsafe { drop(Vec::from_raw_parts(img.pixels, img.len, img.len)); }
+    unsafe {
+        drop(Vec::from_raw_parts(img.pixels, img.len, img.len));
+    }
 }
 
 /// Free a DcDocument handle obtained from dc_open_pptx.
 #[no_mangle]
 pub extern "C" fn dc_free_document(doc: *mut DcDocument) {
-    if doc.is_null() { return; }
-    unsafe { drop(Box::from_raw(doc)); }
+    if doc.is_null() {
+        return;
+    }
+    unsafe {
+        drop(Box::from_raw(doc));
+    }
 }
 
 #[cfg(test)]
@@ -550,12 +678,18 @@ mod tests {
 
     #[test]
     fn finds_overlapping_matches() {
-        assert_eq!(find_matches("aaaa", "aa", true), vec![(0, 2), (1, 2), (2, 2)]);
+        assert_eq!(
+            find_matches("aaaa", "aa", true),
+            vec![(0, 2), (1, 2), (2, 2)]
+        );
     }
 
     #[test]
     fn case_insensitive_search_finds_ascii_variants() {
-        assert_eq!(find_matches("Title title", "TITLE", false), vec![(0, 5), (6, 5)]);
+        assert_eq!(
+            find_matches("Title title", "TITLE", false),
+            vec![(0, 5), (6, 5)]
+        );
     }
 
     #[test]
@@ -569,7 +703,19 @@ mod tests {
     }
 
     #[test]
-    fn text_ranges_use_unicode_scalar_indexes() {
-        assert_eq!(text_char_range("Aé🦀Z", 1, 3).as_deref(), Some("é🦀"));
+    fn text_ranges_use_unicode_scalar_indexes_and_include_wrapped_line_breaks() {
+        let text = "Aé🦀Z\nnext";
+        let breaks = [false, false, true, false, false, false, false, false, false];
+
+        assert_eq!(
+            text_char_range(text, &breaks, 1, 4).as_deref(),
+            Some("é\n🦀Z")
+        );
+        assert_eq!(
+            text_char_range(text, &breaks, 0, 3).as_deref(),
+            Some("Aé\n🦀")
+        );
+        assert_eq!(text_char_range(text, &breaks, 2, 4).as_deref(), Some("🦀Z"));
+        assert_eq!(text_char_range(text, &breaks, 4, 6).as_deref(), Some("\nn"));
     }
 }

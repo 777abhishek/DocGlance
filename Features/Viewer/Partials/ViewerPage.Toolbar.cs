@@ -8,22 +8,97 @@ using DocGlance.Services.Storage;
 using DocGlance.Rendering.Pdf;
 using DocGlance.Features.Viewer.Components;
 using DocGlance.Features.Viewer.Contracts;
+using DocGlance.Infrastructure.Logging;
 using System;
+using System.Diagnostics;
 using System.IO;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
+using Windows.UI.ViewManagement;
 
 namespace DocGlance.Features.Viewer;
 
 public sealed partial class ViewerPage
 {
+    private const double SidebarExpandedWidth = 240;
+    private const double SidebarAnimationDurationMs = 220;
+    private DispatcherTimer? _sidebarAnimationTimer;
+    private long _sidebarAnimationStartedAt;
+    private double _sidebarAnimationFrom;
+    private double _sidebarAnimationTo;
+    private bool _isSidebarAnimating;
+
     private void Toolbar_SidebarToggled(object? sender, EventArgs e)
     {
-        bool isOpen = Toolbar.IsSidebarOpen;
-        SidebarCard.Visibility = isOpen ? Visibility.Visible : Visibility.Collapsed;
-        SidebarColumn.Width = isOpen ? new GridLength(240) : new GridLength(0);
+        SetSidebarOpen(Toolbar.IsSidebarOpen);
+    }
+
+    private void SetSidebarOpen(bool isOpen)
+    {
+        double targetWidth = isOpen ? SidebarExpandedWidth : 0;
+        _sidebarAnimationTimer ??= CreateSidebarAnimationTimer();
+        _sidebarAnimationTimer.Stop();
+        _sidebarAnimationFrom = SidebarColumn.Width.Value;
+        _sidebarAnimationTo = targetWidth;
+        _sidebarAnimationStartedAt = Stopwatch.GetTimestamp();
+        Toolbar.SidebarIsChecked = isOpen;
         ViewModel.SidebarOpen = isOpen;
-        ScheduleFitModeReapply();
+
+        if (isOpen)
+            SidebarCard.Visibility = Visibility.Visible;
+
+        if (Math.Abs(_sidebarAnimationFrom - targetWidth) < 0.5)
+        {
+            FinishSidebarAnimation();
+            return;
+        }
+
+        if (!new UISettings().AnimationsEnabled)
+        {
+            _sidebarAnimationFrom = targetWidth;
+            FinishSidebarAnimation();
+            return;
+        }
+
+        _isSidebarAnimating = true;
+        _sidebarAnimationTimer.Start();
+    }
+
+    private DispatcherTimer CreateSidebarAnimationTimer()
+    {
+        var timer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(16),
+        };
+        timer.Tick += (_, _) =>
+        {
+            double elapsed = Stopwatch.GetElapsedTime(_sidebarAnimationStartedAt).TotalMilliseconds;
+            double progress = Math.Clamp(elapsed / SidebarAnimationDurationMs, 0, 1);
+            double easedProgress = 1 - Math.Pow(1 - progress, 3);
+            double width = _sidebarAnimationFrom +
+                (_sidebarAnimationTo - _sidebarAnimationFrom) * easedProgress;
+            SidebarColumn.Width = new GridLength(width);
+
+            if (progress >= 1)
+                FinishSidebarAnimation();
+        };
+        return timer;
+    }
+
+    private void FinishSidebarAnimation()
+    {
+        _sidebarAnimationTimer?.Stop();
+        _isSidebarAnimating = false;
+        SidebarColumn.Width = new GridLength(_sidebarAnimationTo);
+        SidebarCard.Visibility = _sidebarAnimationTo > 0
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        PdfViewerControl.UpdateLayout();
+        DocumentScrollViewer.UpdateLayout();
+        ReapplyFitMode();
+        if (_pdfState != null)
+            RenderPagesAsync().SafeFireAndForget("PdfSidebarResizeRender");
     }
 
     private void Toolbar_GoToPageRequested(object? sender, int page)

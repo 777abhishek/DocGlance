@@ -1194,13 +1194,6 @@ public sealed partial class SpreadsheetViewer : UserControl,
         };
         copyItem.Click += (_, _) => CopySelectionToClipboard();
         flyout.Items.Add(copyItem);
-        var translateItem = new MenuFlyoutItem
-        {
-            Text = "Translate selection",
-            Icon = new SymbolIcon(Symbol.Globe),
-        };
-        translateItem.Click += (_, _) => TranslateSelection();
-        flyout.Items.Add(translateItem);
         flyout.ShowAt(CellScroll, point);
         e.Handled = true;
     }
