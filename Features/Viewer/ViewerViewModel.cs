@@ -9,9 +9,8 @@ using System;
 namespace DocGlance.Features.Viewer;
 
 /// <summary>
-/// Owns all document-viewer state: page, zoom, rotation, sidebar, document reference.
-/// ViewerPage.xaml.cs keeps internal _page/_zoom/_total/_rotation fields for PDF math,
-/// but calls SyncToViewModel() after every mutation so bindings stay in sync.
+/// Sole owner of all document-viewer state: page, total pages, zoom, rotation,
+/// sidebar visibility, loading/error state, and active document reference.
 /// </summary>
 public sealed partial class ViewerViewModel : ObservableObject
 {

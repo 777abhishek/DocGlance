@@ -120,7 +120,6 @@ public sealed partial class ViewerPage
         int previousIndex = _page - 1;
         _page = page;
         Toolbar.UpdatePageInfo(_page, _total);
-        SyncToViewModel();
 
         if (previousIndex >= 0 && previousIndex < Thumbnails.Count && previousIndex != index)
             Thumbnails[previousIndex].IsSelected = false;
