@@ -34,11 +34,22 @@
             Padding="0,16,24,16"
             SelectionChanged="PlainTextBlock_SelectionChanged"
             ScrollViewer.HorizontalScrollBarVisibility="Auto"
-            ScrollViewer.VerticalScrollBarVisibility="Auto">
+            ScrollViewer.VerticalScrollBarVisibility="Auto"
+            IsTabStop="False">
             <TextBox.Resources>
+                <!-- Background colors - always transparent -->
                 <SolidColorBrush x:Key="TextControlBackground" Color="Transparent"/>
                 <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent"/>
                 <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent"/>
+                
+                <!-- Border colors - always transparent -->
+                <SolidColorBrush x:Key="TextControlBorderBrush" Color="Transparent"/>
+                <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="Transparent"/>
+                <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="Transparent"/>
+                
+                <!-- Border thickness - zero to remove all borders including the blue bottom line -->
+                <Thickness x:Key="TextControlBorderThemeThickness">0</Thickness>
+                <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
             </TextBox.Resources>
         </TextBox>
     </Grid>

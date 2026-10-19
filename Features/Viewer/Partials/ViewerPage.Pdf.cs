@@ -232,16 +232,19 @@ public sealed partial class ViewerPage
             foreach (PageThumbnailItem thumbnail in PdfViewerControl.Thumbnails)
                 Thumbnails.Add(thumbnail);
 
+            Infrastructure.Logging.Logger.Log("[PDF] Hiding loading indicator");
+            
+            ShowLoading(false);
+            
+            // Force layout pass before initializing viewport rendering
+            // This ensures DocumentScrollViewer has valid ViewportWidth/ViewportHeight
+            DocumentScrollViewer.UpdateLayout();
+
             Infrastructure.Logging.Logger.Log("[PDF] Initializing viewport rendering");
             
             // VIEWPORT RENDERING: Initialize viewport system
             InitializeViewportRendering();
             ScheduleFitModeReapply();
-
-            Infrastructure.Logging.Logger.Log("[PDF] Hiding loading indicator");
-            
-            ShowLoading(false);
-            DocumentScrollViewer.UpdateLayout();
 
             Infrastructure.Logging.Logger.Log("[PDF] Starting thumbnail prefetch");
             

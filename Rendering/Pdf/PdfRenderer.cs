@@ -207,8 +207,9 @@ public static class PdfRenderer
             }
         }, ct);
 
-        if (image.Pixels == IntPtr.Zero || image.Width == 0 || image.Height == 0 ||
-            ct.IsCancellationRequested)
+        // No cancellation check past this point: the native render is already paid for,
+        // so always copy it out and let the caller decide whether the bitmap is still wanted.
+        if (image.Pixels == IntPtr.Zero || image.Width == 0 || image.Height == 0)
         {
             if (image.Pixels != IntPtr.Zero)
                 PdfCraftNative.pc_free_image(image);
