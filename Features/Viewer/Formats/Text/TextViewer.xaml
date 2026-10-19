@@ -20,7 +20,7 @@
             VerticalAlignment="Top"
             Margin="16,20,12,16"/>
 
-        <TextBox x:Name="PlainTextBlock"
+        <RichEditBox x:Name="PlainTextBlock"
             Grid.Column="1"
             FontFamily="Cascadia Code, Consolas, Courier New, monospace"
             FontSize="13"
@@ -35,8 +35,8 @@
             SelectionChanged="PlainTextBlock_SelectionChanged"
             ScrollViewer.HorizontalScrollBarVisibility="Auto"
             ScrollViewer.VerticalScrollBarVisibility="Auto"
-            IsTabStop="False">
-            <TextBox.Resources>
+            IsTabStop="True">
+            <RichEditBox.Resources>
                 <!-- Background colors - always transparent -->
                 <SolidColorBrush x:Key="TextControlBackground" Color="Transparent"/>
                 <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent"/>
@@ -50,7 +50,7 @@
                 <!-- Border thickness - zero to remove all borders including the blue bottom line -->
                 <Thickness x:Key="TextControlBorderThemeThickness">0</Thickness>
                 <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
-            </TextBox.Resources>
-        </TextBox>
+            </RichEditBox.Resources>
+        </RichEditBox>
     </Grid>
 </UserControl>

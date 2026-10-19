@@ -175,7 +175,10 @@
                 Visibility="Collapsed"
                 Click="WordWrapButton_Click"
                 ToolTipService.ToolTip="Word wrap">
-                <FontIcon Glyph="{StaticResource ViewerIcon.WordWrap}" FontSize="20"/>
+                <FontIcon
+                    FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
+                    Glyph="{StaticResource ViewerIcon.WordWrap}"
+                    FontSize="20"/>
             </ToggleButton>
 
             <!-- Search -->

@@ -187,7 +187,7 @@ public sealed partial class ViewerPage : Page
 
         // Initialize Office text selection (drag-to-select and copy)
         InitializeOfficeTextSelection();
-        TextViewerControl.TextBox.RightTapped += PlainTextBlock_RightTapped;
+        TextViewerControl.TextControl.RightTapped += PlainTextBlock_RightTapped;
         SpreadsheetViewerControl.TranslateRequested += text => _ = ShowTranslationDialogAsync(text);
 
         // Wire viewport-resize → reapply active fit mode + re-render (the
@@ -853,7 +853,7 @@ public sealed partial class ViewerPage : Page
 
     private void WordWrapButton_Click(object? sender, EventArgs e)
     {
-        TextViewerControl.TextBox.TextWrapping = Toolbar.IsWordWrapChecked
+        TextViewerControl.TextControl.TextWrapping = Toolbar.IsWordWrapChecked
             ? TextWrapping.Wrap
             : TextWrapping.NoWrap;
     }

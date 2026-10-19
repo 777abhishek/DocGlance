@@ -25,7 +25,7 @@ public sealed partial class ViewerPage
         GoToPage(1);
         DocumentScrollViewer.ChangeView(0, 0, null, disableAnimation: true);
         if (TextViewerHost.Visibility == Visibility.Visible)
-            TextViewerControl.TextBox.Select(0, 0);
+            TextViewerControl.TextControl.Document.Selection.SetRange(0, 0);
         if (SpreadsheetViewerHost.Visibility == Visibility.Visible)
             SpreadsheetViewerControl.ResetScrollPosition();
 
@@ -55,7 +55,7 @@ public sealed partial class ViewerPage
         _sidebarVisibilityBeforePresentation = SidebarCard.Visibility;
         _zoomPillVisibilityBeforePresentation = ZoomPill.Visibility;
         _sidebarWidthBeforePresentation = SidebarColumn.Width;
-        _plainTextFontSizeBeforePresentation = TextViewerControl.TextBox.FontSize;
+        _plainTextFontSizeBeforePresentation = TextViewerControl.TextControl.FontSize;
         _lineNumberFontSizeBeforePresentation = TextViewerControl.LineNumbers.FontSize;
         _lineNumberHeightBeforePresentation = TextViewerControl.LineNumbers.LineHeight;
         _isPresentationMode = true;
@@ -72,7 +72,7 @@ public sealed partial class ViewerPage
 
         if (TextViewerHost.Visibility == Visibility.Visible)
         {
-            TextViewerControl.TextBox.FontSize = 22;
+            TextViewerControl.TextControl.FontSize = 22;
             TextViewerControl.LineNumbers.FontSize = 22;
             TextViewerControl.LineNumbers.LineHeight = 36;
         }
@@ -101,7 +101,7 @@ public sealed partial class ViewerPage
         SidebarCard.Visibility = _sidebarVisibilityBeforePresentation;
         ZoomPill.Visibility = _zoomPillVisibilityBeforePresentation;
         SidebarColumn.Width = _sidebarWidthBeforePresentation;
-        TextViewerControl.TextBox.FontSize = _plainTextFontSizeBeforePresentation;
+        TextViewerControl.TextControl.FontSize = _plainTextFontSizeBeforePresentation;
         TextViewerControl.LineNumbers.FontSize = _lineNumberFontSizeBeforePresentation;
         TextViewerControl.LineNumbers.LineHeight = _lineNumberHeightBeforePresentation;
 

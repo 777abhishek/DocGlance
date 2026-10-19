@@ -3,30 +3,82 @@ using DocGlance.Features.Viewer.Components;
 using DocGlance.Features.Viewer.Contracts;
 using DocGlance.Rendering.Shared;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Text;
 using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Windows.UI;
 using Windows.ApplicationModel.DataTransfer;
+using Windows.System;
 
 namespace DocGlance.Features.Viewer.Formats.Text;
 
 public sealed partial class TextViewer : UserControl, IDocumentViewer, ISupportsSearch, ISupportsTextSelection
 {
+    private static readonly HashSet<string> CodeExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".cs", ".vb", ".fs", ".csx", ".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx",
+        ".py", ".pyw", ".java", ".kt", ".kts", ".cpp", ".c", ".h", ".hpp", ".cc",
+        ".go", ".rs", ".swift", ".rb", ".php", ".pl", ".sh", ".bash", ".zsh",
+        ".ps1", ".psm1", ".bat", ".cmd", ".html", ".htm", ".cshtml", ".razor",
+        ".css", ".scss", ".less", ".json", ".jsonc", ".json5", ".xml", ".xaml",
+        ".sql", ".graphql", ".gql", ".r", ".lua", ".dart", ".ex", ".exs",
+    };
+
+    private static readonly HashSet<string> CodeKeywords = new(StringComparer.Ordinal)
+    {
+        "abstract", "as", "async", "await", "bool", "break", "byte", "case", "catch",
+        "char", "class", "const", "continue", "def", "delegate", "do", "double",
+        "elif", "else", "enum", "export", "extends", "false", "final", "finally",
+        "float", "for", "foreach", "from", "func", "function", "get", "if", "implements",
+        "import", "in", "int", "interface", "let", "long", "module", "namespace", "new",
+        "null", "of", "override", "package", "private", "protected", "public", "return",
+        "set", "short", "static", "string", "struct", "super", "switch", "this", "throw",
+        "throws", "true", "try", "type", "var", "void", "while", "with", "yield",
+    };
+
+    private const int MaxHighlightedCharacters = 1_000_000;
+    private const int MaxSyntaxRuns = 30_000;
+
     private SearchState? _searchState;
+    private string _text = string.Empty;
+    private bool _hasSyntaxHighlighting;
 
     public TextViewer()
     {
         InitializeComponent();
+
+        var copyAccelerator = new KeyboardAccelerator
+        {
+            Key = VirtualKey.C,
+            Modifiers = VirtualKeyModifiers.Control,
+        };
+        copyAccelerator.Invoked += (_, args) =>
+        {
+            if (string.IsNullOrEmpty(SelectedText))
+                return;
+
+            CopySelectedTextToClipboard();
+            args.Handled = true;
+        };
+        PlainTextBlock.KeyboardAccelerators.Add(copyAccelerator);
+        ActualThemeChanged += (_, _) =>
+        {
+            if (_hasSyntaxHighlighting)
+                ApplySyntaxHighlighting(_text);
+        };
     }
 
     public event EventHandler? SelectionChanged;
     public FrameworkElement Control => this;
-    public TextBox TextBox => PlainTextBlock;
+    public RichEditBox TextControl => PlainTextBlock;
     public TextBlock LineNumbers => LineNumberBlock;
+    public string SelectedText => PlainTextBlock.Document.Selection.Text;
     public bool MatchCase { get; set; }
     public int SearchMatchCount => _searchState?.Count ?? 0;
     public int ActiveSearchIndex => _searchState?.ActiveIndex ?? -1;
@@ -53,9 +105,24 @@ public sealed partial class TextViewer : UserControl, IDocumentViewer, ISupports
         PlainTextBlock.FontFamily = new FontFamily("Cascadia Code, Cascadia Mono, Consolas, Courier New");
         PlainTextBlock.FontSize = 13;
         PlainTextBlock.TextWrapping = Microsoft.UI.Xaml.TextWrapping.NoWrap;
-        PlainTextBlock.IsReadOnly = true;
         PlainTextBlock.AcceptsReturn = true;
-        PlainTextBlock.Text = text;
+        PlainTextBlock.IsReadOnly = false;
+        try
+        {
+            PlainTextBlock.Document.SetText(TextSetOptions.None, text);
+            PlainTextBlock.Document.GetText(TextGetOptions.None, out _text);
+            ApplyBaseTextFormat(_text.Length);
+            _hasSyntaxHighlighting =
+                CodeExtensions.Contains(System.IO.Path.GetExtension(filePath)) &&
+                _text.Length <= MaxHighlightedCharacters;
+            if (_hasSyntaxHighlighting)
+                ApplySyntaxHighlighting(_text);
+        }
+        finally
+        {
+            PlainTextBlock.IsReadOnly = true;
+        }
+
         LineNumberBlock.FontFamily = new FontFamily("Cascadia Code, Cascadia Mono, Consolas, Courier New");
         LineNumberBlock.FontSize = 13;
         LineNumberBlock.LineHeight = 22;
@@ -68,7 +135,18 @@ public sealed partial class TextViewer : UserControl, IDocumentViewer, ISupports
     public Task CleanupAsync()
     {
         ClearHighlight();
-        PlainTextBlock.Text = string.Empty;
+        _text = string.Empty;
+        _hasSyntaxHighlighting = false;
+        PlainTextBlock.IsReadOnly = false;
+        try
+        {
+            PlainTextBlock.Document.SetText(TextSetOptions.None, string.Empty);
+        }
+        finally
+        {
+            PlainTextBlock.IsReadOnly = true;
+        }
+
         LineNumberBlock.Text = string.Empty;
         return Task.CompletedTask;
     }
@@ -76,13 +154,13 @@ public sealed partial class TextViewer : UserControl, IDocumentViewer, ISupports
     public Task<SearchResult[]> SearchAsync(string query, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        _searchState = SearchHighlighter.FindInText(PlainTextBlock.Text, query, MatchCase);
+        _searchState = SearchHighlighter.FindInText(_text, query, MatchCase);
         var results = new SearchResult[_searchState.Count];
         for (int i = 0; i < results.Length; i++)
         {
             SearchHit hit = _searchState.Hits[i];
             results[i] = new SearchResult(
-                PlainTextBlock.Text.Substring(hit.CharOffset, hit.Length),
+                _text.Substring(hit.CharOffset, hit.Length),
                 new SearchLocation[] { new TextRangeLocation(hit.CharOffset, hit.Length) });
         }
 
@@ -99,8 +177,10 @@ public sealed partial class TextViewer : UserControl, IDocumentViewer, ISupports
             if (location is TextRangeLocation range)
             {
                 PlainTextBlock.SelectionHighlightColorWhenNotFocused =
-                    new SolidColorBrush(Windows.UI.Color.FromArgb(180, 255, 140, 0));
-                PlainTextBlock.Select(range.Start, range.Length);
+                    new SolidColorBrush(Color.FromArgb(180, 255, 140, 0));
+                PlainTextBlock.Document.Selection.SetRange(
+                    range.Start,
+                    range.Start + range.Length);
                 return;
             }
         }
@@ -110,25 +190,37 @@ public sealed partial class TextViewer : UserControl, IDocumentViewer, ISupports
     {
         _searchState = null;
         if (PlainTextBlock != null)
-            PlainTextBlock.SelectionLength = 0;
+            PlainTextBlock.Document.Selection.SetRange(0, 0);
     }
 
     public Task<string?> GetSelectedTextAsync() =>
-        Task.FromResult<string?>(string.IsNullOrWhiteSpace(PlainTextBlock.SelectedText)
+        Task.FromResult<string?>(string.IsNullOrWhiteSpace(SelectedText)
             ? null
-            : PlainTextBlock.SelectedText);
+            : SelectedText);
 
     public Task CopySelectionAsync()
     {
-        string selectedText = PlainTextBlock.SelectedText;
-        if (!string.IsNullOrEmpty(selectedText))
+        CopySelectedTextToClipboard();
+        return Task.CompletedTask;
+    }
+
+    private void CopySelectedTextToClipboard()
+    {
+        string selectedText = SelectedText;
+        if (string.IsNullOrEmpty(selectedText))
+            return;
+
+        try
         {
             var package = new DataPackage();
             package.SetText(selectedText);
             Clipboard.SetContent(package);
             Clipboard.Flush();
         }
-        return Task.CompletedTask;
+        catch (Exception ex)
+        {
+            Infrastructure.Logging.Logger.Error("[TextViewer] Failed to copy selected text", ex);
+        }
     }
 
     public void NavigateSearchHit(int direction)
@@ -143,7 +235,7 @@ public sealed partial class TextViewer : UserControl, IDocumentViewer, ISupports
             return;
         SearchHit hit = _searchState.Hits[_searchState.ActiveIndex];
         Highlight(new SearchResult(
-            PlainTextBlock.Text.Substring(hit.CharOffset, hit.Length),
+            _text.Substring(hit.CharOffset, hit.Length),
             new SearchLocation[] { new TextRangeLocation(hit.CharOffset, hit.Length) }));
     }
 
@@ -157,6 +249,156 @@ public sealed partial class TextViewer : UserControl, IDocumentViewer, ISupports
             builder.Append(line);
         }
         LineNumberBlock.Text = builder.ToString();
+    }
+
+    private void ApplyBaseTextFormat(int length)
+    {
+        if (length == 0)
+            return;
+
+        var format = PlainTextBlock.Document.GetRange(0, length).CharacterFormat;
+        format.Size = (float)PlainTextBlock.FontSize;
+    }
+
+    private void ApplySyntaxHighlighting(string text)
+    {
+        bool isLightTheme = ActualTheme == ElementTheme.Light;
+        Color keywordColor = isLightTheme
+            ? Color.FromArgb(255, 0, 0, 255)
+            : Color.FromArgb(255, 86, 156, 214);
+        Color stringColor = isLightTheme
+            ? Color.FromArgb(255, 163, 21, 21)
+            : Color.FromArgb(255, 206, 145, 120);
+        Color commentColor = isLightTheme
+            ? Color.FromArgb(255, 0, 128, 0)
+            : Color.FromArgb(255, 106, 153, 85);
+        Color numberColor = isLightTheme
+            ? Color.FromArgb(255, 9, 134, 88)
+            : Color.FromArgb(255, 181, 206, 168);
+        int syntaxRuns = 0;
+        int index = 0;
+
+        while (index < text.Length && syntaxRuns < MaxSyntaxRuns)
+        {
+            int start = index;
+            char current = text[index];
+
+            if (current == '/' && index + 1 < text.Length &&
+                (text[index + 1] == '/' || text[index + 1] == '*'))
+            {
+                bool blockComment = text[index + 1] == '*';
+                index += 2;
+                if (blockComment)
+                {
+                    while (index + 1 < text.Length &&
+                           !(text[index] == '*' && text[index + 1] == '/'))
+                        index++;
+                    index = Math.Min(text.Length, index + 2);
+                }
+                else
+                {
+                    while (index < text.Length && text[index] is not '\n' and not '\r')
+                        index++;
+                }
+
+                ApplyForeground(start, index, commentColor);
+                syntaxRuns++;
+                continue;
+            }
+
+            if (current == '#' && IsLinePrefixWhitespace(text, index))
+            {
+                while (index < text.Length && text[index] is not '\n' and not '\r')
+                    index++;
+                ApplyForeground(start, index, commentColor);
+                syntaxRuns++;
+                continue;
+            }
+
+            if (current is '\'' or '"' or '`')
+            {
+                char quote = current;
+                bool tripleQuoted = quote != '`' && index + 2 < text.Length &&
+                                    text[index + 1] == quote && text[index + 2] == quote;
+                index += tripleQuoted ? 3 : 1;
+                while (index < text.Length)
+                {
+                    if (text[index] == '\\')
+                    {
+                        index = Math.Min(text.Length, index + 2);
+                        continue;
+                    }
+
+                    if (tripleQuoted)
+                    {
+                        if (index + 2 < text.Length &&
+                            text[index] == quote &&
+                            text[index + 1] == quote &&
+                            text[index + 2] == quote)
+                        {
+                            index += 3;
+                            break;
+                        }
+                    }
+                    else if (text[index] == quote)
+                    {
+                        index++;
+                        break;
+                    }
+
+                    index++;
+                }
+
+                ApplyForeground(start, index, stringColor);
+                syntaxRuns++;
+                continue;
+            }
+
+            if (char.IsDigit(current))
+            {
+                index++;
+                while (index < text.Length &&
+                       (char.IsLetterOrDigit(text[index]) || text[index] is '.' or '_'))
+                    index++;
+                ApplyForeground(start, index, numberColor);
+                syntaxRuns++;
+                continue;
+            }
+
+            if (char.IsLetter(current) || current == '_')
+            {
+                index++;
+                while (index < text.Length &&
+                       (char.IsLetterOrDigit(text[index]) || text[index] == '_'))
+                    index++;
+                if (CodeKeywords.Contains(text.Substring(start, index - start)))
+                {
+                    ApplyForeground(start, index, keywordColor);
+                    syntaxRuns++;
+                }
+                continue;
+            }
+
+            index++;
+        }
+    }
+
+    private void ApplyForeground(int start, int end, Color color)
+    {
+        if (end > start)
+            PlainTextBlock.Document.GetRange(start, end).CharacterFormat.ForegroundColor = color;
+    }
+
+    private static bool IsLinePrefixWhitespace(string text, int index)
+    {
+        while (index > 0 && text[index - 1] != '\n')
+        {
+            if (!char.IsWhiteSpace(text[index - 1]))
+                return false;
+            index--;
+        }
+
+        return true;
     }
 
     private void PlainTextBlock_SelectionChanged(object sender, RoutedEventArgs e) =>
