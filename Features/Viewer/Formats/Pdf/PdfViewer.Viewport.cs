@@ -46,8 +46,32 @@ public sealed partial class PdfViewer
     private CancellationTokenSource? _renderCts;
     private float _lastRenderZoom = -1f;
 
+    // Lookahead pages rendered past the visible range; eviction keeps this many beyond it too.
+    private const int RenderLookaheadPages = 1;
+
+    // Coalesces bursts of ViewChanged events (mouse-wheel ticks, scrollbar drags) into a
+    // single render pass; without it every event cancels the previous pass's in-flight
+    // renders and their bitmaps are thrown away.
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _renderDebounceTimer;
+    private static readonly TimeSpan RenderDebounceInterval = TimeSpan.FromMilliseconds(120);
+
     // PdfCraft serializes on a Mutex; extra in-flight pages only duplicate pixmaps in RAM.
     private static readonly SemaphoreSlim _renderSemaphore = new(1, 1);
+
+    // ── In-flight render dedup ─────────────────────────────────────────────────
+    // PdfCraft's native renders cannot be aborted once queued, and every render pass
+    // used to enqueue its own copy of a still-uncached page — during a scroll the same
+    // page piled up 5–11 deep behind the native mutex and wait times ballooned
+    // (observed 18–46s per page). One claim per page fixes that; claims are stamped
+    // with an epoch so rotation/annotation invalidation can retire stale ones.
+    private readonly object _inFlightLock = new();
+    private readonly Dictionary<int, int> _inFlightPages = new(); // page → epoch when claimed
+    private int _renderEpoch;
+
+    private bool IsPageInFlight(int pageIndex)
+    {
+        lock (_inFlightLock) return _inFlightPages.ContainsKey(pageIndex);
+    }
 
     // ── Improvement 2: Cached page Y-offsets ──────────────────────────────────
     // Pre-computed so GetPageTopLp is O(1) instead of O(n) on every call.
@@ -82,6 +106,8 @@ public sealed partial class PdfViewer
 
         DocumentScrollViewer.ViewChanged -= OnViewportViewChanged;
         DocumentScrollViewer.ViewChanged += OnViewportViewChanged;
+        DocumentScrollViewer.SizeChanged -= OnViewportSizeChanged;
+        DocumentScrollViewer.SizeChanged += OnViewportSizeChanged;
         EnsureTextPageMap(0);
 
         RenderPagesAsync().SafeFireAndForget("PdfViewportRender");
@@ -90,6 +116,8 @@ public sealed partial class PdfViewer
     internal void CleanupViewportRendering()
     {
         DocumentScrollViewer.ViewChanged -= OnViewportViewChanged;
+        DocumentScrollViewer.SizeChanged -= OnViewportSizeChanged;
+        _renderDebounceTimer?.Stop();
         // Cancel only — in-flight render tasks hold tokens from this CTS and would
         // throw ObjectDisposedException if we disposed it out from under them.
         _renderCts?.Cancel();
@@ -101,7 +129,14 @@ public sealed partial class PdfViewer
         ClearPdfPageCache();
     }
 
-    internal void CancelPendingRenders() => _renderCts?.Cancel();
+    internal void CancelPendingRenders()
+    {
+        _renderCts?.Cancel();
+        // Invalidate in-flight claims: their results are stale (rotation/annotation
+        // state changed) and new passes must be free to claim the same pages.
+        Interlocked.Increment(ref _renderEpoch);
+        lock (_inFlightLock) _inFlightPages.Clear();
+    }
 
     private void ClearPdfPageCache()
     {
@@ -202,13 +237,39 @@ public sealed partial class PdfViewer
             {
                 _lastRenderZoom = zoom;
                 RefreshHighlights();
-                RenderPagesAsync().SafeFireAndForget("PdfViewportRender");
+                ScheduleDebouncedViewportRender();
             }
         }
         catch (Exception ex)
         {
             Infrastructure.Logging.Logger.Error($"[Viewport] OnViewportViewChanged crashed", ex);
         }
+    }
+
+    /// <summary>
+    /// Runs one render pass ~120ms after the last scroll/zoom event settles, so a burst
+    /// of ViewChanged events costs a single pass instead of one cancel+restart per event.
+    /// </summary>
+    private void ScheduleDebouncedViewportRender()
+    {
+        if (_renderDebounceTimer == null)
+        {
+            _renderDebounceTimer = DispatcherQueue.CreateTimer();
+            _renderDebounceTimer.IsRepeating = false;
+            _renderDebounceTimer.Interval = RenderDebounceInterval;
+            _renderDebounceTimer.Tick += (_, _) =>
+                RenderPagesAsync().SafeFireAndForget("PdfViewportRender");
+        }
+        _renderDebounceTimer.Stop();
+        _renderDebounceTimer.Start();
+    }
+
+    private void OnViewportSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        // First layout or a restored tab becoming visible: the pass that ran before
+        // layout skipped (viewport had no height), so render now that it does.
+        if (e.NewSize.Height > 0)
+            ScheduleDebouncedViewportRender();
     }
 
     // ── Page tracking ─────────────────────────────────────────────────────────
@@ -267,6 +328,15 @@ public sealed partial class PdfViewer
                 return;
             }
 
+            // A restored-but-never-shown tab has no layout yet (viewport height 0);
+            // rendering it would burn native renders for pages nobody can see.
+            // OnViewportSizeChanged re-triggers the pass once the tab is laid out.
+            if (DocumentScrollViewer.ViewportHeight <= 0)
+            {
+                Infrastructure.Logging.Logger.Log("[Render] Viewport not laid out - skipping pass");
+                return;
+            }
+
             // Cancel any in-flight render (safe on UI thread; not disposing —
             // buffer-page tasks still hold tokens from the old CTS)
             _renderCts?.Cancel();
@@ -289,9 +359,8 @@ public sealed partial class PdfViewer
 
             // Strictly visible pages (no buffer) — highest priority
             var strictVisible = GetVisiblePageRange(scrollY, vpH, 0);
-            // Visible + one lookahead page
-            int bufferPages = 1;
-            var withBuffer  = GetVisiblePageRange(scrollY, vpH, bufferPages);
+            // Visible + lookahead pages
+            var withBuffer  = GetVisiblePageRange(scrollY, vpH, RenderLookaheadPages);
             int firstVisible = withBuffer.First;
             int lastVisible  = withBuffer.Last;
 
@@ -299,7 +368,7 @@ public sealed partial class PdfViewer
 
             // FEAT-004: Byte-based eviction - evict pages far from viewport first
             var toEvict = _pdfPageCache.Keys
-                .Where(k => k < firstVisible - bufferPages || k > lastVisible + bufferPages)
+                .Where(k => k < firstVisible - RenderLookaheadPages || k > lastVisible + RenderLookaheadPages)
                 .OrderByDescending(k => Math.Min(Math.Abs(k - firstVisible), Math.Abs(k - lastVisible))) // Farthest first
                 .ToList();
                 
@@ -332,10 +401,13 @@ public sealed partial class PdfViewer
                 return RenderBudget.PdfPageDpi(zoom, display, size.W, size.H);
             }
 
+            // Pages already in flight are skipped: their render publishes itself when
+            // done (if still wanted) — enqueuing another copy just clogs the native queue.
             bool NeedsRender(int i) =>
-                !_pdfPageCache.ContainsKey(i) ||
-                !_pdfPageDpi.TryGetValue(i, out float cachedDpi) ||
-                RenderBudget.NeedsRerender(cachedDpi, TargetDpi(i));
+                !IsPageInFlight(i) &&
+                (!_pdfPageCache.ContainsKey(i) ||
+                 !_pdfPageDpi.TryGetValue(i, out float cachedDpi) ||
+                 RenderBudget.NeedsRerender(cachedDpi, TargetDpi(i)));
 
             var visibleToRender = Enumerable
                 .Range(strictVisible.First, strictVisible.Last - strictVisible.First + 1)
@@ -435,16 +507,29 @@ public sealed partial class PdfViewer
     {
         // Snapshot generation at the start to detect stale renders
         int snapshotGeneration = pdfState.Generation;
-        
+
+        if (ct.IsCancellationRequested)
+        {
+            Infrastructure.Logging.Logger.Log($"[RenderSingle] Cancelled before start - page {pageIndex}");
+            return;
+        }
+
+        // One native render per page: duplicates queue behind PdfCraft's internal
+        // mutex and cannot be cancelled once started. Claimed before the try so the
+        // finally can always see the epoch it must release.
+        int epoch = Volatile.Read(ref _renderEpoch);
+        lock (_inFlightLock)
+        {
+            if (!_inFlightPages.TryAdd(pageIndex, epoch))
+            {
+                Infrastructure.Logging.Logger.Log($"[RenderSingle] Duplicate suppressed - page {pageIndex}");
+                return;
+            }
+        }
+
         try
         {
             Infrastructure.Logging.Logger.Log($"[RenderSingle] Starting page {pageIndex}, gen={snapshotGeneration}");
-            
-            if (ct.IsCancellationRequested)
-            {
-                Infrastructure.Logging.Logger.Log($"[RenderSingle] Cancelled before start - page {pageIndex}");
-                return;
-            }
 
             var (ptW, ptH) = pdfState.GetPageSize(pageIndex);
             var (displayWidthPt, displayHeightPt) = GetRotatedPageSize(pageIndex);
@@ -486,9 +571,28 @@ public sealed partial class PdfViewer
             Infrastructure.Logging.Logger.Log($"[RenderSingle] Calling PdfCraft renderer for page {pageIndex}");
 
             WriteableBitmap? bitmap = await PdfRenderer.RenderPageAsync(pdfState, pageIndex, dpi, ct);
-            if (bitmap == null || ct.IsCancellationRequested)
+            if (bitmap == null)
             {
-                Infrastructure.Logging.Logger.Log($"[RenderSingle] Null bitmap or cancelled - page {pageIndex}");
+                Infrastructure.Logging.Logger.Log($"[RenderSingle] Null bitmap - page {pageIndex}");
+                return;
+            }
+
+            // A newer render pass may have cancelled this one while the bitmap was being
+            // produced. The render is already paid for, so publish it when the page is
+            // still inside the current viewport range; drop it only when the page has
+            // scrolled away or the cache already holds an equal-or-better bitmap.
+            if ((ct.IsCancellationRequested || Volatile.Read(ref _renderEpoch) != epoch) &&
+                !await IsSupersededRenderStillWantedAsync(pdfState, pageIndex, dpi))
+            {
+                Infrastructure.Logging.Logger.Log($"[RenderSingle] Superseded render discarded - page {pageIndex}");
+                return;
+            }
+
+            // Rotation/annotation invalidation replaced this render's geometry — publish
+            // would place the bitmap with stale layout, so let the fresh pass render it.
+            if (Volatile.Read(ref _renderEpoch) != epoch)
+            {
+                Infrastructure.Logging.Logger.Log($"[RenderSingle] Stale epoch discarded - page {pageIndex}");
                 return;
             }
 
@@ -540,22 +644,20 @@ public sealed partial class PdfViewer
                 // Check if image already exists
                 if (!_pdfPageCache.TryGetValue(pageIndex, out var img))
                 {
-                    // Create new image
+                    // Create new image with all transform properties set BEFORE any transitions
                     img = new Image
                     {
                         Stretch = Microsoft.UI.Xaml.Media.Stretch.Fill,
                         Width   = pageW,
                         Height  = pageH,
+                        Opacity = 0.0,
                         RenderTransformOrigin = new Windows.Foundation.Point(0.5, 0.5),
-                        RenderTransform = new Microsoft.UI.Xaml.Media.RotateTransform { Angle = PdfRotation },
-                        Opacity = 0.0
+                        RenderTransform = new Microsoft.UI.Xaml.Media.RotateTransform { Angle = PdfRotation }
                     };
                     
-                    img.OpacityTransition = new Microsoft.UI.Xaml.ScalarTransition
-                    {
-                        Duration = TimeSpan.FromMilliseconds(167)
-                    };
-                    
+                    // Do not set OpacityTransition on this element: WinUI 3 rejects it with
+                    // 0x80070005 while a RenderTransform is attached.
+
                     Canvas.SetLeft(img, (displayWidth - pageW) / 2);
                     Canvas.SetTop(img, pageY + (displayHeight - pageH) / 2);
                     
@@ -603,6 +705,59 @@ public sealed partial class PdfViewer
         {
             Infrastructure.Logging.Logger.Error($"[RenderSingle] Exception on page {pageIndex}", ex);
         }
+        finally
+        {
+            lock (_inFlightLock)
+            {
+                if (_inFlightPages.TryGetValue(pageIndex, out int claimedEpoch) && claimedEpoch == epoch)
+                    _inFlightPages.Remove(pageIndex);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Decides whether a bitmap orphaned by a newer render pass should still be published:
+    /// the page must still intersect the viewport plus its lookahead buffer, and the cache
+    /// must not already hold an equal-or-better bitmap. Must run on the UI thread.
+    /// </summary>
+    private bool IsSupersededRenderStillWanted(PdfDocumentState pdfState, int pageIndex, float dpi)
+    {
+        if (!ReferenceEquals(DocumentState, pdfState) || ViewportState == null)
+            return false;
+
+        if (_pdfPageDpi.TryGetValue(pageIndex, out float cachedDpi) && cachedDpi >= dpi)
+            return false;
+
+        float zoom = Math.Max(0.01f, DocumentScrollViewer.ZoomFactor);
+        double scrollY = DocumentScrollViewer.VerticalOffset / zoom;
+        double vpH = DocumentScrollViewer.ViewportHeight / zoom;
+        var (first, last) = GetVisiblePageRange(scrollY, vpH, RenderLookaheadPages);
+        return pageIndex >= first && pageIndex <= last;
+    }
+
+    private async Task<bool> IsSupersededRenderStillWantedAsync(
+        PdfDocumentState pdfState, int pageIndex, float dpi)
+    {
+        if (DispatcherQueue.HasThreadAccess)
+            return IsSupersededRenderStillWanted(pdfState, pageIndex, dpi);
+
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!DispatcherQueue.TryEnqueue(() =>
+        {
+            try
+            {
+                tcs.TrySetResult(IsSupersededRenderStillWanted(pdfState, pageIndex, dpi));
+            }
+            catch (Exception ex)
+            {
+                Infrastructure.Logging.Logger.Error($"[RenderSingle] Superseded check failed - page {pageIndex}", ex);
+                tcs.TrySetResult(false);
+            }
+        }))
+        {
+            return false;
+        }
+        return await tcs.Task;
     }
 
     /// <summary>Returns the first/last page indices that intersect the viewport + buffer.</summary>
