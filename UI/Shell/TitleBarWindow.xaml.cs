@@ -49,6 +49,7 @@ public sealed partial class TitleBarWindow : Window
     private ICompositionSupportsSystemBackdrop? _acrylicTarget;
     private bool _homePageInitialized;
     private bool _homePageInitializationQueued;
+    private bool _deferHomePageInitialization;
     private bool _isPresentationMode;
     private bool _windowCloseFlushInProgress;
     private bool _allowWindowClose;
@@ -226,7 +227,9 @@ public sealed partial class TitleBarWindow : Window
 
     private void QueueHomePageInitialization()
     {
-        if (_homePageInitialized || _homePageInitializationQueued)
+        if (_deferHomePageInitialization ||
+            _homePageInitialized ||
+            _homePageInitializationQueued)
             return;
 
         _homePageInitializationQueued = true;
@@ -243,6 +246,22 @@ public sealed partial class TitleBarWindow : Window
                 HomeFrame.Navigate(typeof(HomePage));
                 DocGlance.Infrastructure.Diagnostics.DiagnosticsService.Milestone("HomePageInitialized");
             });
+    }
+
+    public void DeferHomePageInitializationForFileActivation()
+    {
+        _deferHomePageInitialization = true;
+        HomeFrame.Visibility = Visibility.Collapsed;
+    }
+
+    public void CompleteFileActivationStartup()
+    {
+        _deferHomePageInitialization = false;
+        if (_tabData.Count == 0 && ReferenceEquals(Tabs.SelectedItem, _homeTab))
+        {
+            HomeFrame.Visibility = Visibility.Visible;
+            QueueHomePageInitialization();
+        }
     }
 
     // ── Home tab ──────────────────────────────────────────────────────────────

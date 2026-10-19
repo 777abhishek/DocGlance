@@ -12,7 +12,7 @@ public sealed partial class ViewerPage
 {
     private void PlainTextBlock_RightTapped(object sender, RightTappedRoutedEventArgs e)
     {
-        string selectedText = TextViewerControl.TextBox.SelectedText;
+        string selectedText = TextViewerControl.SelectedText;
         if (string.IsNullOrWhiteSpace(selectedText))
             return;
 
@@ -31,7 +31,7 @@ public sealed partial class ViewerPage
         };
         menu.Items.Add(copyItem);
         menu.Items.Add(new MenuFlyoutSeparator());
-        menu.ShowAt(TextViewerControl.TextBox, e.GetPosition(TextViewerControl.TextBox));
+        menu.ShowAt(TextViewerControl.TextControl, e.GetPosition(TextViewerControl.TextControl));
         e.Handled = true;
     }
 

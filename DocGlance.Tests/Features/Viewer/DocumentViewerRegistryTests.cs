@@ -31,6 +31,8 @@ public sealed class DocumentViewerRegistryTests
             new FallbackViewerFactory());
 
         registry.Resolve(".CSV").Should().BeSameAs(text);
+        registry.Resolve(".html").Should().BeSameAs(text);
+        registry.Resolve(@"C:\documents\page.HTML").Should().BeSameAs(text);
         registry.Resolve(".xlsx").Should().BeSameAs(spreadsheet);
     }
 

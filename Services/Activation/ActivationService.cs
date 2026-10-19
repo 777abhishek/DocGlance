@@ -29,9 +29,9 @@ public static class ActivationService
         {
             try
             {
-                window.RestoreAndActivate();
                 foreach (var path in paths)
                     OpenFilePath(path);
+                window.RestoreAndActivate();
             }
             catch (Exception ex)
             {

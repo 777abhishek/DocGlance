@@ -107,11 +107,10 @@ public partial class App : Application
             DocGlance.Rendering.Shared.NativeBitmap.Initialize(
                 Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread());
 
-            // Construct the window but defer showing it until startup activation is
-            // processed. File launches can select their document tab before the first
-            // frame, avoiding a visible Home-tab flash.
-            m_window = new TitleBarWindow();
-            App.AllWindows.Add((TitleBarWindow)m_window);
+            // Create the shell first; file activation is handled after its first frame.
+            var titleBarWindow = new TitleBarWindow();
+            m_window = titleBarWindow;
+            App.AllWindows.Add(titleBarWindow);
             m_window.Closed += (_, _) => App.AllWindows.Remove((TitleBarWindow)m_window);
 
             // Listen for file handovers from second processes (Explorer double-click
@@ -125,27 +124,53 @@ public partial class App : Application
             _ = RegistrationHelper.EnsureRegisteredAsync();
 #endif
 
-            // Check for file-open activation
             var activatedArgs = AppInstance.GetCurrent().GetActivatedEventArgs();
-            bool openedFromActivation = ActivationService.TryOpenFromActivationArgs(activatedArgs);
-            bool openedFromCommandLine = !openedFromActivation && ActivationService.TryOpenFromCommandLine();
+            bool hasFileLaunch = ActivationPaths.FromActivationArgs(activatedArgs).Count > 0 ||
+                                 ActivationPaths.FromCommandLine(
+                                     Environment.GetCommandLineArgs().Skip(1)).Any();
+            if (hasFileLaunch)
+                titleBarWindow.DeferHomePageInitializationForFileActivation();
 
-            // Select and attach the initial document while the window is still hidden.
-            // This lets the first presented frame be the viewer (with its loading state)
-            // instead of Home followed by an animated tab switch.
+            // Show the shell before doing file validation and constructing the viewer.
+            // The low-priority callback runs after the first frame and still precedes
+            // Home's low-priority initialization, so file launches open directly.
             m_window.Activate();
             Logger.Log("Window activated");
             Infrastructure.Diagnostics.DiagnosticsService.Milestone("WindowActivated");
 
-            // File activation takes precedence. Defer session work until the window has
-            // had a chance to present its first frame; RestoreSession does its I/O off-thread.
-            if (!openedFromActivation && !openedFromCommandLine &&
-                m_window is TitleBarWindow titleBarWindow && AppSettings.RestoreLastSession)
-            {
-                Infrastructure.Diagnostics.DiagnosticsService.Milestone("SessionRestoreScheduled");
-                titleBarWindow.DispatcherQueue.TryEnqueue(
+            if (!m_window.DispatcherQueue.TryEnqueue(
                     Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
-                    titleBarWindow.RestoreSession);
+                    () =>
+                    {
+                        try
+                        {
+                            bool openedFromActivation =
+                                ActivationService.TryOpenFromActivationArgs(activatedArgs);
+                            bool openedFromCommandLine =
+                                !openedFromActivation && ActivationService.TryOpenFromCommandLine();
+
+                            // File activation takes precedence. Session I/O runs off-thread.
+                            if (!openedFromActivation && !openedFromCommandLine &&
+                                m_window is TitleBarWindow restoreWindow &&
+                                AppSettings.RestoreLastSession)
+                            {
+                                Infrastructure.Diagnostics.DiagnosticsService.Milestone(
+                                    "SessionRestoreScheduled");
+                                restoreWindow.RestoreSession();
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Error("Deferred startup activation failed", ex);
+                        }
+                        finally
+                        {
+                            if (hasFileLaunch)
+                                titleBarWindow.CompleteFileActivationStartup();
+                        }
+                    }))
+            {
+                Logger.Error("Could not queue startup activation processing");
             }
         }
         catch (Exception ex)
@@ -170,12 +195,18 @@ public partial class App : Application
             return;
         }
 
+        if (ActivationPaths.FromActivationArgs(args).Count == 0)
+        {
+            Logger.Log("[Reactivation] No file path in redirected args; waiting for activation pipe");
+            return;
+        }
+
         m_window.DispatcherQueue.TryEnqueue(() =>
         {
             try
             {
-                ((TitleBarWindow)m_window).RestoreAndActivate();
                 bool opened = ActivationService.TryOpenFromActivationArgs(args);
+                ((TitleBarWindow)m_window).RestoreAndActivate();
                 Logger.Log($"[Reactivation] Redirect-args handling: {(opened ? "file(s) opened" : "no usable file in redirected args")}");
             }
             catch (Exception ex)
