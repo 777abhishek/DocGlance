@@ -1,5 +1,5 @@
-﻿<UserControl
-    x:Class="DocGlance.Services.Updates.UpdateBanner"
+<UserControl
+    x:Class="DocGlance.UI.Controls.UpdateBanner"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 

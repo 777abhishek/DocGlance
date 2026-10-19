@@ -26,6 +26,7 @@ using DocGlance.Infrastructure.Configuration;
 using DocGlance.Infrastructure.Logging;
 using DocGlance.Services.Input;
 using DocGlance.Services.Session;
+using DocGlance.UI.Controls;
 
 namespace DocGlance.UI.Shell;
 

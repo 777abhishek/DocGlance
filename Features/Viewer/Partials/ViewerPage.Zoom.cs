@@ -77,7 +77,6 @@ public sealed partial class ViewerPage
 
         double displayPct = Math.Round(_zoom / NaturalZoom * 100.0);
         ZoomLabel.Text = $"{displayPct}%";
-        SyncToViewModel();
 
         // PDF: let ScrollViewer scale the canvas, then re-render pages at new resolution
         if (_pdfState != null && _activeViewer is ISupportsZoom pdfZoom)

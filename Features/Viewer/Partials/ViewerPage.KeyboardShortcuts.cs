@@ -1,13 +1,127 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using DocGlance.Core.Enums;
 using DocGlance.Features.Viewer.Components;
 using System;
+using Windows.System;
 
 namespace DocGlance.Features.Viewer;
 
 public sealed partial class ViewerPage
 {
+    private const VirtualKey OemMinusKey = (VirtualKey)0xBD;
+    private const VirtualKey OemPlusKey = (VirtualKey)0xBB;
+
+    private void InitializeViewerShortcuts()
+    {
+        AddViewerShortcut(VirtualKey.F5, VirtualKeyModifiers.None,
+            () => _doc != null, StartPresentationFromBeginning);
+        AddViewerShortcut(VirtualKey.F5, VirtualKeyModifiers.Shift,
+            () => _doc != null, EnterPresentationMode);
+        AddViewerShortcut(VirtualKey.F11, VirtualKeyModifiers.None,
+            () => _doc != null, TogglePresentationMode);
+        AddViewerShortcut(VirtualKey.Escape, VirtualKeyModifiers.None,
+            () => _isPresentationMode, ExitPresentationMode);
+
+        AddViewerShortcut(VirtualKey.Right, VirtualKeyModifiers.None,
+            () => _isPresentationMode && _total > 1, () => NavigatePresentationPage(1));
+        AddViewerShortcut(VirtualKey.PageDown, VirtualKeyModifiers.None,
+            () => _isPresentationMode && _total > 1, () => NavigatePresentationPage(1));
+        AddViewerShortcut(VirtualKey.Space, VirtualKeyModifiers.None,
+            () => _isPresentationMode && _total > 1, () => NavigatePresentationPage(1));
+        AddViewerShortcut(VirtualKey.Left, VirtualKeyModifiers.None,
+            () => _isPresentationMode && _total > 1, () => NavigatePresentationPage(-1));
+        AddViewerShortcut(VirtualKey.PageUp, VirtualKeyModifiers.None,
+            () => _isPresentationMode && _total > 1, () => NavigatePresentationPage(-1));
+        AddViewerShortcut(VirtualKey.Back, VirtualKeyModifiers.None,
+            () => _isPresentationMode && _total > 1, () => NavigatePresentationPage(-1));
+
+        AddViewerShortcut(VirtualKey.F9, VirtualKeyModifiers.None,
+            () => Toolbar.SidebarButtonVisibility == Visibility.Visible,
+            () =>
+            {
+                Toolbar.SidebarIsChecked = !(Toolbar.SidebarIsChecked ?? false);
+                Toolbar_SidebarToggled(this, EventArgs.Empty);
+            });
+        AddViewerShortcut(VirtualKey.F, VirtualKeyModifiers.Control,
+            () => _doc != null, () => Toolbar_FindRequested(this, EventArgs.Empty));
+        AddViewerShortcut(VirtualKey.I, VirtualKeyModifiers.Control,
+            () => _doc != null, () => DocInfoButton_Click(this, EventArgs.Empty));
+        AddViewerShortcut(VirtualKey.Number2, VirtualKeyModifiers.Control,
+            () => Toolbar.FitWidthButtonVisibility == Visibility.Visible,
+            () => Toolbar_FitWidthRequested(this, EventArgs.Empty));
+        AddViewerShortcut(VirtualKey.Number0, VirtualKeyModifiers.Control,
+            () => Toolbar.FitPageButtonVisibility == Visibility.Visible,
+            () => Toolbar_FitPageRequested(this, EventArgs.Empty));
+        AddViewerShortcut(VirtualKey.R, VirtualKeyModifiers.Control,
+            () => _pdfState != null, () => Rotate(90));
+        AddViewerShortcut(VirtualKey.Z, VirtualKeyModifiers.Menu,
+            () => Toolbar.WordWrapVisibility == Visibility.Visible, ToggleWordWrap);
+        AddViewerShortcut(VirtualKey.C, VirtualKeyModifiers.Menu,
+            () => FindBar.Visibility == Visibility.Visible, ToggleMatchCase);
+
+        AddViewerShortcut(OemMinusKey, VirtualKeyModifiers.Control,
+            CanZoomCurrentDocument, ZoomOutFromShortcut);
+        AddViewerShortcut(VirtualKey.Subtract, VirtualKeyModifiers.Control,
+            CanZoomCurrentDocument, ZoomOutFromShortcut);
+        AddViewerShortcut(OemPlusKey, VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift,
+            CanZoomCurrentDocument, ZoomInFromShortcut);
+        AddViewerShortcut(VirtualKey.Add, VirtualKeyModifiers.Control,
+            CanZoomCurrentDocument, ZoomInFromShortcut);
+    }
+
+    private void AddViewerShortcut(
+        VirtualKey key,
+        VirtualKeyModifiers modifiers,
+        Func<bool> canExecute,
+        Action action)
+    {
+        var accelerator = new KeyboardAccelerator
+        {
+            Key = key,
+            Modifiers = modifiers,
+        };
+        accelerator.Invoked += (_, args) =>
+        {
+            if (!canExecute())
+                return;
+
+            action();
+            args.Handled = true;
+        };
+        ViewerRoot.KeyboardAccelerators.Add(accelerator);
+    }
+
+    private bool CanZoomCurrentDocument() =>
+        _pdfState != null || _pptxDocument != null || _docxDocument != null ||
+        _spreadsheetDocument != null;
+
+    private void ToggleWordWrap()
+    {
+        Toolbar.IsWordWrapChecked = !Toolbar.IsWordWrapChecked;
+        WordWrapButton_Click(this, EventArgs.Empty);
+    }
+
+    private void ToggleMatchCase()
+    {
+        MatchCaseButton.IsChecked = !(MatchCaseButton.IsChecked ?? false);
+        MatchCaseButton_Click(MatchCaseButton, null!);
+    }
+
+    private void ZoomOutFromShortcut()
+    {
+        SetFitMode(FitMode.None);
+        SetZoom(_zoom / 1.25);
+    }
+
+    private void ZoomInFromShortcut()
+    {
+        SetFitMode(FitMode.None);
+        SetZoom(_zoom * 1.25);
+    }
+
     private async void ShowKeyboardShortcuts(object? sender, EventArgs e)
     {
         if (XamlRoot == null)

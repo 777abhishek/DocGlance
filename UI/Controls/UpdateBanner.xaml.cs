@@ -1,10 +1,10 @@
-﻿using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using DocGlance.Infrastructure.Logging;
 using DocGlance.Services.Updates;
 using System;
 
-namespace DocGlance.Services.Updates;
+namespace DocGlance.UI.Controls;
 
 /// <summary>
 /// A subtle InfoBar that appears at the top of the window when an update is available.

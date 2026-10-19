@@ -1,12 +1,13 @@
 // ViewerPage.xaml.cs — shell, state, lifecycle, public API
 // Split into partial files:
-//   ViewerPage.Pdf.cs     — PDF loading + rendering
 //   ViewerPage.Toolbar.cs — toolbar button handlers
 //   ViewerPage.Sidebar.cs — sidebar tab switching + thumbnail click
 //   ViewerPage.Zoom.cs    — zoom pill + fit-width / fit-page
 
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 using DocGlance.Services;
 using DocGlance.Core.Models;
@@ -81,18 +82,38 @@ public sealed partial class ViewerPage : Page
     public ViewerViewModel ViewModel { get; } = new();
 
     // ── Shared state (accessed by all partial files) ──────────────────────────
-    // These fields drive PDF rendering math. After every mutation call
-    // SyncToViewModel() so XAML bindings (toolbar, title bar) stay in sync.
-    internal DocumentItem?            _doc;
+    // ViewModel is the sole owner of document-viewer state (page, total, zoom,
+    // rotation, document, sidebar). These properties forward directly to ViewModel.
+    internal DocumentItem? _doc
+    {
+        get => ViewModel.Document;
+        set => ViewModel.Document = value;
+    }
     internal PdfDocumentState? _pdfState
     {
         get => PdfViewerControl.DocumentState;
         set => PdfViewerControl.DocumentState = value;
     }
-    internal double                   _zoom     = 1.0;
-    internal int                      _page     = 1;
-    internal int                      _total    = 1;
-    internal double                   _rotation = 0;
+    internal double _zoom
+    {
+        get => ViewModel.Zoom;
+        set => ViewModel.Zoom = value;
+    }
+    internal int _page
+    {
+        get => ViewModel.CurrentPage;
+        set => ViewModel.CurrentPage = value;
+    }
+    internal int _total
+    {
+        get => ViewModel.TotalPages;
+        set => ViewModel.TotalPages = value;
+    }
+    internal double _rotation
+    {
+        get => ViewModel.Rotation;
+        set => ViewModel.Rotation = value;
+    }
     internal CancellationTokenSource? _cts;
     internal List<OutlineItem>        _outline  = new();
     internal PdfViewportState? _viewportState
@@ -148,14 +169,12 @@ public sealed partial class ViewerPage : Page
         {
             _zoom = zoom;
             ZoomLabel.Text = $"{Math.Round(_zoom / NaturalZoom * 100.0)}%";
-            SyncToViewModel();
         };
         PptxViewerControl.PageChanged += (_, page) => UpdateCurrentPage(page);
         PptxViewerControl.ZoomChanged += (_, zoom) =>
         {
             _zoom = zoom;
             ZoomLabel.Text = $"{Math.Round(_zoom / NaturalZoom * 100.0)}%";
-            SyncToViewModel();
         };
         TextViewerControl = (TextViewer)_viewerRegistry.Resolve(".txt").Create(ViewModel);
         TextViewerHost.Content = TextViewerControl;
@@ -194,7 +213,6 @@ public sealed partial class ViewerPage : Page
         {
             _zoom = zoom;
             ZoomLabel.Text = $"{Math.Round(_zoom * 100)}%";
-            SyncToViewModel();
         };
         SpreadsheetViewerControl.SelectionError += (_, message) =>
             ShowInfoBar($"Could not copy selected cells: {message}", InfoBarSeverity.Error);
@@ -279,22 +297,6 @@ public sealed partial class ViewerPage : Page
         _resizeDebounceTimer.Start();
     }
 
-    // ── ViewModel sync ────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Pushes all internal fields into the ViewModel so XAML bindings stay current.
-    /// Call after any mutation to _page, _total, _zoom, _rotation, _doc, or sidebar state.
-    /// </summary>
-    internal void SyncToViewModel()
-    {
-        ViewModel.CurrentPage  = _page;
-        ViewModel.TotalPages   = _total;
-        ViewModel.Zoom         = _zoom;
-        ViewModel.NaturalZoom  = NaturalZoom;
-        ViewModel.Rotation     = _rotation;
-        ViewModel.Document     = _doc;
-        ViewModel.SidebarOpen  = SidebarCard?.Visibility == Visibility.Visible;
-    }
 
     // ── Navigation ───────────────────────────────────────────────────────────
     protected override void OnNavigatedTo(NavigationEventArgs e)
@@ -352,40 +354,404 @@ public sealed partial class ViewerPage : Page
         ViewModel.IsLoading = on;
     }
 
-    private async Task LoadTextFileAsync(DocumentItem document, CancellationToken cancellationToken)
+    // Natural zoom is 1.0 — render at screen DPI × zoom dynamically.
+    private float NaturalZoom => 1.0f;
+
+    // ── Top-level load entry point ────────────────────────────────────────────
+
+    private async Task LoadDocumentAsync(DocumentItem doc)
     {
+        // Top-level fire-and-forget boundary: exceptions must be caught here so
+        // they are surfaced as error cards instead of silently lost.
+        try
+        {
+            await LoadDocumentCoreAsync(doc);
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when switching documents or closing a tab mid-load.
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"[Viewer] LoadDocumentAsync failed for {doc.FilePath}", ex);
+            ShowErrorCard($"Cannot open document: {ex.Message}");
+        }
+    }
+
+    // ── Core load — generic registry path ────────────────────────────────────
+
+    private async Task LoadDocumentCoreAsync(DocumentItem doc)
+    {
+        if (!await FlushPendingPdfAnnotationsAsync())
+            throw new InvalidOperationException(
+                "The previous PDF still has unsaved annotation changes. " +
+                "Save them before opening another document.");
+
+        using var openOp = Logger.BeginOperation("OpenDocument", ("FilePath", doc.FilePath));
+        Infrastructure.Diagnostics.DiagnosticsService.SetCurrentOperation(
+            $"OpenDocument {System.IO.Path.GetExtension(doc.FilePath ?? string.Empty)}");
+
+        // ── Reset shared state ────────────────────────────────────────────────
+        _doc = doc;
+        ClearPdfAnnotationHistory();
+        _cts?.Cancel();
+        _searchCts?.Cancel();
+        _searchDebounceCts?.Cancel();
+        ClearSearchHighlights();
+        ClearOfficeSelection();
+        ClearOfficeHighlights();
+        _activeViewer           = null;
+        _selectedText           = null;
+        _officeSelectionAnchor  = null;
+        _officeSelectionFocus   = null;
+        _pptxTextMaps.Clear();
+
+        await SpreadsheetViewerControl.CleanupAsync();
+        await PdfViewerControl.CleanupAsync();
+        await DocxViewerControl.CleanupAsync();
+        await PptxViewerControl.CleanupAsync();
+
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        Thumbnails.Clear();
+        ThumbnailList.ItemsSource = Thumbnails;
+        _outline.Clear();
+        OutlineTree.RootNodes.Clear();
+        SetPdfAnnotations(Array.Empty<PdfTextAnnotation>());
+        PdfAnnotationCanvas.Children.Clear();
+        Toolbar.PdfMarkupToolsVisibility = Visibility.Collapsed;
+        Toolbar.SetMarkupToolActive(false);
+
+        _rotation = 0;
+        _fitMode  = FitMode.None;
+        Toolbar.IsFitWidthChecked = false;
+        Toolbar.IsFitPageChecked  = false;
+        _page = 1; _total = 1;
+        Toolbar.UpdatePageInfo(1, 1);
+
+        ViewModel.Reset();
+        ViewModel.Document = doc;
+
+        // ── Generic registry path ─────────────────────────────────────────────
+        // All formats — including XLSX — resolve through the registry and load
+        // via viewer.LoadAsync. No factory type-matching occurs here.
+
+        string ext = System.IO.Path.GetExtension(doc.FilePath ?? "").ToLowerInvariant();
+        IDocumentViewerFactory factory = _viewerRegistry.Resolve(ext);
+
         ShowLoading(true);
         try
         {
-            await TextViewerControl.LoadAsync(document, cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
+            IDocumentViewer viewer = ActivateHostedViewer(factory, doc);
+            _activeViewer = viewer;
 
-            _activeViewer = TextViewerControl;
-            TextViewerHost.Visibility = Visibility.Visible;
-            PdfViewerHost.Visibility = Visibility.Collapsed;
-            DocxViewerHost.Visibility = Visibility.Collapsed;
-            PptxViewerHost.Visibility = Visibility.Collapsed;
-            DocumentScrollViewer.Visibility = Visibility.Collapsed;
-            SpreadsheetViewerHost.Visibility = Visibility.Collapsed;
-            UnsupportedFileMessage.Visibility = Visibility.Collapsed;
-            ErrorMessage.Visibility = Visibility.Collapsed;
-            Toolbar.WordWrapVisibility = Visibility.Visible;
-            Toolbar.RotationButtonsVisibility = Visibility.Collapsed;
-            Toolbar.SidebarButtonVisibility = Visibility.Collapsed;
-            Toolbar.FitWidthButtonVisibility = Visibility.Collapsed;
-            Toolbar.FitPageButtonVisibility = Visibility.Collapsed;
-            Toolbar.IsWordWrapChecked = false;
-            SidebarCard.Visibility = Visibility.Collapsed;
-            SidebarColumn.Width = new GridLength(0);
-            ViewModel.SidebarOpen = false;
-            _total = 1;
-            _page = 1;
-            Toolbar.UpdatePageInfo(1, 1);
+            await viewer.LoadAsync(doc, ct);
+            ct.ThrowIfCancellationRequested();
+
+            await ApplyPostLoadConfigAsync(viewer, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            Logger.Error($"[Viewer] LoadDocumentCoreAsync: {ex.Message}", ex);
+            ShowErrorCard($"Cannot open document: {ex.Message}");
         }
         finally
         {
             ShowLoading(false);
+            Infrastructure.Diagnostics.DiagnosticsService.SetCurrentOperation(null);
+            Infrastructure.Diagnostics.DiagnosticsService.MemoryCheckpoint("DocumentOpened");
         }
+    }
+
+    // ── Viewer activation ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns the pre-hosted viewer instance for the given factory and activates
+    /// the appropriate host panel. FallbackViewer is constructed fresh per load
+    /// and placed in <c>UnsupportedFileMessage</c>.
+    /// </summary>
+    private IDocumentViewer ActivateHostedViewer(IDocumentViewerFactory factory, DocumentItem doc)
+    {
+        switch (factory)
+        {
+            case PdfViewerFactory:
+                ShowPdfViewer();
+                return PdfViewerControl;
+
+            case DocxViewerFactory:
+                ShowDocxViewer();
+                return DocxViewerControl;
+
+            case PptxViewerFactory:
+                ShowPptxViewer();
+                return PptxViewerControl;
+
+            case SpreadsheetViewerFactory:
+                // XLSX routed through the shared viewer path (Phase 2 completion).
+                ShowSpreadsheetViewer();
+                return SpreadsheetViewerControl;
+
+            case TextViewerFactory:
+                ShowTextViewer();
+                return TextViewerControl;
+
+            default:
+                return ActivateFallbackViewer(factory, doc);
+        }
+    }
+
+    private IDocumentViewer ActivateFallbackViewer(IDocumentViewerFactory factory, DocumentItem doc)
+    {
+        if (_fallbackViewer != null)
+            _ = _fallbackViewer.CleanupAsync();
+
+        _fallbackViewer = (FallbackViewer)factory.Create(ViewModel);
+        _fallbackViewer.OpenRequested += (_, _) => OpenExternalButton_Click(this, EventArgs.Empty);
+
+        PdfViewerHost.Visibility          = Visibility.Collapsed;
+        DocxViewerHost.Visibility         = Visibility.Collapsed;
+        PptxViewerHost.Visibility         = Visibility.Collapsed;
+        DocumentScrollViewer.Visibility   = Visibility.Collapsed;
+        TextViewerHost.Visibility         = Visibility.Collapsed;
+        SpreadsheetViewerHost.Visibility  = Visibility.Collapsed;
+        ErrorMessage.Visibility           = Visibility.Collapsed;
+        UnsupportedFileMessage.Content    = _fallbackViewer.Control;
+        UnsupportedFileMessage.Visibility = Visibility.Visible;
+
+        SidebarCard.Visibility              = Visibility.Collapsed;
+        SidebarColumn.Width                 = new GridLength(0);
+        Toolbar.SidebarButtonVisibility     = Visibility.Collapsed;
+        Toolbar.RotationButtonsVisibility   = Visibility.Collapsed;
+
+        return _fallbackViewer;
+    }
+
+    // ── Post-load configuration ───────────────────────────────────────────────
+
+    /// <summary>
+    /// After <c>viewer.LoadAsync</c> succeeds, apply shell-side wiring that
+    /// cannot live inside the viewer: page counts, thumbnails, outline tree,
+    /// zoom defaults, and sidebar visibility. Uses ISupports* and viewer-concrete
+    /// checks — no factory type-matching.
+    /// </summary>
+    private async Task ApplyPostLoadConfigAsync(IDocumentViewer viewer, CancellationToken ct)
+    {
+        // ── PDF ───────────────────────────────────────────────────────────────
+        if (viewer is PdfViewer pdfViewer)
+        {
+            _pdfState = pdfViewer.DocumentState;
+            _total    = _pdfState?.PageCount ?? 0;
+
+            if (_pdfState == null)
+            {
+                ShowErrorCard("Failed to load PDF document");
+                return;
+            }
+
+            Toolbar.PdfMarkupToolsVisibility = _pdfState.ManagedPdfDocument == null
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+
+            await LoadPdfNavigationDataAsync(_pdfState, ct);
+
+            _page = 1;
+            Toolbar.UpdatePageInfo(_page, _total);
+            ViewModel.TotalPages  = _total;
+            ViewModel.CurrentPage = _page;
+
+            double targetZoom = Infrastructure.Configuration.AppSettings.DefaultZoomPercent / 100.0;
+            _zoom = targetZoom;
+            DocumentScrollViewer.ChangeView(null, null, (float)targetZoom, disableAnimation: true);
+            ZoomLabel.Text        = $"{Infrastructure.Configuration.AppSettings.DefaultZoomPercent}%";
+            ViewModel.NaturalZoom = NaturalZoom;
+            ViewModel.Zoom        = _zoom;
+
+            string zoomMode = Infrastructure.Configuration.AppSettings.DefaultZoomMode;
+            if      (zoomMode == "FitWidth")   { SetFitMode(FitMode.FitWidth); ApplyFitWidth(); }
+            else if (zoomMode == "FitPage")    { SetFitMode(FitMode.FitPage);  ApplyFitPage();  }
+            else if (zoomMode == "ActualSize") { SetFitMode(FitMode.None);     SetZoom(1.0);    }
+
+            if (_total == 1)
+                ConfigureSidebar(false, singlePage: true);
+            else
+                ConfigureSidebar(Infrastructure.Configuration.AppSettings.ShowSidebar);
+
+            foreach (PageThumbnailItem thumbnail in pdfViewer.Thumbnails)
+                Thumbnails.Add(thumbnail);
+
+            ShowLoading(false);
+            DocumentScrollViewer.UpdateLayout();
+            InitializeViewportRendering();
+            ScheduleFitModeReapply();
+
+            pdfViewer.PrefetchThumbnailsAroundAsync(
+                0, SidebarCard.Visibility == Visibility.Visible, ct)
+                .SafeFireAndForget("PdfThumbnailPrefetch");
+            return;
+        }
+
+        // ── DOCX ──────────────────────────────────────────────────────────────
+        if (viewer is DocxViewer docxViewer)
+        {
+            DocxDocument document = docxViewer.Document
+                ?? throw new InvalidOperationException(
+                    "DOCX viewer did not retain the opened document.");
+            _total = document.PageCount;
+            SetOutlineItems(docxViewer.Outline);
+            _page = 1;
+            Toolbar.UpdatePageInfo(_page, _total);
+            ViewModel.TotalPages  = _total;
+            ViewModel.CurrentPage = _page;
+
+            ConfigureSidebar(true);
+
+            foreach (PageThumbnailItem thumbnail in docxViewer.Thumbnails)
+                Thumbnails.Add(thumbnail);
+            ThumbnailList.ItemsSource = Thumbnails;
+
+            _zoom = NaturalZoom;
+            ZoomLabel.Text        = "100%";
+            ViewModel.NaturalZoom = NaturalZoom;
+            ViewModel.Zoom        = _zoom;
+            SetFitMode(FitMode.FitWidth);
+            ApplyFitWidth();
+
+            await Task.Delay(100, ct);
+            docxViewer.ScrollViewer.UpdateLayout();
+            await docxViewer.RenderViewportAsync(ct);
+            docxViewer.StartThumbnailLoading();
+            return;
+        }
+
+        // ── PPTX ──────────────────────────────────────────────────────────────
+        if (viewer is PptxViewer pptxViewer)
+        {
+            PptxDocument document = pptxViewer.Document
+                ?? throw new InvalidOperationException(
+                    "PPTX viewer did not retain the opened presentation.");
+            _pptxTextMaps.Clear();
+            _total = document.SlideCount;
+            SetOutlineItems(pptxViewer.Outline);
+            _page = 1;
+            Toolbar.UpdatePageInfo(_page, _total);
+            ViewModel.TotalPages  = _total;
+            ViewModel.CurrentPage = _page;
+
+            ConfigureSidebar(true);
+
+            Thumbnails.Clear();
+            foreach (PageThumbnailItem thumbnail in pptxViewer.Thumbnails)
+                Thumbnails.Add(thumbnail);
+            ThumbnailList.ItemsSource = Thumbnails;
+
+            _zoom = NaturalZoom;
+            ZoomLabel.Text        = "100%";
+            ViewModel.NaturalZoom = NaturalZoom;
+            ViewModel.Zoom        = _zoom;
+            SetFitMode(FitMode.FitWidth);
+
+            await Task.Delay(100, ct);
+            pptxViewer.ScrollViewer.UpdateLayout();
+            await pptxViewer.RenderViewportAsync(ct);
+            pptxViewer.StartThumbnailLoading();
+            return;
+        }
+
+        // ── XLSX (Spreadsheet) ────────────────────────────────────────────────
+        if (viewer is SpreadsheetViewer spreadsheetViewer)
+        {
+            // GridCraft availability is enforced inside SpreadsheetViewer.LoadAsync.
+            // If it threw, we never reach here.
+            SpreadsheetDocument spreadsheetDocument = spreadsheetViewer.Document
+                ?? throw new InvalidOperationException(
+                    "Spreadsheet viewer did not retain the opened document.");
+
+            _activeViewer = spreadsheetViewer;
+            int sheetCount = spreadsheetDocument.SheetCount;
+            _total = sheetCount;
+            _page  = 1;
+            Toolbar.UpdatePageInfo(1, sheetCount);
+            ViewModel.TotalPages  = sheetCount;
+            ViewModel.CurrentPage = 1;
+            SetFitMode(FitMode.None);
+            SetZoom(1.0);
+            return;
+        }
+
+        // ── Text / Markdown / Code ────────────────────────────────────────────
+        if (viewer is TextViewer)
+        {
+            _activeViewer = viewer;
+            _total = 1;
+            _page  = 1;
+            Toolbar.UpdatePageInfo(1, 1);
+            return;
+        }
+
+        // ── Fallback (unsupported / .xls) ─────────────────────────────────────
+        _total = 1;
+        Toolbar.UpdatePageInfo(1, 1);
+    }
+
+    // ── Sidebar helper ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Sets sidebar open/collapsed. When <paramref name="singlePage"/> is true,
+    /// the sidebar is always collapsed regardless of <paramref name="showSidebar"/>.
+    /// </summary>
+    private void ConfigureSidebar(bool showSidebar, bool singlePage = false)
+    {
+        bool open = !singlePage && showSidebar;
+        Toolbar.SidebarIsChecked = open;
+        SidebarCard.Visibility   = open ? Visibility.Visible : Visibility.Collapsed;
+        SidebarColumn.Width      = open
+            ? new Microsoft.UI.Xaml.GridLength(240)
+            : new Microsoft.UI.Xaml.GridLength(0);
+        ViewModel.SidebarOpen    = open;
+    }
+
+    // ── Error card ────────────────────────────────────────────────────────────
+
+    private void ShowErrorCard(string message)
+    {
+        ViewModel.ErrorMessage = message;
+        _activeViewer = null;
+
+        ErrorMessageText.Text   = message;
+        ErrorMessage.Visibility = Visibility.Visible;
+
+        PdfViewerHost.Visibility          = Visibility.Collapsed;
+        DocxViewerHost.Visibility         = Visibility.Collapsed;
+        PptxViewerHost.Visibility         = Visibility.Collapsed;
+        DocumentScrollViewer.Visibility   = Visibility.Collapsed;
+        TextViewerHost.Visibility         = Visibility.Collapsed;
+        SpreadsheetViewerHost.Visibility  = Visibility.Collapsed;
+        UnsupportedFileMessage.Visibility = Visibility.Collapsed;
+
+        SidebarCard.Visibility              = Visibility.Collapsed;
+        SidebarColumn.Width                 = new GridLength(0);
+        Toolbar.SidebarButtonVisibility     = Visibility.Collapsed;
+        Toolbar.RotationButtonsVisibility   = Visibility.Collapsed;
+    }
+
+    // ── Resource helpers (absorbed from ViewerPage.Helpers.cs) ────────────────
+    internal static Brush ResBrush(string key)
+    {
+        if (Application.Current.Resources.TryGetValue(key, out var v) && v is Brush b)
+            return b;
+        return new SolidColorBrush(Colors.Transparent);
+    }
+
+    internal static Style? ResStyle(string key)
+    {
+        if (Application.Current.Resources.TryGetValue(key, out var v) && v is Style s)
+            return s;
+        return null;
     }
 
     internal void ShowPdfViewer()
@@ -459,6 +825,30 @@ public sealed partial class ViewerPage : Page
         SidebarCard.Visibility = Visibility.Collapsed;
         SidebarColumn.Width = new GridLength(0);
         ViewModel.SidebarOpen = false;
+    }
+
+    internal void ShowTextViewer()
+    {
+        _activeViewer                   = TextViewerControl;
+        TextViewerHost.Visibility       = Visibility.Visible;
+        PdfViewerHost.Visibility        = Visibility.Collapsed;
+        DocxViewerHost.Visibility       = Visibility.Collapsed;
+        PptxViewerHost.Visibility       = Visibility.Collapsed;
+        DocumentScrollViewer.Visibility = Visibility.Collapsed;
+        SpreadsheetViewerHost.Visibility = Visibility.Collapsed;
+        UnsupportedFileMessage.Visibility = Visibility.Collapsed;
+        ErrorMessage.Visibility         = Visibility.Collapsed;
+
+        Toolbar.WordWrapVisibility        = Visibility.Visible;
+        Toolbar.RotationButtonsVisibility = Visibility.Collapsed;
+        Toolbar.SidebarButtonVisibility   = Visibility.Collapsed;
+        Toolbar.FitWidthButtonVisibility  = Visibility.Collapsed;
+        Toolbar.FitPageButtonVisibility   = Visibility.Collapsed;
+        Toolbar.IsWordWrapChecked         = false;
+
+        SidebarCard.Visibility = Visibility.Collapsed;
+        SidebarColumn.Width    = new GridLength(0);
+        ViewModel.SidebarOpen  = false;
     }
 
     private void WordWrapButton_Click(object? sender, EventArgs e)
