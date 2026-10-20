@@ -32,6 +32,7 @@ using DocGlance.Features.Viewer.Formats.Docx;
 using DocGlance.Features.Viewer.Formats.Pptx;
 using DocGlance.Features.Viewer.Formats.Spreadsheet;
 using DocGlance.Features.Viewer.Formats.Images;
+using DocGlance.Features.Viewer.Formats.Markdown;
 
 namespace DocGlance.Features.Viewer;
 
@@ -44,6 +45,7 @@ public sealed partial class ViewerPage : Page
             new DocxViewerFactory(),
             new PptxViewerFactory(),
             new TextViewerFactory(),
+            new MarkdownViewerFactory(),
             new SpreadsheetViewerFactory(),
             new ImageViewerFactory(),
         },
@@ -60,6 +62,7 @@ public sealed partial class ViewerPage : Page
         _pptxViewerControl ?? throw new InvalidOperationException("The PPTX viewer has not been initialized.");
     private PptxDocument? _pptxDocument => _pptxViewerControl?.Document;
     private TextViewer TextViewerControl { get; set; } = null!;
+    private MarkdownViewer MarkdownViewerControl { get; set; } = null!;
     private SpreadsheetViewer SpreadsheetViewerControl { get; set; } = null!;
     private SpreadsheetDocument? _spreadsheetDocument => SpreadsheetViewerControl?.Document;
     private ImageViewer ImageViewerControl { get; set; } = null!;
@@ -192,6 +195,8 @@ public sealed partial class ViewerPage : Page
         };
         TextViewerControl = (TextViewer)_viewerRegistry.Resolve(".txt").Create(ViewModel);
         TextViewerHost.Content = TextViewerControl;
+        MarkdownViewerControl = (MarkdownViewer)_viewerRegistry.Resolve(".md").Create(ViewModel);
+        MarkdownViewerHost.Content = MarkdownViewerControl;
         SpreadsheetViewerControl = (SpreadsheetViewer)_viewerRegistry.Resolve(".xlsx").Create(ViewModel);
         SpreadsheetViewerHost.Content = SpreadsheetViewerControl;
         InitializeViewerShortcuts();
@@ -338,6 +343,7 @@ public sealed partial class ViewerPage : Page
         // leaked the Rust-side document (whole file buffer + renderer + font caches)
         // until GC — the reported "memory grows when opening documents" symptom.
         _ = TextViewerControl.CleanupAsync();
+        _ = MarkdownViewerControl?.CleanupAsync();
         _ = PptxViewerControl.CleanupAsync();
         _ = DocxViewerControl.CleanupAsync();
         _pptxTextMaps.Clear();
@@ -423,6 +429,7 @@ public sealed partial class ViewerPage : Page
 
         await SpreadsheetViewerControl.CleanupAsync();
         await ImageViewerControl.CleanupAsync();
+        await MarkdownViewerControl.CleanupAsync();
         await PdfViewerControl.CleanupAsync();
         await DocxViewerControl.CleanupAsync();
         await PptxViewerControl.CleanupAsync();
@@ -516,6 +523,10 @@ public sealed partial class ViewerPage : Page
                 ShowTextViewer();
                 return TextViewerControl;
 
+            case MarkdownViewerFactory:
+                ShowMarkdownViewer();
+                return MarkdownViewerControl;
+
             case ImageViewerFactory:
                 ShowImageViewer();
                 return ImageViewerControl;
@@ -538,6 +549,7 @@ public sealed partial class ViewerPage : Page
         PptxViewerHost.Visibility         = Visibility.Collapsed;
         DocumentScrollViewer.Visibility   = Visibility.Collapsed;
         TextViewerHost.Visibility         = Visibility.Collapsed;
+        MarkdownViewerHost.Visibility     = Visibility.Collapsed;
         SpreadsheetViewerHost.Visibility  = Visibility.Collapsed;
         ImageViewerHost.Visibility        = Visibility.Collapsed;
         ErrorMessage.Visibility           = Visibility.Collapsed;
@@ -720,7 +732,7 @@ public sealed partial class ViewerPage : Page
         }
 
         // ── Text / Markdown / Code ────────────────────────────────────────────
-        if (viewer is TextViewer)
+        if (viewer is TextViewer or MarkdownViewer)
         {
             _activeViewer = viewer;
             _total = 1;
@@ -766,6 +778,7 @@ public sealed partial class ViewerPage : Page
         PptxViewerHost.Visibility         = Visibility.Collapsed;
         DocumentScrollViewer.Visibility   = Visibility.Collapsed;
         TextViewerHost.Visibility         = Visibility.Collapsed;
+        MarkdownViewerHost.Visibility     = Visibility.Collapsed;
         SpreadsheetViewerHost.Visibility  = Visibility.Collapsed;
         ImageViewerHost.Visibility        = Visibility.Collapsed;
         UnsupportedFileMessage.Visibility = Visibility.Collapsed;
@@ -798,6 +811,7 @@ public sealed partial class ViewerPage : Page
         DocxViewerHost.Visibility = Visibility.Collapsed;
         PptxViewerHost.Visibility = Visibility.Collapsed;
         TextViewerHost.Visibility = Visibility.Collapsed;
+        MarkdownViewerHost.Visibility = Visibility.Collapsed;
         DocumentScrollViewer.Visibility = Visibility.Visible;
         SpreadsheetViewerHost.Visibility = Visibility.Collapsed;
         ImageViewerHost.Visibility = Visibility.Collapsed;
@@ -817,6 +831,7 @@ public sealed partial class ViewerPage : Page
         DocxViewerHost.Visibility = Visibility.Visible;
         PptxViewerHost.Visibility = Visibility.Collapsed;
         TextViewerHost.Visibility = Visibility.Collapsed;
+        MarkdownViewerHost.Visibility = Visibility.Collapsed;
         SpreadsheetViewerHost.Visibility = Visibility.Collapsed;
         ImageViewerHost.Visibility = Visibility.Collapsed;
         UnsupportedFileMessage.Visibility = Visibility.Collapsed;
@@ -835,6 +850,7 @@ public sealed partial class ViewerPage : Page
         DocxViewerHost.Visibility = Visibility.Collapsed;
         PptxViewerHost.Visibility = Visibility.Visible;
         TextViewerHost.Visibility = Visibility.Collapsed;
+        MarkdownViewerHost.Visibility = Visibility.Collapsed;
         SpreadsheetViewerHost.Visibility = Visibility.Collapsed;
         ImageViewerHost.Visibility = Visibility.Collapsed;
         UnsupportedFileMessage.Visibility = Visibility.Collapsed;
@@ -853,6 +869,7 @@ public sealed partial class ViewerPage : Page
         DocxViewerHost.Visibility = Visibility.Collapsed;
         PptxViewerHost.Visibility = Visibility.Collapsed;
         TextViewerHost.Visibility = Visibility.Collapsed;
+        MarkdownViewerHost.Visibility = Visibility.Collapsed;
         DocumentScrollViewer.Visibility = Visibility.Collapsed;
         SpreadsheetViewerHost.Visibility = Visibility.Visible;
         ImageViewerHost.Visibility = Visibility.Collapsed;
@@ -872,6 +889,7 @@ public sealed partial class ViewerPage : Page
     {
         _activeViewer                   = TextViewerControl;
         TextViewerHost.Visibility       = Visibility.Visible;
+        MarkdownViewerHost.Visibility   = Visibility.Collapsed;
         PdfViewerHost.Visibility        = Visibility.Collapsed;
         DocxViewerHost.Visibility       = Visibility.Collapsed;
         PptxViewerHost.Visibility       = Visibility.Collapsed;
@@ -893,6 +911,29 @@ public sealed partial class ViewerPage : Page
         ViewModel.SidebarOpen  = false;
     }
 
+    internal void ShowMarkdownViewer()
+    {
+        _activeViewer = MarkdownViewerControl;
+        MarkdownViewerHost.Visibility = Visibility.Visible;
+        TextViewerHost.Visibility = Visibility.Collapsed;
+        PdfViewerHost.Visibility = Visibility.Collapsed;
+        DocxViewerHost.Visibility = Visibility.Collapsed;
+        PptxViewerHost.Visibility = Visibility.Collapsed;
+        DocumentScrollViewer.Visibility = Visibility.Collapsed;
+        SpreadsheetViewerHost.Visibility = Visibility.Collapsed;
+        ImageViewerHost.Visibility = Visibility.Collapsed;
+        UnsupportedFileMessage.Visibility = Visibility.Collapsed;
+        ErrorMessage.Visibility = Visibility.Collapsed;
+        Toolbar.WordWrapVisibility = Visibility.Collapsed;
+        Toolbar.RotationButtonsVisibility = Visibility.Collapsed;
+        Toolbar.SidebarButtonVisibility = Visibility.Collapsed;
+        Toolbar.FitWidthButtonVisibility = Visibility.Collapsed;
+        Toolbar.FitPageButtonVisibility = Visibility.Collapsed;
+        SidebarCard.Visibility = Visibility.Collapsed;
+        SidebarColumn.Width = new GridLength(0);
+        ViewModel.SidebarOpen = false;
+    }
+
     internal void ShowImageViewer()
     {
         _activeViewer = ImageViewerControl;
@@ -901,6 +942,7 @@ public sealed partial class ViewerPage : Page
         DocxViewerHost.Visibility = Visibility.Collapsed;
         PptxViewerHost.Visibility = Visibility.Collapsed;
         TextViewerHost.Visibility = Visibility.Collapsed;
+        MarkdownViewerHost.Visibility = Visibility.Collapsed;
         SpreadsheetViewerHost.Visibility = Visibility.Collapsed;
         UnsupportedFileMessage.Visibility = Visibility.Collapsed;
         ErrorMessage.Visibility = Visibility.Collapsed;

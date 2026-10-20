@@ -7,6 +7,7 @@ using DocGlance.Features.Viewer.Formats.Pptx;
 using DocGlance.Features.Viewer.Formats.Spreadsheet;
 using DocGlance.Features.Viewer.Formats.Text;
 using DocGlance.Features.Viewer.Formats.Images;
+using DocGlance.Features.Viewer.Formats.Markdown;
 
 namespace DocGlance.Tests.Features.Viewer;
 
@@ -88,6 +89,23 @@ public sealed class DocumentViewerRegistryTests
         registry.Resolve(".png").Should().BeSameAs(image);
         registry.Resolve(@"C:\documents\photo.JPEG").Should().BeSameAs(image);
         registry.Resolve(".tiff").Should().BeSameAs(image);
+        registry.Resolve(".svg").Should().BeSameAs(image);
+        registry.Resolve(".svgz").Should().BeSameAs(image);
+        registry.Resolve(".jxr").Should().BeSameAs(image);
+    }
+
+    [Fact]
+    public void Resolve_UsesMarkdownFactoryForMarkdownFormats()
+    {
+        var markdown = new MarkdownViewerFactory();
+        var registry = new DocumentViewerRegistry(
+            new IDocumentViewerFactory[] { markdown },
+            new FallbackViewerFactory());
+
+        registry.Resolve(".md").Should().BeSameAs(markdown);
+        registry.Resolve(@"C:\documents\guide.MARKDOWN").Should().BeSameAs(markdown);
+        registry.Resolve(".mdx").Should().BeSameAs(markdown);
+        registry.Resolve(".mmd").Should().BeSameAs(markdown);
     }
 
     [Fact]

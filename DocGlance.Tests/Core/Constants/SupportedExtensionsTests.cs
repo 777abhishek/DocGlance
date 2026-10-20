@@ -16,9 +16,13 @@ public class SupportedExtensionsTests
     {
         SupportedExtensions.Pdf.Intersect(SupportedExtensions.Text).Should().BeEmpty();
         SupportedExtensions.Pdf.Intersect(SupportedExtensions.Office).Should().BeEmpty();
+        SupportedExtensions.Markdown.Intersect(SupportedExtensions.Pdf).Should().BeEmpty();
+        SupportedExtensions.Markdown.Intersect(SupportedExtensions.Office).Should().BeEmpty();
         SupportedExtensions.Text.Intersect(SupportedExtensions.Office).Should().BeEmpty();
         SupportedExtensions.Image.Intersect(SupportedExtensions.Office).Should().BeEmpty();
         SupportedExtensions.Image.Intersect(SupportedExtensions.Text).Should().BeEmpty();
+        SupportedExtensions.Markdown.Intersect(SupportedExtensions.Image).Should().BeEmpty();
+        SupportedExtensions.Markdown.Intersect(SupportedExtensions.Text).Should().BeEmpty();
     }
 
     [Theory]
@@ -37,6 +41,16 @@ public class SupportedExtensionsTests
         SupportedExtensions.IsText(ext).Should().Be(text);
         SupportedExtensions.IsOffice(ext).Should().Be(office);
         SupportedExtensions.IsImage(ext).Should().Be(image);
+    }
+
+    [Theory]
+    [InlineData(".md")]
+    [InlineData(".markdown")]
+    [InlineData(".MDX")]
+    [InlineData(".mmd")]
+    public void MarkdownExtensions_AreClassifiedSeparately(string extension)
+    {
+        SupportedExtensions.IsMarkdown(extension).Should().BeTrue();
     }
 
     [Fact]

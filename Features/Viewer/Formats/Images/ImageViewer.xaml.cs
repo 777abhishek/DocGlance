@@ -8,15 +8,11 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using Windows.Graphics.Imaging;
-using Windows.Storage;
-using Windows.Storage.Streams;
 
 namespace DocGlance.Features.Viewer.Formats.Images;
 
 public sealed partial class ImageViewer : UserControl, IDocumentViewer, ISupportsZoom
 {
-    private const double MaxDecodedPixels = 32_000_000;
     private const double SidePadding = 32;
     private const double VerticalPadding = 32;
     private double _imageWidth;
@@ -51,35 +47,15 @@ public sealed partial class ImageViewer : UserControl, IDocumentViewer, ISupport
         _zoom = 1;
         ImageScrollViewer.ChangeView(0, 0, 1, disableAnimation: true);
 
-        StorageFile file = await StorageFile.GetFileFromPathAsync(document.FilePath);
-        using IRandomAccessStream stream = await file.OpenReadAsync();
-        BitmapDecoder decoder = await BitmapDecoder.CreateAsync(stream);
+        LoadedImageSource loadedImage = await ImageSourceLoader.LoadAsync(
+            document.FilePath, decodeWidth: null, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
 
-        double sourceWidth = decoder.PixelWidth;
-        double sourceHeight = decoder.PixelHeight;
-        if (sourceWidth <= 0 || sourceHeight <= 0)
-            throw new InvalidOperationException("The image has invalid dimensions.");
-
-        double decodeScale = Math.Min(1, Math.Sqrt(MaxDecodedPixels / (sourceWidth * sourceHeight)));
-        int decodeWidth = Math.Max(1, (int)Math.Floor(sourceWidth * decodeScale));
-        int decodeHeight = Math.Max(1, (int)Math.Floor(sourceHeight * decodeScale));
-        stream.Seek(0);
-
-        var bitmap = new BitmapImage
-        {
-            DecodePixelType = DecodePixelType.Physical,
-            DecodePixelWidth = decodeWidth,
-            DecodePixelHeight = decodeHeight,
-        };
-        await bitmap.SetSourceAsync(stream);
-        cancellationToken.ThrowIfCancellationRequested();
-
-        PreviewImage.Source = bitmap;
-        PreviewImage.Width = bitmap.PixelWidth;
-        PreviewImage.Height = bitmap.PixelHeight;
-        _imageWidth = bitmap.PixelWidth;
-        _imageHeight = bitmap.PixelHeight;
+        PreviewImage.Source = loadedImage.Source;
+        PreviewImage.Width = loadedImage.Width;
+        PreviewImage.Height = loadedImage.Height;
+        _imageWidth = loadedImage.Width;
+        _imageHeight = loadedImage.Height;
         SetFitMode(FitMode.FitPage);
     }
 
@@ -151,7 +127,11 @@ public sealed partial class ImageViewer : UserControl, IDocumentViewer, ISupport
 public sealed class ImageViewerFactory : IDocumentViewerFactory
 {
     private static readonly IReadOnlyCollection<string> Extensions =
-        new[] { ".bmp", ".gif", ".jpeg", ".jpg", ".png", ".tif", ".tiff" };
+        new[]
+        {
+            ".bmp", ".dds", ".gif", ".hdp", ".ico", ".jpeg", ".jpg", ".jxr",
+            ".png", ".svg", ".svgz", ".tif", ".tiff", ".wdp",
+        };
 
     public IReadOnlyCollection<string> SupportedExtensions => Extensions;
 

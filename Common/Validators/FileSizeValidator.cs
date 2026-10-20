@@ -58,7 +58,7 @@ public static class FileSizeValidator
             return AppSettings.MaxPdfFileSizeBytes;
         if (SupportedExtensions.IsOffice(extension))
             return AppSettings.MaxOfficeFileSizeBytes;
-        if (SupportedExtensions.IsText(extension))
+        if (SupportedExtensions.IsText(extension) || SupportedExtensions.IsMarkdown(extension))
             return AppSettings.MaxTextFileSizeBytes;
 
         // Default for unknown types

@@ -31,8 +31,7 @@ public static class SessionService
 
     public static void RestoreSession(
         DispatcherQueue dispatcherQueue,
-        Action<DocumentItem> openDocument,
-        Action<DocumentItem> selectDocument)
+        Action<IReadOnlyList<DocumentItem>, int> restoreDocuments)
     {
         DocGlance.Infrastructure.Diagnostics.DiagnosticsService.Milestone("SessionRestoreStarted");
 
@@ -58,7 +57,7 @@ public static class SessionService
                             }
 
                             var document = DocumentItem.FromFileInfo(new FileInfo(filePath));
-                            if (documents.Count == state.SelectedTabIndex)
+                            if (i == state.SelectedTabIndex)
                                 selectedDocumentIndex = documents.Count;
                             documents.Add(document);
                         }
@@ -82,23 +81,7 @@ public static class SessionService
                             }
 
                             Logger.Log($"[Session] Restoring {documents.Count} tabs");
-                            DocumentItem? selected = null;
-                            foreach (var (document, index) in documents.Select((document, index) => (document, index)))
-                            {
-                                try
-                                {
-                                    openDocument(document);
-                                    if (index == selectedDocumentIndex)
-                                        selected = document;
-                                }
-                                catch (Exception ex)
-                                {
-                                    Logger.Error($"Failed to restore tab for: {document.FilePath}", ex);
-                                }
-                            }
-
-                            if (selected != null)
-                                selectDocument(selected);
+                            restoreDocuments(documents, selectedDocumentIndex);
                         }
                         finally
                         {

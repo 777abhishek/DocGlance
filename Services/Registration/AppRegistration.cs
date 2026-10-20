@@ -66,13 +66,14 @@ public static class AppRegistration
     private static string GetIconName(string extension) => extension.ToLowerInvariant() switch
     {
         ".pdf" => "PDF",
-        ".bmp" or ".gif" or ".jpeg" or ".jpg" or ".png" or ".tif" or ".tiff" => "Image",
+        ".bmp" or ".dds" or ".gif" or ".hdp" or ".ico" or ".jpeg" or ".jpg" or ".jxr" or
+        ".png" or ".svg" or ".svgz" or ".tif" or ".tiff" or ".wdp" => "Image",
         ".pptx" or ".ppt" or ".pptm" or ".ppsx" => "PowerPoint",
         ".docx" or ".doc" => "Word",
         ".xlsx" or ".xls" => "Excel",
         ".csv" or ".tsv" => "CSV",
         ".log" => "LOG",
-        ".md" or ".markdown" => "Markdown",
+        ".md" or ".markdown" or ".mdx" or ".mmd" => "Markdown",
         ".rtf" => "RichText",
         ".json" => "JSON",
         ".xml" or ".xaml" => "XML",

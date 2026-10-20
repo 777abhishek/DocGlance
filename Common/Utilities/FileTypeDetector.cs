@@ -19,8 +19,9 @@ public static class FileTypeDetector
         return extension?.TrimStart('.').ToUpperInvariant() switch
         {
             "PDF" or "DOCX" or "DOC" or "PPTX" or "PPT" or "XLSX" or "XLS" => FileCategory.Document,
-            "TXT" or "MD"   or "RTF" or "LOG"  or "CSV"                     => FileCategory.Text,
-            "PNG" or "JPG"  or "JPEG" or "GIF" or "BMP" or "WEBP" or "TIFF" or "SVG" => FileCategory.Image,
+            "TXT" or "MD" or "MARKDOWN" or "MDX" or "MMD" or "RTF" or "LOG" or "CSV" => FileCategory.Text,
+            "PNG" or "JPG" or "JPEG" or "GIF" or "BMP" or "WEBP" or "TIFF" or
+                "SVG" or "SVGZ" or "DDS" or "HDP" or "ICO" or "JXR" or "WDP" => FileCategory.Image,
             "MP4" or "MKV"  or "AVI" or "MOV"  or "WMV" or "WEBM" or "FLV"  => FileCategory.Video,
             "MP3" or "WAV"  or "FLAC" or "AAC" or "OGG" or "M4A"            => FileCategory.Audio,
             "CS"  or "CPP"  or "C"   or "H"    or "PY"  or "JS"  or "TS"
@@ -52,7 +53,8 @@ public static class FileTypeDetector
             "DOCX" or "DOC"  => "\uF0C22",  // Page
             "PPTX" or "PPT"  => "\uF12B",  // PPT
             "XLSX" or "XLS" or "CSV" => "\uE54C",  // ExcelDocument
-            "PNG"  or "JPG" or "JPEG" or "GIF" or "BMP" or "WEBP" => "\uF489",  // Photo2
+            "PNG" or "JPG" or "JPEG" or "GIF" or "BMP" or "WEBP" or "SVG" or
+                "SVGZ" or "DDS" or "HDP" or "ICO" or "JXR" or "WDP" => "\uF489",  // Photo2
             "MP4"  or "MKV" or "AVI" or "MOV" or "WMV" => "\uE8B2",  // Video
             "MP3"  or "WAV" or "FLAC" => "\uE8D6",  // MusicNote
             "ZIP"  or "RAR" or "7Z"   => "\uE8B1",  // ZipFolder
@@ -144,6 +146,10 @@ public static class FileTypeDetector
         [".bmp"] = "image/bmp",
         [".webp"] = "image/webp",
         [".svg"] = "image/svg+xml",
+        [".svgz"] = "image/svg+xml",
+        [".jxr"] = "image/vnd.ms-photo",
+        [".wdp"] = "image/vnd.ms-photo",
+        [".hdp"] = "image/vnd.ms-photo",
         [".mp4"] = "video/mp4",
         [".mp3"] = "audio/mpeg",
         [".wav"] = "audio/wav",
