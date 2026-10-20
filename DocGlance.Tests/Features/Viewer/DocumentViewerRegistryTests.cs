@@ -52,24 +52,26 @@ public sealed class DocumentViewerRegistryTests
     public void Resolve_UsesDocxFactoryForWordDocuments()
     {
         var docx = new DocxViewerFactory();
+        var fallback = new FallbackViewerFactory();
         var registry = new DocumentViewerRegistry(
             new IDocumentViewerFactory[] { docx },
-            new FallbackViewerFactory());
+            fallback);
 
         registry.Resolve(".docx").Should().BeSameAs(docx);
-        registry.Resolve(@"C:\documents\sample.doc").Should().BeSameAs(docx);
+        registry.Resolve(@"C:\documents\sample.doc").Should().BeSameAs(fallback);
     }
 
     [Fact]
     public void Resolve_UsesPptxFactoryForPresentationDocuments()
     {
         var pptx = new PptxViewerFactory();
+        var fallback = new FallbackViewerFactory();
         var registry = new DocumentViewerRegistry(
             new IDocumentViewerFactory[] { pptx },
-            new FallbackViewerFactory());
+            fallback);
 
         registry.Resolve(".pptx").Should().BeSameAs(pptx);
-        registry.Resolve(@"C:\documents\sample.PPT").Should().BeSameAs(pptx);
+        registry.Resolve(@"C:\documents\sample.PPT").Should().BeSameAs(fallback);
         registry.Resolve(".pptm").Should().BeSameAs(pptx);
         registry.Resolve(".ppsx").Should().BeSameAs(pptx);
     }

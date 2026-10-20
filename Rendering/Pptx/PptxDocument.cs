@@ -54,7 +54,7 @@ public sealed class PptxDocument : IDisposable
     }
 
     /// <summary>
-    /// Parse a PPTX/PPT file.
+    /// Parse a PPTX file.
     /// Returns null if the file cannot be opened or deckcraft_ffi.dll is missing.
     /// </summary>
     public static async Task<PptxDocument?> OpenAsync(string filePath, CancellationToken ct = default)
@@ -62,6 +62,7 @@ public sealed class PptxDocument : IDisposable
         if (!DeckCraftNative.IsAvailable)
             return null;
 
+        await Task.Run(() => OfficeArchiveBudget.Validate(filePath, ct), ct);
         byte[] bytes;
         try
         {

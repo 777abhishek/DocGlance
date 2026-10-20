@@ -641,7 +641,7 @@ public sealed partial class PptxViewer :
 public sealed class PptxViewerFactory : IDocumentViewerFactory
 {
     private static readonly IReadOnlyCollection<string> Extensions =
-        new[] { ".pptx", ".ppt", ".pptm", ".ppsx" };
+        new[] { ".pptx", ".pptm", ".ppsx" };
 
     public IReadOnlyCollection<string> SupportedExtensions => Extensions;
 

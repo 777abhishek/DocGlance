@@ -18,8 +18,7 @@ namespace DocGlance.Services.Updates;
 /// Lightweight background update checker.
 ///
 /// PACKAGED (Store / MSIX): The Store manages updates automatically.
-///   CheckInBackground() is a no-op; DownloadAndInstallAsync() opens the Store
-///   page instead of downloading an EXE installer.
+///   CheckInBackground() is a no-op; in-app update installation is disabled.
 ///
 /// UNPACKAGED (direct EXE): Checks GitHub Releases once per session and offers
 ///   an in-app installer download.
@@ -30,12 +29,6 @@ public static class UpdateService
     private const string GitHubOwner = "777abhishek";
     private const string GitHubRepo  = "DocGlance";
     private const string ApiUrl      = $"https://api.github.com/repos/{GitHubOwner}/{GitHubRepo}/releases/latest";
-
-    // Store product page — fill in your real Store app ID before submission.
-    // Format: ms-windows-store://pdp/?productid=<ProductId>
-    // The ProductId is shown in Partner Center under App identity.
-    private const string StoreProductId  = "PLACEHOLDER_STORE_PRODUCT_ID";
-    private const string StorePageUri    = $"ms-windows-store://pdp/?productid={StoreProductId}";
 
     // ── Events ────────────────────────────────────────────────────────────────
     /// <summary>Fired on the calling thread when a newer release is found.</summary>
@@ -74,25 +67,18 @@ public static class UpdateService
 
     /// <summary>
     /// "Install" an available update.
-    /// In packaged builds: opens the Store page so the user can update from there.
-    /// In unpackaged builds: downloads and runs the EXE installer.
+    /// Packaged builds disable in-app installation; unpackaged builds download
+    /// and run a verified EXE installer.
     /// </summary>
+#if PACKAGED
+    public static Task DownloadAndInstallAsync(ReleaseInfo release)
+    {
+        Logger.Log("[Update] Packaged updates are managed by Microsoft Store.");
+        return Task.CompletedTask;
+    }
+#else
     public static async Task DownloadAndInstallAsync(ReleaseInfo release)
     {
-#if PACKAGED
-        // Redirect to the Microsoft Store product page.
-        // The Store will handle the actual update installation.
-        try
-        {
-            Logger.Log("[Update] Opening Microsoft Store page for update.");
-            await Windows.System.Launcher.LaunchUriAsync(new Uri(StorePageUri));
-        }
-        catch (Exception ex)
-        {
-            Logger.Error("[Update] Failed to open Store page", ex);
-            throw;
-        }
-#else
         try
         {
             if (!IsTrustedDownloadUrl(release.InstallerUrl))
@@ -163,8 +149,8 @@ public static class UpdateService
             Logger.Error("[Update] DownloadAndInstall failed", ex);
             throw;
         }
-#endif
     }
+#endif
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
