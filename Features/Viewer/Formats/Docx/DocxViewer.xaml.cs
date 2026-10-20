@@ -663,7 +663,7 @@ public sealed partial class DocxViewer :
 
 public sealed class DocxViewerFactory : IDocumentViewerFactory
 {
-    private static readonly IReadOnlyCollection<string> Extensions = new[] { ".docx", ".doc" };
+    private static readonly IReadOnlyCollection<string> Extensions = new[] { ".docx" };
 
     public IReadOnlyCollection<string> SupportedExtensions => Extensions;
 

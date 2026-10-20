@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using DocGlance.Services.FileSystem;
 
 namespace DocGlance.Features.Viewer.Formats.Fallback;
 
@@ -18,6 +19,9 @@ public sealed class FallbackViewer : UserControl, IDocumentViewer
     private readonly TextBlock _name;
     private readonly TextBlock _metadata;
     private readonly TextBlock _path;
+    private readonly TextBlock _previewMessage;
+    private readonly TextBlock _openWarning;
+    private readonly Button _openButton;
 
     public FallbackViewer()
     {
@@ -57,21 +61,38 @@ public sealed class FallbackViewer : UserControl, IDocumentViewer
             Opacity = 0.6,
             Margin = new Thickness(0, -6, 0, 4),
         };
-        var openButton = new Button
+        _previewMessage = new TextBlock
+        {
+            Text = "DocGlance cannot preview this format. Open it with your default app.",
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 500,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            TextAlignment = TextAlignment.Center,
+        };
+        _openButton = new Button
         {
             Content = "Open with default app",
             HorizontalAlignment = HorizontalAlignment.Center,
             Padding = new Thickness(20, 10, 20, 10),
             Style = GetStyle("AccentButtonStyle"),
         };
-        openButton.Click += (_, _) => OpenRequested?.Invoke(this, EventArgs.Empty);
+        _openButton.Click += (_, _) => OpenRequested?.Invoke(this, EventArgs.Empty);
+        _openWarning = new TextBlock
+        {
+            Text = "For safety, executable and script files cannot be opened from DocGlance.",
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 500,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            TextAlignment = TextAlignment.Center,
+            Visibility = Visibility.Collapsed,
+        };
 
         Content = new StackPanel
         {
             Spacing = 16,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
-            Children = { _icon, _name, _metadata, _path, openButton },
+            Children = { _icon, _name, _metadata, _path, _previewMessage, _openWarning, _openButton },
         };
     }
 
@@ -89,6 +110,8 @@ public sealed class FallbackViewer : UserControl, IDocumentViewer
         _metadata.Foreground = GetBrush("TextFillColorSecondaryBrush");
         _path.Text = document.FilePath;
         _path.Foreground = GetBrush("TextFillColorTertiaryBrush");
+        _openButton.IsEnabled = ExternalFileSafety.IsAllowed(document.FilePath);
+        _openWarning.Visibility = _openButton.IsEnabled ? Visibility.Collapsed : Visibility.Visible;
         return Task.CompletedTask;
     }
 
@@ -107,7 +130,7 @@ public sealed class FallbackViewer : UserControl, IDocumentViewer
 
 public sealed class FallbackViewerFactory : IDocumentViewerFactory
 {
-    private static readonly IReadOnlyCollection<string> Extensions = new[] { ".xls" };
+    private static readonly IReadOnlyCollection<string> Extensions = new[] { ".xls", ".doc", ".ppt" };
 
     public IReadOnlyCollection<string> SupportedExtensions => Extensions;
 

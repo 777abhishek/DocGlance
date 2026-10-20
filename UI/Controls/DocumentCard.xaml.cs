@@ -5,6 +5,7 @@ using Microsoft.UI;
 using System;
 using Windows.UI;
 using DocGlance.Core.Models;
+using DocGlance.Services.FileSystem;
 
 namespace DocGlance.UI.Controls;
 
@@ -142,6 +143,11 @@ public sealed partial class DocumentCard : UserControl
     private async void OpenWithDefaultMenuItem_Click(object sender, RoutedEventArgs e)
     {
         if (Document?.FilePath == null) return;
+        if (!ExternalFileSafety.IsAllowed(Document.FilePath))
+        {
+            System.Diagnostics.Debug.WriteLine("OpenDefault blocked for executable or script file.");
+            return;
+        }
         try
         {
             var file = await Windows.Storage.StorageFile.GetFileFromPathAsync(Document.FilePath);
@@ -154,6 +160,11 @@ public sealed partial class DocumentCard : UserControl
     private async void OpenWithChooseMenuItem_Click(object sender, RoutedEventArgs e)
     {
         if (Document?.FilePath == null) return;
+        if (!ExternalFileSafety.IsAllowed(Document.FilePath))
+        {
+            System.Diagnostics.Debug.WriteLine("OpenWith blocked for executable or script file.");
+            return;
+        }
         try
         {
             var file = await Windows.Storage.StorageFile.GetFileFromPathAsync(Document.FilePath);

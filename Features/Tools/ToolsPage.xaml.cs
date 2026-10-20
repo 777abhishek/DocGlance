@@ -26,6 +26,7 @@ using DocGlance.Rendering.Xlsx;
 using DocGlance.Infrastructure.Logging;
 using DocGlance.Rendering.Pdf;
 using DocGlance.Interop.PdfCraft;
+using DocGlance.Services.FileSystem;
 using WinRT.Interop;
 
 namespace DocGlance.Features.Tools;
@@ -1098,6 +1099,11 @@ public sealed partial class ToolsPage : Page
     private static async Task OpenOutputAsync(string? path)
     {
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return;
+        if (!ExternalFileSafety.IsAllowed(path))
+        {
+            Logger.Log("[Tools] Refused to open an executable or script file.");
+            return;
+        }
         await Launcher.LaunchFileAsync(await StorageFile.GetFileFromPathAsync(path));
     }
 

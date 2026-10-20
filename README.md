@@ -13,9 +13,9 @@ DocGlance is a 64-bit Windows desktop application built with **.NET 8**, **WinUI
 
 ## Features
 
-- **Documents:** Open and read PDF and Word documents.
-- **Presentations:** Browse PowerPoint slides.
-- **Spreadsheets:** View `.xlsx`, `.xlsm`, `.xltx`, and `.xltm` workbooks, including sheets and cell contents. Legacy `.xls` files are not rendered in-app.
+- **Documents:** Open and read PDF and `.docx` Word documents. Legacy `.doc` files are not previewed in-app.
+- **Presentations:** Browse `.pptx`, `.pptm`, and `.ppsx` presentations. Legacy `.ppt` files are not previewed in-app.
+- **Spreadsheets:** View `.xlsx`, `.xlsm`, `.xltx`, and `.xltm` workbooks, including sheets and cell contents. Legacy `.xls` files are not previewed in-app.
 - **Text and code:** Preview plain text, Markdown, source code, and common configuration files.
 - **Search and navigation:** Find document text, move between pages or slides, and inspect workbook sheets.
 - **PDF annotations:** Add highlights and other text markup, freehand ink, notes, text boxes, signatures, and images.

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using DocGlance.Interop.GridCraft;
+using DocGlance.Rendering.Shared;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -53,6 +54,7 @@ public sealed class SpreadsheetDocument : IDisposable
         if (!GridCraftNative.IsAvailable)
             return null;
 
+        await Task.Run(() => OfficeArchiveBudget.Validate(filePath, ct), ct);
         byte[] bytes;
         try
         {

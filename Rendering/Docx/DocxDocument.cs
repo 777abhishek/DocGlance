@@ -58,6 +58,7 @@ public sealed class DocxDocument : IDisposable
         if (!WordCraftNative.IsAvailable)
             return null;
 
+        await Task.Run(() => OfficeArchiveBudget.Validate(filePath, ct), ct);
         byte[] bytes;
         try
         {
@@ -84,6 +85,7 @@ public sealed class DocxDocument : IDisposable
 
     public static IReadOnlyList<OutlineItem> ReadOutline(string filePath)
     {
+        OfficeArchiveBudget.Validate(filePath);
         using var archive = ZipFile.OpenRead(filePath);
         var documentEntry = archive.GetEntry("word/document.xml");
         if (documentEntry == null)

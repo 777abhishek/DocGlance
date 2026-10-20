@@ -599,7 +599,11 @@ public sealed partial class ViewerPage
                     await output.FlushAsync();
                 }
 
-                File.Replace(tempPath, sourcePath, null);
+                string backupPath = sourcePath + ".docglance-" +
+                    DateTime.UtcNow.ToString("yyyyMMddHHmmssfff") + "-" +
+                    Guid.NewGuid().ToString("N") + ".bak";
+                File.Replace(tempPath, sourcePath, backupPath);
+                Logger.Log($"[PDFAnnotation] Original PDF backed up to {backupPath}");
             }
             finally
             {

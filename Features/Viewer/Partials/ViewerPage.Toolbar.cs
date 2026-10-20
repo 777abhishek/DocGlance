@@ -5,6 +5,7 @@ using DocGlance.Core.Enums;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using DocGlance.Services.Storage;
+using DocGlance.Services.FileSystem;
 using DocGlance.Rendering.Pdf;
 using DocGlance.Features.Viewer.Components;
 using DocGlance.Features.Viewer.Contracts;
@@ -253,7 +254,9 @@ public sealed partial class ViewerPage
 
     private async void PrintMenuItem_Click(object? sender, EventArgs e)
     {
-        if (_doc?.FilePath == null) return;
+        if (_doc?.FilePath == null ||
+            !string.Equals(Path.GetExtension(_doc.FilePath), ".pdf", StringComparison.OrdinalIgnoreCase))
+            return;
         try
         {
             var file = await StorageFile.GetFileFromPathAsync(_doc.FilePath);
@@ -266,6 +269,12 @@ public sealed partial class ViewerPage
     internal async void OpenExternalButton_Click(object? sender, EventArgs e)
     {
         if (_doc?.FilePath == null) return;
+        if (!ExternalFileSafety.IsAllowed(_doc.FilePath))
+        {
+            ShowInfoBar("For safety, executable and script files cannot be opened from DocGlance.",
+                InfoBarSeverity.Warning);
+            return;
+        }
         try
         {
             await Windows.System.Launcher.LaunchFileAsync(
