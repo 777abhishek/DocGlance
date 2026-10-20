@@ -48,3 +48,5 @@ docs
 docs/*
 !docs/offline-translation.md
 !docs/architecture/
+
+website
