@@ -179,7 +179,7 @@ using var src = (Bitmap)Image.FromFile(srcPath);
     }
 
     // version
-    DrawCentered(g, "Version 1.0.0", "Segoe UI", 6.5f, FontStyle.Regular,
+    DrawCentered(g, "Version 20.10.26", "Segoe UI", 6.5f, FontStyle.Regular,
                  Color.FromArgb(135, 135, 135), new RectangleF(0, H - 20, W, 16));
 
     var outPath = Path.Combine(outDir, "wizard-sidebar.bmp");

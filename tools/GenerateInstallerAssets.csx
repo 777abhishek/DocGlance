@@ -100,7 +100,7 @@ var srcIcon = Image.FromFile(iconPath);
     using (var b    = new SolidBrush(Color.FromArgb(130, 130, 130)))
     {
         var sf = new StringFormat { Alignment = StringAlignment.Center };
-        g.DrawString("Version 1.0.0", font, b, new RectangleF(0, H - 20, W, 16), sf);
+        g.DrawString("Version 20.10.26", font, b, new RectangleF(0, H - 20, W, 16), sf);
     }
 
     var outPath = Path.Combine(outDir, "wizard-sidebar.bmp");

@@ -59,8 +59,8 @@
 
     <!-- Version / file info -->
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>14.10.26.0</FileVersion>
-    <InformationalVersion>14.10.26</InformationalVersion>
+    <FileVersion>20.10.26.0</FileVersion>
+    <InformationalVersion>20.10.26</InformationalVersion>
     <Company>777abhishek</Company>
     <Product>DocGlance</Product>
     <Description>Fast universal file viewer for Windows</Description>
