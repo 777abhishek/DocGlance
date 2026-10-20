@@ -282,6 +282,17 @@ if ($BuildMsix) {
     $packageDebugType = if ($StoreUpload) { "portable" } else { "embedded" }
     $packageCertificateThumbprint = ""
     $packageCertificate = $null
+    $pdbCmfExe = $null
+
+    if ($StoreUpload) {
+        $pdbCmfExe = Get-ChildItem -Path "$env:ProgramFiles\Microsoft Visual Studio\*\*\VC\Tools\MSVC\*\bin\Hostx64\x64\mspdbcmf.exe" -File -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1 -ExpandProperty FullName
+        if (-not $pdbCmfExe) {
+            Write-Fail "Store upload symbol generation requires Visual Studio's x64 mspdbcmf.exe. Install the MSVC C++ build tools."
+        }
+        Write-Info "Store symbol conversion tool: $pdbCmfExe"
+    }
 
     if (-not $StoreUpload) {
         $packageCertificate = Get-OrCreatePackageSigningCertificate $PackagePublisher
@@ -313,6 +324,10 @@ if ($BuildMsix) {
         "--nologo",
         "-v", "minimal"
     )
+
+    if ($StoreUpload) {
+        $dotnetArgs += "-p:PdbCmfx64ExeFullPath=$pdbCmfExe"
+    }
 
     & dotnet @dotnetArgs
     if ($LASTEXITCODE -ne 0) {

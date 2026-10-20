@@ -10,7 +10,7 @@
 ; ─────────────────────────────────────────────────────────────────────────────
 
 #define AppName      "DocGlance"
-#define AppVersion   "14.10.26"
+#define AppVersion   "20.10.26"
 #define AppPublisher "777abhishek"
 #define AppURL       "https://github.com/777abhishek/DocGlance"
 #define AppExeName   "DocGlance.exe"
@@ -59,7 +59,7 @@ CloseApplications=yes
 ; Create uninstall entry in Add/Remove Programs
 CreateUninstallRegKey=yes
 ; Version info embedded into the installer EXE (visible in Explorer → Properties)
-VersionInfoVersion=14.10.26.0
+VersionInfoVersion=20.10.26.0
 VersionInfoDescription={#AppName} Setup
 VersionInfoProductName={#AppName}
 VersionInfoCompany={#AppPublisher}

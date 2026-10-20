@@ -129,6 +129,7 @@ public sealed class NativeCallGateTests
     {
         var gate = new NativeCallGate();
         using var lease = gate.TryEnter();
+        Assert.NotNull(lease);
 
         // Start a Dispose that will block on the active lease.
         var disposeTask = Task.Run(() => gate.Dispose(TimeSpan.FromSeconds(5)));
