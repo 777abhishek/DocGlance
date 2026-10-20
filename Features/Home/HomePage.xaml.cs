@@ -278,7 +278,8 @@ public sealed partial class HomePage : Page
             var picker = new FileOpenPicker();
             picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
             foreach (var ext in new[]{ ".pdf",".docx",".doc",".xlsx",".xls",".pptx",".ppt",
-                                        ".txt",".md",".png",".jpg",".jpeg",".mp4",".mkv",".mp3" })
+                                        ".txt",".md",".png",".jpg",".jpeg",".bmp",".gif",
+                                        ".tif",".tiff",".mp4",".mkv",".mp3" })
                 picker.FileTypeFilter.Add(ext);
             InitializeWithWindow.Initialize(picker, DocGlance.UI.Shell.TitleBarWindow.Current?.Hwnd ?? IntPtr.Zero);
 

@@ -46,26 +46,29 @@ public sealed partial class ViewerPage
         contentPanel.PointerReleased += OnOfficeContentPointerReleased;
         contentPanel.PointerCaptureLost += OnOfficeContentPointerCaptureLost;
         contentPanel.RightTapped += OnOfficeContentRightTapped;
-        var copyAccelerator = new KeyboardAccelerator
-        {
-            Key = VirtualKey.C,
-            Modifiers = VirtualKeyModifiers.Control,
-        };
-        copyAccelerator.Invoked += (_, args) =>
-        {
-            if (string.IsNullOrEmpty(_selectedText) ||
-                (_docxDocument == null && _pptxDocument == null))
-                return;
-
-            CopyOfficeTextToClipboard();
-            args.Handled = true;
-        };
         ScrollViewer scrollViewer = contentPanel == DocxViewerControl.Canvas
             ? DocxViewerControl.ScrollViewer
             : contentPanel == PptxViewerControl.Canvas
                 ? PptxViewerControl.ScrollViewer
                 : PdfViewerControl.DocumentScrollViewerControl;
-        scrollViewer.KeyboardAccelerators.Add(copyAccelerator);
+        if (contentPanel != PdfViewerControl.PdfViewportCanvasControl)
+            scrollViewer.KeyDown += OfficeScrollViewer_KeyDown;
+    }
+
+    private void OfficeScrollViewer_KeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key != VirtualKey.C ||
+            (_docxDocument == null && _pptxDocument == null))
+            return;
+
+        var controlState = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(
+            VirtualKey.Control);
+        if ((controlState & Windows.UI.Core.CoreVirtualKeyStates.Down) == 0)
+            return;
+
+        if (!string.IsNullOrEmpty(_selectedText))
+            CopyOfficeTextToClipboard();
+        e.Handled = true;
     }
 
     private void OnOfficeContentPointerPressed(object sender, PointerRoutedEventArgs e)

@@ -66,7 +66,7 @@
 
       <uap:VisualElements
         DisplayName="DocGlance"
-        Description="Fast document viewer for PDF, PowerPoint, Word, and Excel"
+        Description="Fast document and image viewer for PDF, PowerPoint, Word, Excel, and images"
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png">
@@ -98,6 +98,24 @@
             </uap:SupportedFileTypes>
             <uap:DisplayName>PDF Document</uap:DisplayName>
             <uap:Logo>Assets\FileTypeIcons\PDF.png</uap:Logo>
+            <uap:InfoTip>Open with DocGlance</uap:InfoTip>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
+        <!-- Common bitmap image files -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="docglance-image">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.bmp</uap:FileType>
+              <uap:FileType>.gif</uap:FileType>
+              <uap:FileType>.jpeg</uap:FileType>
+              <uap:FileType>.jpg</uap:FileType>
+              <uap:FileType>.png</uap:FileType>
+              <uap:FileType>.tif</uap:FileType>
+              <uap:FileType>.tiff</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>Image File</uap:DisplayName>
+            <uap:Logo>Assets\StoreLogo.png</uap:Logo>
             <uap:InfoTip>Open with DocGlance</uap:InfoTip>
           </uap:FileTypeAssociation>
         </uap:Extension>

@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Input;
 using DocGlance.Rendering.Pdf;
 using DocGlance.Core.Enums;
 using DocGlance.Features.Viewer.Contracts;
+using DocGlance.Features.Viewer.Formats.Images;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -104,6 +105,12 @@ public sealed partial class ViewerPage
             return;
         }
 
+        if (_activeViewer is ImageViewer imageViewer)
+        {
+            imageViewer.SetZoom(_zoom);
+            return;
+        }
+
     }
 
     private Windows.Foundation.Point GetViewportCenter() =>
@@ -150,6 +157,13 @@ public sealed partial class ViewerPage
         if (_spreadsheetDocument != null)
         {
             SetZoom(SpreadsheetViewerControl.GetFitWidthZoom());
+            return;
+        }
+
+        if (_activeViewer is ImageViewer imageViewer)
+        {
+            imageViewer.ApplyFitMode();
+            return;
         }
     }
 
@@ -197,6 +211,9 @@ public sealed partial class ViewerPage
             SetZoom(SpreadsheetViewerControl.GetFitPageZoom());
             return;
         }
+
+        if (_activeViewer is ImageViewer imageViewer)
+            imageViewer.ApplyFitMode();
 
     }
 

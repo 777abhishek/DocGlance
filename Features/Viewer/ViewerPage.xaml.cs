@@ -31,6 +31,7 @@ using DocGlance.Features.Viewer.Formats.Pdf;
 using DocGlance.Features.Viewer.Formats.Docx;
 using DocGlance.Features.Viewer.Formats.Pptx;
 using DocGlance.Features.Viewer.Formats.Spreadsheet;
+using DocGlance.Features.Viewer.Formats.Images;
 
 namespace DocGlance.Features.Viewer;
 
@@ -44,6 +45,7 @@ public sealed partial class ViewerPage : Page
             new PptxViewerFactory(),
             new TextViewerFactory(),
             new SpreadsheetViewerFactory(),
+            new ImageViewerFactory(),
         },
         new FallbackViewerFactory());
     private PdfViewer? _pdfViewerControl;
@@ -60,6 +62,7 @@ public sealed partial class ViewerPage : Page
     private TextViewer TextViewerControl { get; set; } = null!;
     private SpreadsheetViewer SpreadsheetViewerControl { get; set; } = null!;
     private SpreadsheetDocument? _spreadsheetDocument => SpreadsheetViewerControl?.Document;
+    private ImageViewer ImageViewerControl { get; set; } = null!;
     private FallbackViewer? _fallbackViewer;
     private IDocumentViewer? _activeViewer;
     private ScrollViewer DocumentScrollViewer =>
@@ -67,6 +70,8 @@ public sealed partial class ViewerPage : Page
             ? docxViewer.ScrollViewer
             : _activeViewer is PptxViewer pptxViewer
                 ? pptxViewer.ScrollViewer
+            : _activeViewer is ImageViewer imageViewer
+                ? imageViewer.ScrollViewer
             : PdfViewerControl.DocumentScrollViewerControl;
     private Canvas PdfViewportCanvas =>
         _activeViewer is DocxViewer docxViewer
@@ -148,6 +153,15 @@ public sealed partial class ViewerPage : Page
         DocxViewerHost.Content = _docxViewerControl;
         _pptxViewerControl = (PptxViewer)_viewerRegistry.Resolve(".pptx").Create(ViewModel);
         PptxViewerHost.Content = _pptxViewerControl;
+        ImageViewerControl = (ImageViewer)_viewerRegistry.Resolve(".png").Create(ViewModel);
+        ImageViewerHost.Content = ImageViewerControl;
+        ImageViewerControl.ZoomChanged += (_, zoom) =>
+        {
+            _zoom = zoom;
+            ZoomLabel.Text = $"{Math.Round(_zoom / NaturalZoom * 100.0)}%";
+            ViewModel.Zoom = _zoom;
+        };
+        ImageViewerControl.ScrollViewer.PointerWheelChanged += OnViewerPointerWheelChanged;
         PdfViewerControl.ZoomChanged += (_, zoom) =>
         {
             _zoom = zoom;
@@ -329,6 +343,7 @@ public sealed partial class ViewerPage : Page
         _pptxTextMaps.Clear();
         ClearOfficeSelection();
         _ = SpreadsheetViewerControl?.CleanupAsync();
+        _ = ImageViewerControl?.CleanupAsync();
         if (_fallbackViewer != null)
         {
             _ = _fallbackViewer.CleanupAsync();
@@ -407,6 +422,7 @@ public sealed partial class ViewerPage : Page
         _pptxTextMaps.Clear();
 
         await SpreadsheetViewerControl.CleanupAsync();
+        await ImageViewerControl.CleanupAsync();
         await PdfViewerControl.CleanupAsync();
         await DocxViewerControl.CleanupAsync();
         await PptxViewerControl.CleanupAsync();
@@ -500,6 +516,10 @@ public sealed partial class ViewerPage : Page
                 ShowTextViewer();
                 return TextViewerControl;
 
+            case ImageViewerFactory:
+                ShowImageViewer();
+                return ImageViewerControl;
+
             default:
                 return ActivateFallbackViewer(factory, doc);
         }
@@ -519,6 +539,7 @@ public sealed partial class ViewerPage : Page
         DocumentScrollViewer.Visibility   = Visibility.Collapsed;
         TextViewerHost.Visibility         = Visibility.Collapsed;
         SpreadsheetViewerHost.Visibility  = Visibility.Collapsed;
+        ImageViewerHost.Visibility        = Visibility.Collapsed;
         ErrorMessage.Visibility           = Visibility.Collapsed;
         UnsupportedFileMessage.Content    = _fallbackViewer.Control;
         UnsupportedFileMessage.Visibility = Visibility.Visible;
@@ -683,6 +704,21 @@ public sealed partial class ViewerPage : Page
             return;
         }
 
+        if (viewer is ImageViewer imageViewer)
+        {
+            _total = 1;
+            _page = 1;
+            Toolbar.UpdatePageInfo(1, 1);
+            ViewModel.TotalPages = 1;
+            ViewModel.CurrentPage = 1;
+            ViewModel.NaturalZoom = NaturalZoom;
+            ConfigureSidebar(false, singlePage: true);
+            SetFitMode(FitMode.FitPage);
+            ZoomLabel.Text = $"{Math.Round(imageViewer.CurrentZoom / NaturalZoom * 100.0)}%";
+            ViewModel.Zoom = imageViewer.CurrentZoom;
+            return;
+        }
+
         // ── Text / Markdown / Code ────────────────────────────────────────────
         if (viewer is TextViewer)
         {
@@ -731,6 +767,7 @@ public sealed partial class ViewerPage : Page
         DocumentScrollViewer.Visibility   = Visibility.Collapsed;
         TextViewerHost.Visibility         = Visibility.Collapsed;
         SpreadsheetViewerHost.Visibility  = Visibility.Collapsed;
+        ImageViewerHost.Visibility        = Visibility.Collapsed;
         UnsupportedFileMessage.Visibility = Visibility.Collapsed;
 
         SidebarCard.Visibility              = Visibility.Collapsed;
@@ -763,6 +800,7 @@ public sealed partial class ViewerPage : Page
         TextViewerHost.Visibility = Visibility.Collapsed;
         DocumentScrollViewer.Visibility = Visibility.Visible;
         SpreadsheetViewerHost.Visibility = Visibility.Collapsed;
+        ImageViewerHost.Visibility = Visibility.Collapsed;
         UnsupportedFileMessage.Visibility = Visibility.Collapsed;
         ErrorMessage.Visibility = Visibility.Collapsed;
         Toolbar.WordWrapVisibility = Visibility.Collapsed;
@@ -780,6 +818,7 @@ public sealed partial class ViewerPage : Page
         PptxViewerHost.Visibility = Visibility.Collapsed;
         TextViewerHost.Visibility = Visibility.Collapsed;
         SpreadsheetViewerHost.Visibility = Visibility.Collapsed;
+        ImageViewerHost.Visibility = Visibility.Collapsed;
         UnsupportedFileMessage.Visibility = Visibility.Collapsed;
         ErrorMessage.Visibility = Visibility.Collapsed;
         Toolbar.WordWrapVisibility = Visibility.Collapsed;
@@ -797,6 +836,7 @@ public sealed partial class ViewerPage : Page
         PptxViewerHost.Visibility = Visibility.Visible;
         TextViewerHost.Visibility = Visibility.Collapsed;
         SpreadsheetViewerHost.Visibility = Visibility.Collapsed;
+        ImageViewerHost.Visibility = Visibility.Collapsed;
         UnsupportedFileMessage.Visibility = Visibility.Collapsed;
         ErrorMessage.Visibility = Visibility.Collapsed;
         Toolbar.WordWrapVisibility = Visibility.Collapsed;
@@ -815,6 +855,7 @@ public sealed partial class ViewerPage : Page
         TextViewerHost.Visibility = Visibility.Collapsed;
         DocumentScrollViewer.Visibility = Visibility.Collapsed;
         SpreadsheetViewerHost.Visibility = Visibility.Visible;
+        ImageViewerHost.Visibility = Visibility.Collapsed;
         UnsupportedFileMessage.Visibility = Visibility.Collapsed;
         ErrorMessage.Visibility = Visibility.Collapsed;
         Toolbar.WordWrapVisibility = Visibility.Collapsed;
@@ -836,6 +877,7 @@ public sealed partial class ViewerPage : Page
         PptxViewerHost.Visibility       = Visibility.Collapsed;
         DocumentScrollViewer.Visibility = Visibility.Collapsed;
         SpreadsheetViewerHost.Visibility = Visibility.Collapsed;
+        ImageViewerHost.Visibility = Visibility.Collapsed;
         UnsupportedFileMessage.Visibility = Visibility.Collapsed;
         ErrorMessage.Visibility         = Visibility.Collapsed;
 
@@ -849,6 +891,27 @@ public sealed partial class ViewerPage : Page
         SidebarCard.Visibility = Visibility.Collapsed;
         SidebarColumn.Width    = new GridLength(0);
         ViewModel.SidebarOpen  = false;
+    }
+
+    internal void ShowImageViewer()
+    {
+        _activeViewer = ImageViewerControl;
+        ImageViewerHost.Visibility = Visibility.Visible;
+        PdfViewerHost.Visibility = Visibility.Collapsed;
+        DocxViewerHost.Visibility = Visibility.Collapsed;
+        PptxViewerHost.Visibility = Visibility.Collapsed;
+        TextViewerHost.Visibility = Visibility.Collapsed;
+        SpreadsheetViewerHost.Visibility = Visibility.Collapsed;
+        UnsupportedFileMessage.Visibility = Visibility.Collapsed;
+        ErrorMessage.Visibility = Visibility.Collapsed;
+        Toolbar.WordWrapVisibility = Visibility.Collapsed;
+        Toolbar.RotationButtonsVisibility = Visibility.Collapsed;
+        Toolbar.SidebarButtonVisibility = Visibility.Collapsed;
+        Toolbar.FitWidthButtonVisibility = Visibility.Visible;
+        Toolbar.FitPageButtonVisibility = Visibility.Visible;
+        SidebarCard.Visibility = Visibility.Collapsed;
+        SidebarColumn.Width = new GridLength(0);
+        ViewModel.SidebarOpen = false;
     }
 
     private void WordWrapButton_Click(object? sender, EventArgs e)

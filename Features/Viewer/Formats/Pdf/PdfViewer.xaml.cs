@@ -635,17 +635,15 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
         RefreshHighlights();
 
         PdfSearchResult hit = _pdfSearchResults[index];
-        double pageTopLp = GetPageOffsetInDocument(hit.PageIndex) * (96.0 / 72.0);
-        double hitTopLp = 0;
+        double hitTopLp = GetPageTopLp(hit.PageIndex);
         if (hit.Rects.Count > 0)
         {
             PdfSearchRect rect = hit.Rects[0];
             Rect rotated = TransformPageRect(hit.PageIndex, rect.X, rect.Y, rect.Width, rect.Height);
-            hitTopLp = rotated.Y - pageTopLp;
+            hitTopLp += rotated.Y;
         }
         double targetOffset = Math.Max(
-            0,
-            (pageTopLp + hitTopLp) * CurrentZoom - DocumentScrollViewer.ViewportHeight / 2);
+            0, hitTopLp * CurrentZoom - DocumentScrollViewer.ViewportHeight / 2);
         DocumentScrollViewer.ChangeView(null, targetOffset, null, disableAnimation: true);
         PageNavigationRequested?.Invoke(this, hit.PageIndex + 1);
     }
@@ -701,21 +699,6 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
                 SearchHighlightCanvas.Children.Add(highlight);
             }
         }
-    }
-
-    private double GetPageOffsetInDocument(int pageIndex)
-    {
-        if (DocumentState == null || pageIndex <= 0)
-            return 0;
-
-        const double pageGapPt = 12.0 * 72.0 / 96.0;
-        double offset = 0;
-        for (int i = 0; i < pageIndex && i < DocumentState.PageCount; i++)
-        {
-            var (_, pageHeight) = GetRotatedPageSize(i);
-            offset += pageHeight + pageGapPt;
-        }
-        return offset;
     }
 
     public async Task LoadAsync(DocumentItem document, CancellationToken cancellationToken)

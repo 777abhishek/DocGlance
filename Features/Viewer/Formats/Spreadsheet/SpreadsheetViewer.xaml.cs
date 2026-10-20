@@ -154,18 +154,8 @@ public sealed partial class SpreadsheetViewer : UserControl,
         CellScroll.PointerCaptureLost += CellCanvas_PointerCaptureLost;
         CellScroll.RightTapped += CellScroll_RightTapped;
         CellScroll.PointerWheelChanged += CellScroll_PointerWheelChanged;
+        CellScroll.KeyDown += CellScroll_KeyDown;
         CellScroll.SizeChanged += (_, _) => ResizeCanvases();
-        var copyAccelerator = new KeyboardAccelerator
-        {
-            Key = Windows.System.VirtualKey.C,
-            Modifiers = Windows.System.VirtualKeyModifiers.Control,
-        };
-        copyAccelerator.Invoked += (_, args) =>
-        {
-            CopySelectionToClipboard();
-            args.Handled = true;
-        };
-        CellScroll.KeyboardAccelerators.Add(copyAccelerator);
 
         // Column header canvas
         _colHeaderCanvas = new CanvasControl { Height = 26, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
@@ -1219,6 +1209,21 @@ public sealed partial class SpreadsheetViewer : UserControl,
             Logger.Error("[SpreadsheetSelection] Could not copy selected cells", ex);
             SelectionError?.Invoke(this, ex.Message);
         }
+    }
+
+    private void CellScroll_KeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key != Windows.System.VirtualKey.C)
+            return;
+
+        var controlState = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(
+            Windows.System.VirtualKey.Control);
+        if ((controlState & Windows.UI.Core.CoreVirtualKeyStates.Down) == 0)
+            return;
+
+        if (HasCellSelection)
+            CopySelectionToClipboard();
+        e.Handled = true;
     }
 
     private void TranslateSelection()
