@@ -342,6 +342,11 @@
                     HorizontalContentAlignment="Stretch"
                     VerticalContentAlignment="Stretch"/>
 
+                <ContentControl x:Name="ImageViewerHost"
+                    Visibility="Collapsed"
+                    HorizontalContentAlignment="Stretch"
+                    VerticalContentAlignment="Stretch"/>
+
                 <ContentControl
                     x:Name="UnsupportedFileMessage"
                     Visibility="Collapsed"/>

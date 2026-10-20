@@ -66,6 +66,7 @@ public static class AppRegistration
     private static string GetIconName(string extension) => extension.ToLowerInvariant() switch
     {
         ".pdf" => "PDF",
+        ".bmp" or ".gif" or ".jpeg" or ".jpg" or ".png" or ".tif" or ".tiff" => "Image",
         ".pptx" or ".ppt" or ".pptm" or ".ppsx" => "PowerPoint",
         ".docx" or ".doc" => "Word",
         ".xlsx" or ".xls" => "Excel",
@@ -85,6 +86,7 @@ public static class AppRegistration
     private static string GetTypeDescription(string iconName) => iconName switch
     {
         "PDF" => "PDF Document",
+        "Image" => "Image File",
         "PowerPoint" => "PowerPoint Presentation",
         "Word" => "Word Document",
         "Excel" => "Excel Spreadsheet",
@@ -116,7 +118,8 @@ public static class AppRegistration
             string progId = $"DocGlance.{iconName}";
             string description = GetTypeDescription(iconName);
             string typeIconPath = System.IO.Path.Combine(
-                System.IO.Path.GetDirectoryName(exePath)!, "Assets", "FileTypeIcons", $"{iconName}.ico");
+                System.IO.Path.GetDirectoryName(exePath)!, "Assets",
+                iconName == "Image" ? "AppIcon.ico" : System.IO.Path.Combine("FileTypeIcons", $"{iconName}.ico"));
 
             using (var type = EnsureKey($@"Software\Classes\{progId}"))
             {

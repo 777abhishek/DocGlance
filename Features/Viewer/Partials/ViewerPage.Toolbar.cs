@@ -177,6 +177,16 @@ public sealed partial class ViewerPage
     {
         switch (e.Key)
         {
+            case Windows.System.VirtualKey.Up:
+            case Windows.System.VirtualKey.Left:
+                NavigateSearchHit(-1);
+                e.Handled = true;
+                break;
+            case Windows.System.VirtualKey.Down:
+            case Windows.System.VirtualKey.Right:
+                NavigateSearchHit(+1);
+                e.Handled = true;
+                break;
             case Windows.System.VirtualKey.Enter:
             {
                 bool shift = Microsoft.UI.Input.InputKeyboardSource

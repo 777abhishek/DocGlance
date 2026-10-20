@@ -21,6 +21,7 @@ public static class FolderScanner
             ".log",  ".rtf",
             ".cs",   ".cpp",  ".py",   ".js",   ".ts",
             ".json", ".xml",  ".html", ".css",
+            ".bmp",  ".gif",  ".jpeg", ".jpg",  ".png", ".tif", ".tiff",
         };
 
     public static Task<List<DocumentItem>> ScanFolderAsync(

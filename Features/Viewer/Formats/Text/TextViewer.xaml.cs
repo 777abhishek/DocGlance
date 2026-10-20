@@ -52,21 +52,6 @@ public sealed partial class TextViewer : UserControl, IDocumentViewer, ISupports
     public TextViewer()
     {
         InitializeComponent();
-
-        var copyAccelerator = new KeyboardAccelerator
-        {
-            Key = VirtualKey.C,
-            Modifiers = VirtualKeyModifiers.Control,
-        };
-        copyAccelerator.Invoked += (_, args) =>
-        {
-            if (string.IsNullOrEmpty(SelectedText))
-                return;
-
-            CopySelectedTextToClipboard();
-            args.Handled = true;
-        };
-        PlainTextBlock.KeyboardAccelerators.Add(copyAccelerator);
         ActualThemeChanged += (_, _) =>
         {
             if (_hasSyntaxHighlighting)

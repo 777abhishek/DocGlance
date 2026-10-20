@@ -31,12 +31,18 @@ public static class SupportedExtensions
         ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt", ".pptm", ".ppsx",
     };
 
+    public static readonly IReadOnlyList<string> Image = new[]
+    {
+        ".bmp", ".gif", ".jpeg", ".jpg", ".png", ".tif", ".tiff",
+    };
+
     /// <summary>Every supported extension, in registration order.</summary>
     public static readonly IReadOnlyList<string> All =
-        Pdf.Concat(Text).Concat(Office).ToArray();
+        Pdf.Concat(Text).Concat(Office).Concat(Image).ToArray();
 
     private static readonly HashSet<string> TextSet = new(Text, StringComparer.OrdinalIgnoreCase);
     private static readonly HashSet<string> OfficeSet = new(Office, StringComparer.OrdinalIgnoreCase);
+    private static readonly HashSet<string> ImageSet = new(Image, StringComparer.OrdinalIgnoreCase);
 
     public static bool IsPdf(string extension) =>
         extension.Equals(".pdf", StringComparison.OrdinalIgnoreCase);
@@ -44,4 +50,6 @@ public static class SupportedExtensions
     public static bool IsText(string extension) => TextSet.Contains(extension);
 
     public static bool IsOffice(string extension) => OfficeSet.Contains(extension);
+
+    public static bool IsImage(string extension) => ImageSet.Contains(extension);
 }

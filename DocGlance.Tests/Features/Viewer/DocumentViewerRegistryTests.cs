@@ -6,6 +6,7 @@ using DocGlance.Features.Viewer.Formats.Pdf;
 using DocGlance.Features.Viewer.Formats.Pptx;
 using DocGlance.Features.Viewer.Formats.Spreadsheet;
 using DocGlance.Features.Viewer.Formats.Text;
+using DocGlance.Features.Viewer.Formats.Images;
 
 namespace DocGlance.Tests.Features.Viewer;
 
@@ -74,6 +75,19 @@ public sealed class DocumentViewerRegistryTests
         registry.Resolve(@"C:\documents\sample.PPT").Should().BeSameAs(fallback);
         registry.Resolve(".pptm").Should().BeSameAs(pptx);
         registry.Resolve(".ppsx").Should().BeSameAs(pptx);
+    }
+
+    [Fact]
+    public void Resolve_UsesImageFactoryForCommonImageFormats()
+    {
+        var image = new ImageViewerFactory();
+        var registry = new DocumentViewerRegistry(
+            new IDocumentViewerFactory[] { image },
+            new FallbackViewerFactory());
+
+        registry.Resolve(".png").Should().BeSameAs(image);
+        registry.Resolve(@"C:\documents\photo.JPEG").Should().BeSameAs(image);
+        registry.Resolve(".tiff").Should().BeSameAs(image);
     }
 
     [Fact]

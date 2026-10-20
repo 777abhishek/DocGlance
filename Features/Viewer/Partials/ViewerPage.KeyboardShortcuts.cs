@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using DocGlance.Core.Enums;
 using DocGlance.Features.Viewer.Components;
+using DocGlance.Features.Viewer.Formats.Images;
 using System;
 using Windows.System;
 
@@ -16,10 +17,6 @@ public sealed partial class ViewerPage
 
     private void InitializeViewerShortcuts()
     {
-        AddViewerShortcut(VirtualKey.F5, VirtualKeyModifiers.None,
-            () => _doc != null, StartPresentationFromBeginning);
-        AddViewerShortcut(VirtualKey.F5, VirtualKeyModifiers.Shift,
-            () => _doc != null, EnterPresentationMode);
         AddViewerShortcut(VirtualKey.F11, VirtualKeyModifiers.None,
             () => _doc != null, TogglePresentationMode);
         AddViewerShortcut(VirtualKey.Escape, VirtualKeyModifiers.None,
@@ -96,7 +93,7 @@ public sealed partial class ViewerPage
 
     private bool CanZoomCurrentDocument() =>
         _pdfState != null || _pptxDocument != null || _docxDocument != null ||
-        _spreadsheetDocument != null;
+        _spreadsheetDocument != null || _activeViewer is ImageViewer;
 
     private void ToggleWordWrap()
     {
@@ -130,8 +127,6 @@ public sealed partial class ViewerPage
         var sections = new StackPanel { Spacing = 14 };
         AddKeyboardShortcutSection(sections, "Presentation", new[]
         {
-            ("F5", "Start from the beginning"),
-            ("Shift+F5", "Start from the current page or sheet"),
             ("F11", "Toggle presentation mode"),
             ("Esc", "Exit presentation mode or close Find"),
             ("Right / Space / Page Down", "Next page or sheet (presentation mode)"),
@@ -155,6 +150,8 @@ public sealed partial class ViewerPage
             ("Alt+C", "Toggle match case (while Find is open)"),
             ("Enter", "Next search result (while Find is focused)"),
             ("Shift+Enter", "Previous search result (while Find is focused)"),
+            ("Down / Right", "Next search result (while Find is focused)"),
+            ("Up / Left", "Previous search result (while Find is focused)"),
         });
 
         var dialog = new ContentDialog

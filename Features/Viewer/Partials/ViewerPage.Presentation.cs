@@ -19,19 +19,6 @@ public sealed partial class ViewerPage
     private double _lineNumberFontSizeBeforePresentation;
     private double _lineNumberHeightBeforePresentation;
 
-
-    private void StartPresentationFromBeginning()
-    {
-        GoToPage(1);
-        DocumentScrollViewer.ChangeView(0, 0, null, disableAnimation: true);
-        if (TextViewerHost.Visibility == Visibility.Visible)
-            TextViewerControl.TextControl.Document.Selection.SetRange(0, 0);
-        if (SpreadsheetViewerHost.Visibility == Visibility.Visible)
-            SpreadsheetViewerControl.ResetScrollPosition();
-
-        EnterPresentationMode();
-    }
-
     private void TogglePresentationMode()
     {
         if (_isPresentationMode)

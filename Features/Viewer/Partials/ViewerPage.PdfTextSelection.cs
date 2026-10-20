@@ -51,20 +51,21 @@ public sealed partial class ViewerPage
         PdfViewportCanvas.PointerCaptureLost += PdfTextCanvas_PointerCaptureLost;
         PdfViewportCanvas.RightTapped += PdfTextCanvas_RightTapped;
         _touchSelectionTimer.Tick += TouchSelectionTimer_Tick;
+        DocumentScrollViewer.KeyDown += PdfDocumentScrollViewer_KeyDown;
+    }
 
-        var copyAccelerator = new KeyboardAccelerator
-        {
-            Key = VirtualKey.C,
-            Modifiers = VirtualKeyModifiers.Control,
-        };
-        copyAccelerator.Invoked += (sender, args) =>
-        {
-            if (!PdfViewerControl.HasTextSelection || _pdfState == null)
-                return;
+    private void PdfDocumentScrollViewer_KeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key != VirtualKey.C || _pdfState == null)
+            return;
+
+        var controlState = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control);
+        if ((controlState & Windows.UI.Core.CoreVirtualKeyStates.Down) == 0)
+            return;
+
+        if (PdfViewerControl.HasTextSelection)
             _ = CopyPdfTextSelectionAsync();
-            args.Handled = true;
-        };
-        DocumentScrollViewer.KeyboardAccelerators.Add(copyAccelerator);
+        e.Handled = true;
     }
 
     private void EnsurePdfTextPageMap(int pageIndex)
