@@ -107,12 +107,19 @@
           <uap:FileTypeAssociation Name="docglance-image">
             <uap:SupportedFileTypes>
               <uap:FileType>.bmp</uap:FileType>
+              <uap:FileType>.dds</uap:FileType>
+              <uap:FileType>.hdp</uap:FileType>
               <uap:FileType>.gif</uap:FileType>
+              <uap:FileType>.ico</uap:FileType>
               <uap:FileType>.jpeg</uap:FileType>
               <uap:FileType>.jpg</uap:FileType>
+              <uap:FileType>.jxr</uap:FileType>
               <uap:FileType>.png</uap:FileType>
+              <uap:FileType>.svg</uap:FileType>
+              <uap:FileType>.svgz</uap:FileType>
               <uap:FileType>.tif</uap:FileType>
               <uap:FileType>.tiff</uap:FileType>
+              <uap:FileType>.wdp</uap:FileType>
             </uap:SupportedFileTypes>
             <uap:DisplayName>Image File</uap:DisplayName>
             <uap:Logo>Assets\StoreLogo.png</uap:Logo>
@@ -209,6 +216,8 @@
             <uap:SupportedFileTypes>
               <uap:FileType>.md</uap:FileType>
               <uap:FileType>.markdown</uap:FileType>
+              <uap:FileType>.mdx</uap:FileType>
+              <uap:FileType>.mmd</uap:FileType>
             </uap:SupportedFileTypes>
             <uap:DisplayName>Markdown Document</uap:DisplayName>
             <uap:Logo>Assets\FileTypeIcons\Markdown.png</uap:Logo>

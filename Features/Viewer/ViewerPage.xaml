@@ -378,6 +378,9 @@
                 <ContentControl x:Name="TextViewerHost"
                     Visibility="Collapsed"/>
 
+                <ContentControl x:Name="MarkdownViewerHost"
+                    Visibility="Collapsed"/>
+
                 <!-- ── SPREADSHEET viewer — native Win2D cell grid ── -->
                 <ContentControl x:Name="SpreadsheetViewerHost"
                     Visibility="Collapsed"/>

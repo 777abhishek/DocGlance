@@ -23,7 +23,12 @@ public static class SupportedExtensions
         ".py", ".java", ".kt", ".cpp", ".c", ".h", ".go", ".rs",
         ".swift", ".rb", ".php", ".sh", ".ps1", ".bat",
         ".html", ".htm", ".css", ".scss", ".json", ".xml", ".xaml",
-        ".sql", ".md", ".markdown",
+        ".sql",
+    };
+
+    public static readonly IReadOnlyList<string> Markdown = new[]
+    {
+        ".md", ".markdown", ".mdx", ".mmd",
     };
 
     public static readonly IReadOnlyList<string> Office = new[]
@@ -33,14 +38,16 @@ public static class SupportedExtensions
 
     public static readonly IReadOnlyList<string> Image = new[]
     {
-        ".bmp", ".gif", ".jpeg", ".jpg", ".png", ".tif", ".tiff",
+        ".bmp", ".dds", ".gif", ".hdp", ".ico", ".jpeg", ".jpg", ".jxr",
+        ".png", ".svg", ".svgz", ".tif", ".tiff", ".wdp",
     };
 
     /// <summary>Every supported extension, in registration order.</summary>
     public static readonly IReadOnlyList<string> All =
-        Pdf.Concat(Text).Concat(Office).Concat(Image).ToArray();
+        Pdf.Concat(Text).Concat(Markdown).Concat(Office).Concat(Image).ToArray();
 
     private static readonly HashSet<string> TextSet = new(Text, StringComparer.OrdinalIgnoreCase);
+    private static readonly HashSet<string> MarkdownSet = new(Markdown, StringComparer.OrdinalIgnoreCase);
     private static readonly HashSet<string> OfficeSet = new(Office, StringComparer.OrdinalIgnoreCase);
     private static readonly HashSet<string> ImageSet = new(Image, StringComparer.OrdinalIgnoreCase);
 
@@ -48,6 +55,8 @@ public static class SupportedExtensions
         extension.Equals(".pdf", StringComparison.OrdinalIgnoreCase);
 
     public static bool IsText(string extension) => TextSet.Contains(extension);
+
+    public static bool IsMarkdown(string extension) => MarkdownSet.Contains(extension);
 
     public static bool IsOffice(string extension) => OfficeSet.Contains(extension);
 

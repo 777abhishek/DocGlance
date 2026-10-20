@@ -17,11 +17,12 @@ public static class FolderScanner
         new(StringComparer.OrdinalIgnoreCase)
         {
             ".pdf",  ".docx", ".doc",  ".pptx", ".ppt",
-            ".xlsx", ".xls",  ".csv",  ".txt",  ".md",
+            ".xlsx", ".xls",  ".csv",  ".txt",  ".md", ".markdown", ".mdx", ".mmd",
             ".log",  ".rtf",
             ".cs",   ".cpp",  ".py",   ".js",   ".ts",
             ".json", ".xml",  ".html", ".css",
-            ".bmp",  ".gif",  ".jpeg", ".jpg",  ".png", ".tif", ".tiff",
+            ".bmp", ".dds", ".gif", ".hdp", ".ico", ".jpeg", ".jpg", ".jxr",
+            ".png", ".svg", ".svgz", ".tif", ".tiff", ".wdp",
         };
 
     public static Task<List<DocumentItem>> ScanFolderAsync(

@@ -136,6 +136,8 @@ public sealed partial class ViewerPage
         CancellationToken cancellationToken = _searchCts.Token;
         if (viewer is TextViewer textViewer)
             textViewer.MatchCase = matchCase;
+        else if (viewer is Formats.Markdown.MarkdownViewer markdownViewer)
+            markdownViewer.MatchCase = matchCase;
         else if (viewer is SpreadsheetViewer spreadsheetViewer)
             spreadsheetViewer.MatchCase = matchCase;
         else if (viewer is Formats.Pdf.PdfViewer pdfViewer)

@@ -396,14 +396,14 @@ public sealed class TextViewerFactory : IDocumentViewerFactory
     {
         ".txt", ".log", ".csv", ".tsv", ".ini", ".cfg", ".conf",
         ".env", ".toml", ".yaml", ".yml", ".properties", ".gitignore",
-        ".editorconfig", ".htaccess", ".md", ".markdown", ".mdx",
+        ".editorconfig", ".htaccess",
         ".cs", ".vb", ".fs", ".csx", ".js", ".mjs", ".cjs", ".jsx",
         ".ts", ".tsx", ".py", ".pyw", ".java", ".kt", ".kts",
         ".cpp", ".c", ".h", ".hpp", ".cc", ".go", ".rs", ".swift",
         ".rb", ".php", ".pl", ".sh", ".bash", ".zsh", ".ps1", ".psm1",
         ".bat", ".cmd", ".html", ".htm", ".cshtml", ".razor", ".css",
         ".scss", ".less", ".json", ".jsonc", ".json5", ".xml", ".xaml",
-        ".svg", ".csproj", ".sln", ".props", ".targets", ".sql", ".graphql",
+        ".csproj", ".sln", ".props", ".targets", ".sql", ".graphql",
         ".gql", ".dockerfile", ".makefile", ".r", ".lua", ".dart", ".ex", ".exs",
     };
 

@@ -35,8 +35,8 @@ public sealed partial class TitleBarWindow : Window
     // ── Singleton so pages can reach the shell ────────────────────────────────
     public static new TitleBarWindow? Current { get; private set; }
 
-    // ── Per-tab state: tab item → (ViewerPage, DocumentItem) ─────────────────
-    private readonly Dictionary<TabViewItem, (ViewerPage viewer, DocumentItem doc)> _tabData = new();
+    // ── Per-tab state: tab item → (optional ViewerPage, DocumentItem) ────────
+    private readonly Dictionary<TabViewItem, (ViewerPage? viewer, DocumentItem doc)> _tabData = new();
     
     // Special tabs (Settings, etc.) that don't show documents
     private readonly Dictionary<TabViewItem, UIElement> _specialTabs = new();
@@ -155,7 +155,10 @@ public sealed partial class TitleBarWindow : Window
             }
 
             foreach (var (viewer, _) in _tabData.Values.ToArray())
-                await viewer.FlushPendingPdfAnnotationsAsync();
+            {
+                if (viewer != null)
+                    await viewer.FlushPendingPdfAnnotationsAsync();
+            }
         };
         
         // Save session and release the custom backdrop controller when the window closes.
@@ -206,7 +209,7 @@ public sealed partial class TitleBarWindow : Window
         {
             foreach (var (viewer, _) in _tabData.Values.ToArray())
             {
-                if (!await viewer.FlushPendingPdfAnnotationsAsync())
+                if (viewer != null && !await viewer.FlushPendingPdfAnnotationsAsync())
                     return;
             }
 
@@ -311,7 +314,7 @@ public sealed partial class TitleBarWindow : Window
     public void OpenDocument(DocumentItem doc)
     {
         Infrastructure.Logging.Logger.Log($"[TitleBarWindow] OpenDocument called: Title={doc.Title}, FilePath={doc.FilePath}, FileType={doc.FileType}");
-        
+
         // If file already open in a tab, just focus it
         foreach (var kv in _tabData)
         {
@@ -320,47 +323,66 @@ public sealed partial class TitleBarWindow : Window
             {
                 Infrastructure.Logging.Logger.Log($"[TitleBarWindow] File already open, focusing tab");
                 Tabs.SelectedItem = kv.Key;
-                DocHost.Content = kv.Value.viewer;
-                DocHost.Visibility = Visibility.Visible;
-                HomeFrame.Visibility = Visibility.Collapsed;
-                Title = doc.Title + " — DocGlance";
+                if (ReferenceEquals(Tabs.SelectedItem, kv.Key))
+                    ShowDocumentTab(kv.Key, kv.Value);
                 return;
             }
         }
 
         Infrastructure.Logging.Logger.Log($"[TitleBarWindow] Creating new tab for document");
-        
-        // Persist to recent files and refresh the home page strip
+
         DocGlance.Services.Storage.RecentFilesStore.Push(doc.FilePath);
-        if (HomeFrame.Content is DocGlance.Features.Home.HomePage home)
-            home.LoadRecentDocuments();
+        RefreshRecentDocuments();
+        var tab = CreateDocumentTab(doc);
+        Tabs.SelectedItem = tab;
 
-        // Create new viewer tab
-        var viewer = new ViewerPage();
+        Infrastructure.Logging.Logger.Log($"[TitleBarWindow] OpenDocument complete");
 
+        // Save session after opening new tab
+        SaveSession();
+    }
+
+    private TabViewItem CreateDocumentTab(DocumentItem doc)
+    {
         var tab = new TabViewItem
         {
-            Header     = doc.Title,
+            Header = doc.Title,
             IsClosable = true,
             IconSource = CreateDocumentIconSource(doc.FileType),
         };
 
-        _tabData[tab] = (viewer, doc);
+        _tabData[tab] = (null, doc);
         Tabs.TabItems.Add(tab);
-        Tabs.SelectedItem = tab;
+        return tab;
+    }
 
-        // Immediately attach viewer to content host and update shell
+    private void RefreshRecentDocuments()
+    {
+        if (HomeFrame.Content is HomePage home)
+            home.LoadRecentDocuments();
+    }
+
+    private (ViewerPage viewer, DocumentItem doc) EnsureViewerLoaded(TabViewItem tab)
+    {
+        var data = _tabData[tab];
+        if (data.viewer != null)
+            return (data.viewer, data.doc);
+
+        var viewer = new ViewerPage();
+        _tabData[tab] = (viewer, data.doc);
+        viewer.LoadDocument(data.doc);
+        return (viewer, data.doc);
+    }
+
+    private void ShowDocumentTab(
+        TabViewItem tab,
+        (ViewerPage? viewer, DocumentItem doc) data)
+    {
+        var viewer = data.viewer ?? EnsureViewerLoaded(tab).viewer;
         DocHost.Content = viewer;
         DocHost.Visibility = Visibility.Visible;
         HomeFrame.Visibility = Visibility.Collapsed;
-        Title = doc.Title + " — DocGlance";
-
-        Infrastructure.Logging.Logger.Log($"[TitleBarWindow] Calling viewer.LoadDocument");
-        viewer.LoadDocument(doc);
-        Infrastructure.Logging.Logger.Log($"[TitleBarWindow] OpenDocument complete");
-        
-        // Save session after opening new tab
-        SaveSession();
+        Title = data.doc.Title + " — DocGlance";
     }
 
     // ── Legacy NavigateTo — kept so old call sites compile ───────────────────
@@ -522,6 +544,8 @@ public sealed partial class TitleBarWindow : Window
         // Document tab (in _tabData)
         else if (_tabData.TryGetValue(selected, out var data))
         {
+            var viewerData = EnsureViewerLoaded(selected);
+
             // Fade out home if visible
             if (HomeFrame.Visibility == Visibility.Visible)
             {
@@ -534,7 +558,7 @@ public sealed partial class TitleBarWindow : Window
             }
             
             // Fade in document viewer
-            DocHost.Content = data.viewer;
+            DocHost.Content = viewerData.viewer;
             DocHost.Visibility = Visibility.Visible;
             DocHost.Opacity = 1.0;
         }
@@ -564,6 +588,7 @@ public sealed partial class TitleBarWindow : Window
     private async Task CloseTabAsync(TabViewItem tab)
     {
         if (_tabData.TryGetValue(tab, out var documentData) &&
+            documentData.viewer != null &&
             !await documentData.viewer.FlushPendingPdfAnnotationsAsync())
             return;
 
@@ -690,14 +715,15 @@ public sealed partial class TitleBarWindow : Window
         // Clean up viewer state for the document tab that left this window.
         if (_tabData.TryGetValue(tab, out var data))
         {
-            if (!await data.viewer.FlushPendingPdfAnnotationsAsync())
+            if (data.viewer != null &&
+                !await data.viewer.FlushPendingPdfAnnotationsAsync())
             {
                 Tabs.TabItems.Add(tab);
                 Tabs.SelectedItem = tab;
                 newWindow?.Close();
                 return;
             }
-            data.viewer.CancelLoad();
+            data.viewer?.CancelLoad();
             _tabData.Remove(tab);
         }
 
@@ -1059,14 +1085,37 @@ public sealed partial class TitleBarWindow : Window
     /// </summary>
     public void RestoreSession()
     {
-        SessionService.RestoreSession(DispatcherQueue, OpenDocument, SelectRestoredDocument);
+        SessionService.RestoreSession(DispatcherQueue, RestoreDocuments);
     }
 
-    private void SelectRestoredDocument(DocumentItem document)
+    private void RestoreDocuments(IReadOnlyList<DocumentItem> documents, int selectedIndex)
     {
-        var selectedTab = _tabData
-            .FirstOrDefault(entry => ReferenceEquals(entry.Value.doc, document)).Key;
+        TabViewItem? selectedTab = null;
+        TabViewItem? lastTab = null;
+
+        for (int i = 0; i < documents.Count; i++)
+        {
+            var document = documents[i];
+            try
+            {
+                DocGlance.Services.Storage.RecentFilesStore.Push(document.FilePath);
+                var tab = CreateDocumentTab(document);
+                lastTab = tab;
+                if (i == selectedIndex)
+                    selectedTab = tab;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Failed to restore tab for: {document.FilePath}", ex);
+            }
+        }
+
+        RefreshRecentDocuments();
+        selectedTab ??= lastTab;
         if (selectedTab != null)
+        {
             Tabs.SelectedItem = selectedTab;
+            SaveSession();
+        }
     }
 }
