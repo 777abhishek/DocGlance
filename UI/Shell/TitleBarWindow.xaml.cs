@@ -352,8 +352,272 @@ public sealed partial class TitleBarWindow : Window
         };
 
         _tabData[tab] = (null, doc);
+        ConfigureDocumentTabContextFlyout(tab, doc);
         Tabs.TabItems.Add(tab);
         return tab;
+    }
+
+    private void ConfigureDocumentTabContextFlyout(TabViewItem tab, DocumentItem document)
+    {
+        var flyout = new MenuFlyout();
+        flyout.Items.Add(CreateTabMenuItem("Save all open tabs as workspace", SaveWorkspaceFromTab_Click, tab));
+
+        var addToWorkspace = new MenuFlyoutSubItem { Text = "Add this tab to workspace" };
+        foreach (var workspace in DocGlance.Services.Storage.WorkspaceStore.Load())
+        {
+            addToWorkspace.Items.Add(CreateTabMenuItem(
+                workspace.Name,
+                AddTabToWorkspace_Click,
+                (workspace.Id, document.FilePath)));
+        }
+        addToWorkspace.IsEnabled = addToWorkspace.Items.Count > 0;
+        flyout.Items.Add(addToWorkspace);
+        flyout.Items.Add(new MenuFlyoutSeparator());
+        flyout.Items.Add(CreateTabMenuItem("Open in new window", OpenTabInNewWindow_Click, tab));
+        flyout.Items.Add(CreateTabMenuItem("Copy file path", CopyTabPath_Click, tab));
+        flyout.Items.Add(CreateTabMenuItem("Show in Explorer", ShowTabInExplorer_Click, tab));
+        flyout.Items.Add(new MenuFlyoutSeparator());
+        flyout.Items.Add(CreateTabMenuItem("Close tab", CloseTabFromMenu_Click, tab));
+        flyout.Items.Add(CreateTabMenuItem("Close other tabs", CloseOtherTabs_Click, tab));
+        flyout.Items.Add(CreateTabMenuItem("Close tabs to the right", CloseTabsToRight_Click, tab));
+        tab.ContextFlyout = flyout;
+    }
+
+    private static MenuFlyoutItem CreateTabMenuItem(string text, RoutedEventHandler handler, object tag)
+    {
+        var item = new MenuFlyoutItem { Text = text, Tag = tag };
+        item.Click += handler;
+        return item;
+    }
+
+    private async void SaveWorkspaceFromTab_Click(object sender, RoutedEventArgs e)
+    {
+        var nameBox = new TextBox { PlaceholderText = "Workspace name", MaxLength = 80 };
+        var dialog = new ContentDialog
+        {
+            Title = "Save current tabs as a workspace",
+            Content = nameBox,
+            PrimaryButtonText = "Save",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = RootGrid.XamlRoot,
+        };
+
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            return;
+
+        try
+        {
+            SaveCurrentWorkspace(nameBox.Text);
+            if (HomeFrame.Content is HomePage home)
+                home.RefreshWorkspaces();
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Failed to save workspace from tab menu", ex);
+            await ShowShellMessageAsync("Could not save workspace", ex.Message);
+        }
+    }
+
+    private void AddTabToWorkspace_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuFlyoutItem { Tag: ValueTuple<string, string> target })
+            return;
+
+        try
+        {
+            DocGlance.Services.Storage.WorkspaceStore.AddDocument(target.Item1, target.Item2);
+            if (HomeFrame.Content is HomePage home)
+                home.RefreshWorkspaces();
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to add tab to workspace: {target.Item1}", ex);
+            _ = ShowShellMessageAsync("Could not update workspace", ex.Message);
+        }
+    }
+
+    private async Task ShowShellMessageAsync(string title, string message)
+    {
+        var dialog = new ContentDialog
+        {
+            Title = title,
+            Content = message,
+            CloseButtonText = "OK",
+            XamlRoot = RootGrid.XamlRoot,
+        };
+        await dialog.ShowAsync();
+    }
+
+    private void OpenTabInNewWindow_Click(object sender, RoutedEventArgs e)
+    {
+        if (GetDocumentTab(sender) is not { } tab ||
+            !_tabData.TryGetValue(tab, out var data))
+            return;
+
+        CreateDetachedWindow(data.doc).Activate();
+    }
+
+    private void CopyTabPath_Click(object sender, RoutedEventArgs e)
+    {
+        if (GetDocumentTab(sender) is not { } tab ||
+            !_tabData.TryGetValue(tab, out var data))
+            return;
+
+        try
+        {
+            var package = new DataPackage();
+            package.SetText(data.doc.FilePath);
+            Clipboard.SetContent(package);
+            Clipboard.Flush();
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to copy path for {data.doc.FilePath}", ex);
+        }
+    }
+
+    private void ShowTabInExplorer_Click(object sender, RoutedEventArgs e)
+    {
+        if (GetDocumentTab(sender) is not { } tab ||
+            !_tabData.TryGetValue(tab, out var data))
+            return;
+
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
+                "explorer.exe", $"/select,\"{data.doc.FilePath}\"")
+            {
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to show file in Explorer: {data.doc.FilePath}", ex);
+        }
+    }
+
+    private async void CloseTabFromMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (GetDocumentTab(sender) is { } tab)
+            await CloseTabAsync(tab);
+    }
+
+    private async void CloseOtherTabs_Click(object sender, RoutedEventArgs e)
+    {
+        if (GetDocumentTab(sender) is not { } keepTab)
+            return;
+
+        foreach (TabViewItem tab in _tabData.Keys.Where(tab => !ReferenceEquals(tab, keepTab)).ToArray())
+        {
+            await CloseTabAsync(tab);
+            if (Tabs.TabItems.Contains(tab))
+                break;
+        }
+    }
+
+    private async void CloseTabsToRight_Click(object sender, RoutedEventArgs e)
+    {
+        if (GetDocumentTab(sender) is not { } sourceTab)
+            return;
+
+        int sourceIndex = Tabs.TabItems.IndexOf(sourceTab);
+        TabViewItem[] tabsToClose = Tabs.TabItems
+            .OfType<TabViewItem>()
+            .Skip(sourceIndex + 1)
+            .Where(tab => _tabData.ContainsKey(tab))
+            .ToArray();
+        foreach (TabViewItem tab in tabsToClose)
+        {
+            await CloseTabAsync(tab);
+            if (Tabs.TabItems.Contains(tab))
+                break;
+        }
+    }
+
+    private static TabViewItem? GetDocumentTab(object sender) =>
+        sender is MenuFlyoutItem { Tag: TabViewItem tab } ? tab : null;
+
+    public void OpenWorkspaceDocuments(
+        IReadOnlyList<DocumentItem> documents,
+        int selectedIndex)
+    {
+        var tabs = new List<TabViewItem>(documents.Count);
+        foreach (DocumentItem document in documents)
+        {
+            TabViewItem? tab = _tabData
+                .FirstOrDefault(entry => string.Equals(
+                    entry.Value.doc.FilePath,
+                    document.FilePath,
+                    StringComparison.OrdinalIgnoreCase))
+                .Key;
+
+            if (tab == null)
+            {
+                DocGlance.Services.Storage.RecentFilesStore.Push(document.FilePath);
+                tab = CreateDocumentTab(document);
+            }
+
+            tabs.Add(tab);
+        }
+
+        RefreshRecentDocuments();
+        if (tabs.Count == 0)
+            return;
+
+        int index = selectedIndex >= 0 && selectedIndex < tabs.Count
+            ? selectedIndex
+            : tabs.Count - 1;
+        Tabs.SelectedItem = tabs[index];
+        SaveSession();
+    }
+
+    public bool RestoreStartupWorkspace()
+    {
+        var workspace = DocGlance.Services.Storage.WorkspaceStore
+            .Load()
+            .FirstOrDefault(item => item.IsStartup);
+        if (workspace == null)
+            return false;
+
+        OpenWorkspace(workspace, openInNewWindow: false);
+        Logger.Log($"[Workspace] Scheduled startup workspace: {workspace.Name}");
+        return true;
+    }
+
+    public void OpenWorkspace(
+        DocGlance.Services.Storage.SavedWorkspace workspace,
+        bool openInNewWindow)
+    {
+        TitleBarWindow target = this;
+        if (openInNewWindow)
+        {
+            target = new TitleBarWindow();
+            App.AllWindows.Add(target);
+            target.Closed += (_, _) => App.AllWindows.Remove(target);
+            target.Activate();
+        }
+
+        SessionService.RestoreWorkspace(
+            target.DispatcherQueue,
+            workspace.FilePaths,
+            workspace.SelectedIndex,
+            target.OpenWorkspaceDocuments);
+    }
+
+    public DocGlance.Services.Storage.SavedWorkspace SaveCurrentWorkspace(
+        string name,
+        string? workspaceId = null)
+    {
+        int selectedIndex = -1;
+        if (Tabs.SelectedItem is TabViewItem selectedTab && _tabData.ContainsKey(selectedTab))
+            selectedIndex = _tabData.Keys.ToList().IndexOf(selectedTab);
+
+        return DocGlance.Services.Storage.WorkspaceStore.Save(
+            name,
+            _tabData.Values.Select(value => value.doc.FilePath),
+            selectedIndex,
+            workspaceId);
     }
 
     private void RefreshRecentDocuments()

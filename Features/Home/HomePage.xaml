@@ -102,10 +102,16 @@
             </Grid>
         </DataTemplate>
 
+        <!-- ── Workspace Card Component ──────────────────────────────────
+             Modular, reusable workspace card component -->
+        <DataTemplate x:Key="WorkspaceCardTemplate">
+            <controls:WorkspaceCard/>
+        </DataTemplate>
+
     </Page.Resources>
 
     <!-- ── Root two-column layout ────────────────────────────────────────── -->
-    <Grid>
+    <Grid x:Name="HomeLayout">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="300"/>
@@ -142,7 +148,7 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Segmented control: Recent / All Documents -->
+                <!-- Segmented control: Recent / All Documents / Spaces -->
                 <Border Grid.Column="0"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -152,6 +158,7 @@
                         Height="36">
                     <Grid>
                         <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
@@ -171,6 +178,15 @@
                                      MinWidth="116"
                                      Height="32"
                                      Padding="14,0"
+                                     CornerRadius="6"
+                                     Checked="ViewModeToggle_Checked"
+                                     Style="{StaticResource SegmentedButtonStyle}"/>
+                        <RadioButton x:Name="SpacesModeButton"
+                                     Grid.Column="2"
+                                     Content="Spaces"
+                                     MinWidth="78"
+                                     Height="32"
+                                     Padding="12,0"
                                      CornerRadius="6"
                                      Checked="ViewModeToggle_Checked"
                                      Style="{StaticResource SegmentedButtonStyle}"/>
@@ -206,6 +222,59 @@
 
             <!-- ── CONTENT ────────────────────────────────────────────────── -->
             <Grid Grid.Row="2">
+
+                <!-- Empty Spaces State -->
+                <StackPanel
+                    x:Name="EmptySpacesState"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Spacing="12"
+                    Padding="40"
+                    Visibility="Collapsed">
+                    <FontIcon
+                        Glyph="&#xE734;"
+                        FontSize="42"
+                        HorizontalAlignment="Center"
+                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                    <TextBlock
+                        Text="No workspaces yet"
+                        FontSize="18"
+                        FontWeight="SemiBold"
+                        HorizontalAlignment="Center"/>
+                    <TextBlock
+                        Text="Open related documents, then save their tabs as a workspace."
+                        FontSize="13"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap"
+                        MaxWidth="360"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    <Button
+                        Content="Save current tabs"
+                        HorizontalAlignment="Center"
+                        Click="SaveWorkspace_Click"
+                        Style="{StaticResource AccentButtonStyle}"/>
+                </StackPanel>
+
+                <!-- Workspaces Grid View -->
+                <ScrollViewer
+                    x:Name="WorkspacesView"
+                    VerticalScrollBarVisibility="Auto"
+                    Padding="16,10,16,10"
+                    Visibility="Collapsed">
+                    <ItemsRepeater
+                        ItemsSource="{x:Bind Workspaces}"
+                        ItemTemplate="{StaticResource WorkspaceCardTemplate}">
+                        <ItemsRepeater.Layout>
+                            <UniformGridLayout
+                                MinItemWidth="185"
+                                MinItemHeight="165"
+                                MinColumnSpacing="12"
+                                MinRowSpacing="12"
+                                ItemsStretch="Fill"
+                                Orientation="Horizontal"/>
+                        </ItemsRepeater.Layout>
+                    </ItemsRepeater>
+                </ScrollViewer>
 
                 <!-- Empty state with brand identity -->
                 <StackPanel
@@ -377,7 +446,7 @@
              RIGHT — floating filter panel
              No border or opaque fill — layers over the root Acrylic surface.
              ════════════════════════════════════════════════════════════════ -->
-        <Grid Grid.Column="1">
+        <Grid x:Name="FilterPanel" Grid.Column="1">
             <Grid.RowDefinitions>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>

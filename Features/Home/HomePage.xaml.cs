@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -28,6 +29,7 @@ public sealed partial class HomePage : Page
 
     // ── ViewModel ─────────────────────────────────────────────────────────────
     public HomeViewModel ViewModel { get; } = new();
+    public ObservableCollection<DocGlance.Services.Storage.SavedWorkspace> Workspaces { get; } = new();
 
     // ── Convenience accessors (keep existing external API surface) ────────────
     public System.Collections.ObjectModel.ObservableCollection<DocumentItem> RecentDocuments   => ViewModel.RecentDocuments;
@@ -36,8 +38,10 @@ public sealed partial class HomePage : Page
 
     // ── Page-level state (UI concerns only) ───────────────────────────────────
     private bool   _loaded;
+    private bool   _showingSpaces;
     private int    _recentLoadGeneration;
     private DispatcherQueue _dispatcherQueue = null!;
+    private List<DocGlance.Services.Storage.SavedWorkspace> _allWorkspaces = new();
 
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -58,6 +62,7 @@ public sealed partial class HomePage : Page
         ClearButton.Visibility = Visibility.Visible;
 
         LoadRecentDocuments();
+        LoadWorkspaces();
         RefreshDisplay();
 
         // Initialize database in background - don't block UI
@@ -112,10 +117,12 @@ public sealed partial class HomePage : Page
     {
         if (!_loaded) return;
         ViewModel.ShowingRecent = ReferenceEquals(sender, RecentModeButton);
+        _showingSpaces = ReferenceEquals(sender, SpacesModeButton);
         ClearButton.Visibility = ViewModel.ShowingRecent ? Visibility.Visible : Visibility.Collapsed;
         
         // Lazy load: only load index when switching to All Documents mode for the first time
-        if (!ViewModel.ShowingRecent && ViewModel.BackgroundIndex.IsEmpty && ViewModel.ScannedFolders.Count == 0)
+        if (!ViewModel.ShowingRecent && !_showingSpaces &&
+            ViewModel.BackgroundIndex.IsEmpty && ViewModel.ScannedFolders.Count == 0)
         {
             await LoadCachedIndexAsync();
         }
@@ -259,8 +266,163 @@ public sealed partial class HomePage : Page
 
     private void RefreshDisplay()
     {
-        ViewModel.RefreshFilter();
+        if (_showingSpaces)
+            ApplyWorkspaceFilter();
+        else
+            ViewModel.RefreshFilter();
         UpdateUI();
+    }
+
+    private void LoadWorkspaces()
+    {
+        _allWorkspaces = DocGlance.Services.Storage.WorkspaceStore.Load();
+        ApplyWorkspaceFilter();
+        if (_loaded && _showingSpaces)
+            UpdateUI();
+    }
+
+    public void RefreshWorkspaces() => LoadWorkspaces();
+
+    private void ApplyWorkspaceFilter()
+    {
+        string search = ViewModel.SearchText.Trim();
+        Workspaces.Clear();
+        foreach (var workspace in _allWorkspaces.Where(workspace =>
+                     string.IsNullOrEmpty(search) ||
+                     workspace.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                     workspace.FilePaths.Any(path =>
+                         Path.GetFileName(path).Contains(search, StringComparison.OrdinalIgnoreCase))))
+            Workspaces.Add(workspace);
+    }
+
+    private async void SaveWorkspace_Click(object sender, RoutedEventArgs e)
+    {
+        var nameBox = new TextBox
+        {
+            PlaceholderText = "Workspace name",
+            MaxLength = 80,
+        };
+        var dialog = new ContentDialog
+        {
+            Title = "Save current tabs as a workspace",
+            Content = nameBox,
+            PrimaryButtonText = "Save",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = XamlRoot,
+        };
+
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            return;
+
+        try
+        {
+            var window = UI.Shell.TitleBarWindow.Current
+                ?? throw new InvalidOperationException("The active DocGlance window is unavailable.");
+            window.SaveCurrentWorkspace(nameBox.Text);
+            LoadWorkspaces();
+            SpacesModeButton.IsChecked = true;
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Failed to save workspace", ex);
+            await ShowWorkspaceMessageAsync(ex.Message);
+        }
+    }
+
+    private async void OpenWorkspace_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: DocGlance.Services.Storage.SavedWorkspace workspace })
+            return;
+
+        var dialog = new ContentDialog
+        {
+            Title = $"Open \"{workspace.Name}\"",
+            Content = $"Open {workspace.DocumentCount} documents in the current window or in a new window?",
+            PrimaryButtonText = "Current window",
+            SecondaryButtonText = "New window",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = XamlRoot,
+        };
+
+        ContentDialogResult result = await dialog.ShowAsync();
+        if (result == ContentDialogResult.None)
+            return;
+
+        try
+        {
+            var window = UI.Shell.TitleBarWindow.Current
+                ?? throw new InvalidOperationException("The active DocGlance window is unavailable.");
+            window.OpenWorkspace(workspace, result == ContentDialogResult.Secondary);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to open workspace: {workspace.Name}", ex);
+            await ShowWorkspaceMessageAsync(ex.Message);
+        }
+    }
+
+    private async void UpdateWorkspace_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: DocGlance.Services.Storage.SavedWorkspace workspace })
+            return;
+
+        try
+        {
+            var window = UI.Shell.TitleBarWindow.Current
+                ?? throw new InvalidOperationException("The active DocGlance window is unavailable.");
+            window.SaveCurrentWorkspace(workspace.Name, workspace.Id);
+            LoadWorkspaces();
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to update workspace: {workspace.Name}", ex);
+            await ShowWorkspaceMessageAsync(ex.Message);
+        }
+    }
+
+    private void SetStartupWorkspace_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: DocGlance.Services.Storage.SavedWorkspace workspace })
+            return;
+
+        DocGlance.Services.Storage.WorkspaceStore.SetStartup(
+            workspace.IsStartup ? null : workspace.Id);
+        LoadWorkspaces();
+    }
+
+    private async void DeleteWorkspace_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: DocGlance.Services.Storage.SavedWorkspace workspace })
+            return;
+
+        var dialog = new ContentDialog
+        {
+            Title = $"Delete \"{workspace.Name}\"?",
+            Content = "This removes the saved workspace, but does not delete any documents.",
+            PrimaryButtonText = "Delete",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = XamlRoot,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            return;
+
+        DocGlance.Services.Storage.WorkspaceStore.Delete(workspace.Id);
+        LoadWorkspaces();
+    }
+
+    private async Task ShowWorkspaceMessageAsync(string message)
+    {
+        var dialog = new ContentDialog
+        {
+            Title = "Workspace",
+            Content = message,
+            CloseButtonText = "OK",
+            XamlRoot = XamlRoot,
+        };
+        await dialog.ShowAsync();
     }
 
     private static bool MatchTypeGroup(string ft, string tag)
@@ -428,6 +590,31 @@ public sealed partial class HomePage : Page
     {
         if (!_loaded) return;
 
+        if (_showingSpaces)
+        {
+            EmptyState.Visibility = Visibility.Collapsed;
+            EmptySpacesState.Visibility = Workspaces.Count == 0
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            WorkspacesView.Visibility = Workspaces.Count > 0
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            NoResultsState.Visibility = Visibility.Collapsed;
+            DocumentsGridView.Visibility = Visibility.Collapsed;
+            GroupedDocumentsView.Visibility = Visibility.Collapsed;
+            ClearButton.Visibility = Visibility.Collapsed;
+            HomeLayout.ColumnDefinitions[1].Width = new GridLength(0);
+            FilterPanel.Visibility = Visibility.Collapsed;
+            DocumentCountLabel.Text = Workspaces.Count == 1
+                ? "1 workspace"
+                : $"{Workspaces.Count} workspaces";
+            return;
+        }
+
+        EmptySpacesState.Visibility = Visibility.Collapsed;
+        WorkspacesView.Visibility = Visibility.Collapsed;
+        HomeLayout.ColumnDefinitions[1].Width = new GridLength(300);
+        FilterPanel.Visibility = Visibility.Visible;
         bool hasFolders = ViewModel.ScannedFolders.Count > 0;
         bool hasItems   = ViewModel.FilteredDocuments.Count > 0;
         bool hasGroups  = ViewModel.GroupedDocuments.Count > 0;

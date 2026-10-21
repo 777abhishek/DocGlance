@@ -99,4 +99,61 @@ public static class SessionService
             }
         });
     }
+
+    public static void RestoreWorkspace(
+        DispatcherQueue dispatcherQueue,
+        IReadOnlyList<string> filePaths,
+        int selectedIndex,
+        Action<IReadOnlyList<DocumentItem>, int> restoreDocuments)
+    {
+        _ = System.Threading.Tasks.Task.Run(() =>
+        {
+            try
+            {
+                var documents = new List<DocumentItem>();
+                int restoredSelectedIndex = -1;
+                for (int i = 0; i < filePaths.Count; i++)
+                {
+                    string filePath = filePaths[i];
+                    try
+                    {
+                        if (!File.Exists(filePath))
+                        {
+                            Logger.Log($"[Workspace] Skipping missing file: {filePath}");
+                            continue;
+                        }
+
+                        if (i == selectedIndex)
+                            restoredSelectedIndex = documents.Count;
+                        documents.Add(DocumentItem.FromFileInfo(new FileInfo(filePath)));
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"Failed to prepare workspace tab for: {filePath}", ex);
+                    }
+                }
+
+                if (!dispatcherQueue.TryEnqueue(
+                    DispatcherQueuePriority.Low,
+                    () =>
+                    {
+                        try
+                        {
+                            restoreDocuments(documents, restoredSelectedIndex);
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Error("Failed to restore workspace tabs", ex);
+                        }
+                    }))
+                {
+                    Logger.Warn("[Workspace] UI dispatcher unavailable; workspace was not opened");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Workspace restore failed", ex);
+            }
+        });
+    }
 }
