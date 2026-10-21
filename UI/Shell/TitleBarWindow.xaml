@@ -17,41 +17,7 @@
           Drop="RootGrid_Drop"
           Background="{ThemeResource AppFrameBackground}">
 
-        <Grid.Resources>
-            <ResourceDictionary>
-                <ResourceDictionary.ThemeDictionaries>
-                    <!--  DARK: Pure black tab bar, black inactive tabs, #202020 active tab  -->
-                    <ResourceDictionary x:Key="Dark">
-                        <SolidColorBrush x:Key="TabViewBackground" Color="#000000"/>
-                        <SolidColorBrush x:Key="TabViewTopBorderBrush" Color="Transparent"/>
-                        <SolidColorBrush x:Key="TabViewSelectedItemBorderBrush" Color="Transparent"/>
-                        <SolidColorBrush x:Key="TabViewItemHeaderBackground" Color="Transparent"/>
-                        <SolidColorBrush x:Key="TabViewItemHeaderBackgroundPointerOver" Color="#101010"/>
-                        <SolidColorBrush x:Key="TabViewItemHeaderBackgroundPressed" Color="#181818"/>
-                        <SolidColorBrush x:Key="TabViewItemHeaderBackgroundSelected" Color="#202020"/>
-                        <SolidColorBrush x:Key="TabViewItemHeaderBackgroundDisabled" Color="Transparent"/>
-                        <SolidColorBrush x:Key="TabViewItemSeparator" Color="Transparent"/>
-                        <SolidColorBrush x:Key="TabViewItemSeparatorPointerOver" Color="Transparent"/>
-                        <SolidColorBrush x:Key="TabViewItemSeparatorSelected" Color="Transparent"/>
-                    </ResourceDictionary>
-                    
-                    <!--  LIGHT: Pure white tab bar, white inactive tabs, #F2F2F2 active tab  -->
-                    <ResourceDictionary x:Key="Light">
-                        <SolidColorBrush x:Key="TabViewBackground" Color="#FFFFFF"/>
-                        <SolidColorBrush x:Key="TabViewTopBorderBrush" Color="Transparent"/>
-                        <SolidColorBrush x:Key="TabViewSelectedItemBorderBrush" Color="Transparent"/>
-                        <SolidColorBrush x:Key="TabViewItemHeaderBackground" Color="Transparent"/>
-                        <SolidColorBrush x:Key="TabViewItemHeaderBackgroundPointerOver" Color="#F7F7F7"/>
-                        <SolidColorBrush x:Key="TabViewItemHeaderBackgroundPressed" Color="#F0F0F0"/>
-                        <SolidColorBrush x:Key="TabViewItemHeaderBackgroundSelected" Color="#F2F2F2"/>
-                        <SolidColorBrush x:Key="TabViewItemHeaderBackgroundDisabled" Color="Transparent"/>
-                        <SolidColorBrush x:Key="TabViewItemSeparator" Color="Transparent"/>
-                        <SolidColorBrush x:Key="TabViewItemSeparatorPointerOver" Color="Transparent"/>
-                        <SolidColorBrush x:Key="TabViewItemSeparatorSelected" Color="Transparent"/>
-                    </ResourceDictionary>
-                </ResourceDictionary.ThemeDictionaries>
-            </ResourceDictionary>
-        </Grid.Resources>        <Grid.RowDefinitions>
+        <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>  <!-- TabView strip (= title bar) -->
             <RowDefinition Height="Auto"/>  <!-- Update notification banner -->
             <RowDefinition Height="*"/>     <!-- Page content -->

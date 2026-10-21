@@ -6,6 +6,8 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+                <!--  Palette merged first, then Theme.xaml references it  -->
+                <ResourceDictionary Source="ms-appx:///UI/Styles/Palettes/Palette.Midnight.xaml" />
                 <ResourceDictionary Source="ms-appx:///UI/Styles/Theme.xaml" />
             </ResourceDictionary.MergedDictionaries>
             
