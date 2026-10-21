@@ -1,0 +1,185 @@
+<!--  DocGlance Premium Theme - Files App Inspired  -->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--  ══════════════════════════════════════════════════════════════════════════
+         WINDOW CONFIGURATION FOR MICA BACKDROP
+         ══════════════════════════════════════════════════════════════════════════  -->
+    
+    <SolidColorBrush x:Key="WindowCaptionBackground" Color="Transparent" />
+    <SolidColorBrush x:Key="WindowCaptionBackgroundDisabled" Color="Transparent" />
+    <x:Double x:Key="TabViewShadowDepth">0</x:Double>
+    <CornerRadius x:Key="OverlayCornerRadius">8</CornerRadius>
+
+
+    <!--  ══════════════════════════════════════════════════════════════════════════
+         TYPOGRAPHY - Files App Text Styles
+         ══════════════════════════════════════════════════════════════════════════  -->
+
+    <Style x:Key="App.Theme.BaseTextBlockStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{ThemeResource ContentControlThemeFontFamily}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="LineStackingStrategy" Value="MaxHeight" />
+        <Setter Property="TextLineBounds" Value="Full" />
+    </Style>
+
+    <Style x:Key="App.Theme.BodyTextBlockStyle" BasedOn="{StaticResource App.Theme.BaseTextBlockStyle}" TargetType="TextBlock">
+        <Setter Property="FontWeight" Value="Normal" />
+    </Style>
+
+    <Style x:Key="App.Theme.BodyStrongTextBlockStyle" BasedOn="{StaticResource App.Theme.BaseTextBlockStyle}" TargetType="TextBlock" />
+
+    <Style x:Key="App.Theme.CaptionTextBlockStyle" BasedOn="{StaticResource App.Theme.BaseTextBlockStyle}" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="Normal" />
+    </Style>
+
+    <Style x:Key="App.Theme.SubtitleTextBlockStyle" BasedOn="{StaticResource App.Theme.BaseTextBlockStyle}" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="20" />
+        <Setter Property="OpticalMarginAlignment" Value="TrimSideBearings" />
+    </Style>
+
+
+    <!--  ══════════════════════════════════════════════════════════════════════════
+         BUTTON STYLES - Modern Transparent Buttons
+         ══════════════════════════════════════════════════════════════════════════  -->
+
+    <Style x:Key="App.Theme.IconButtonStyle" TargetType="Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Width" Value="36" />
+        <Setter Property="Height" Value="36" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid x:Name="Root" Background="{TemplateBinding Background}" CornerRadius="{TemplateBinding CornerRadius}">
+                        <ContentPresenter
+                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                            Content="{TemplateBinding Content}" />
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="Root.Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="Root.Background" Value="{ThemeResource SubtleFillColorTertiaryBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <VisualState.Setters>
+                                        <Setter Target="Root.Opacity" Value="0.4" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+
+    <!--  ══════════════════════════════════════════════════════════════════════════
+         FLYOUT STYLES
+         ══════════════════════════════════════════════════════════════════════════  -->
+
+    <Style TargetType="FlyoutPresenter">
+        <Setter Property="HighContrastAdjustment" Value="None" />
+        <Setter Property="CornerRadius" Value="{StaticResource OverlayCornerRadius}" />
+    </Style>
+
+    <Style TargetType="MenuFlyoutPresenter">
+        <Setter Property="HighContrastAdjustment" Value="None" />
+    </Style>
+
+    <Style BasedOn="{StaticResource DefaultMenuFlyoutItemStyle}" TargetType="MenuFlyoutItem">
+        <Setter Property="FontFamily" Value="{ThemeResource ContentControlThemeFontFamily}" />
+    </Style>
+
+    <Style BasedOn="{StaticResource DefaultToggleMenuFlyoutItemStyle}" TargetType="ToggleMenuFlyoutItem">
+        <Setter Property="FontFamily" Value="{ThemeResource ContentControlThemeFontFamily}" />
+    </Style>
+
+    <Style BasedOn="{StaticResource DefaultMenuFlyoutSubItemStyle}" TargetType="MenuFlyoutSubItem">
+        <Setter Property="FontFamily" Value="{ThemeResource ContentControlThemeFontFamily}" />
+    </Style>
+
+
+    <!--  ══════════════════════════════════════════════════════════════════════════
+         THEME COLORS - Light / Dark / High Contrast
+         ══════════════════════════════════════════════════════════════════════════  -->
+
+    <ResourceDictionary.ThemeDictionaries>
+        
+        <!--  ═══ DARK THEME ═══  -->
+        <ResourceDictionary x:Key="Dark">
+            <!--  Main window background is transparent to show Mica backdrop  -->
+            <SolidColorBrush x:Key="ApplicationPageBackgroundThemeBrush" Color="Transparent" />
+
+            <!--  Two-colour chrome model: FRAME = title/tab strip, CONTENT = active tab + toolbar + page  -->
+            <SolidColorBrush x:Key="AppFrameBackground" Color="#000000" />
+            <SolidColorBrush x:Key="AppContentBackground" Color="#202020" />
+            
+            <!--  Tab text: inactive tabs faded, active tab bright white  -->
+            <SolidColorBrush x:Key="TabViewItemHeaderForeground" Color="#80FFFFFF" />
+            <SolidColorBrush x:Key="TabViewItemHeaderForegroundSelected" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="TabViewItemHeaderForegroundPointerOver" Color="#CCFFFFFF" />
+            <SolidColorBrush x:Key="TabViewItemHeaderForegroundPressed" Color="#FFFFFFFF" />
+            
+            <!--  Content areas transparent to show backdrop  -->
+            <SolidColorBrush x:Key="App.Theme.FileArea.BackgroundBrush" Color="Transparent" />
+            <Color x:Key="App.Theme.FillColorAttention">#50C0FF</Color>
+            <SolidColorBrush x:Key="App.Theme.FillColorAttentionBrush" Color="{StaticResource App.Theme.FillColorAttention}" />
+        </ResourceDictionary>
+        
+        <!--  ═══ LIGHT THEME ═══  -->
+        <ResourceDictionary x:Key="Light">
+            <!--  Main window background is transparent to show Mica backdrop  -->
+            <SolidColorBrush x:Key="ApplicationPageBackgroundThemeBrush" Color="Transparent" />
+
+            <SolidColorBrush x:Key="AppFrameBackground" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="AppContentBackground" Color="#F2F2F2" />
+            
+            <!--  Tab text: adjusted for light theme  -->
+            <SolidColorBrush x:Key="TabViewItemHeaderForeground" Color="#80000000" />
+            <SolidColorBrush x:Key="TabViewItemHeaderForegroundSelected" Color="#FF000000" />
+            <SolidColorBrush x:Key="TabViewItemHeaderForegroundPointerOver" Color="#CC000000" />
+            <SolidColorBrush x:Key="TabViewItemHeaderForegroundPressed" Color="#FF000000" />
+            
+            <!--  Content areas #F2F2F2 to match active tab  -->
+            <SolidColorBrush x:Key="App.Theme.FileArea.BackgroundBrush" Color="#F2F2F2" />
+            <Color x:Key="App.Theme.FillColorAttention">#0070CB</Color>
+            <SolidColorBrush x:Key="App.Theme.FillColorAttentionBrush" Color="{StaticResource App.Theme.FillColorAttention}" />
+        </ResourceDictionary>
+        
+        <!--  ═══ HIGH CONTRAST ═══  -->
+        <ResourceDictionary x:Key="HighContrast">
+            <SolidColorBrush x:Key="ApplicationPageBackgroundThemeBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="AppFrameBackground" Color="{StaticResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="AppContentBackground" Color="{StaticResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="TabViewItemHeaderBackground" Color="{StaticResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="TabViewItemHeaderBackgroundSelected" Color="{StaticResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="TabViewItemHeaderBackgroundPressed" Color="{StaticResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="TabViewItemHeaderBackgroundPointerOver" Color="{StaticResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="App.Theme.FileArea.BackgroundBrush" Color="Transparent" />
+            <Color x:Key="App.Theme.FillColorAttention">#50C0FF</Color>
+            <SolidColorBrush x:Key="App.Theme.FillColorAttentionBrush" Color="{StaticResource App.Theme.FillColorAttention}" />
+        </ResourceDictionary>
+        
+    </ResourceDictionary.ThemeDictionaries>
+
+</ResourceDictionary>

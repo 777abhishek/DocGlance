@@ -7,6 +7,14 @@
 
     <UserControl.Resources>
         <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="ToolbarBackground" Color="#202020"/>
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="ToolbarBackground" Color="#F2F2F2"/>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="ms-appx:///Features/Viewer/Components/ViewerToolbarIcons.xaml"/>
             </ResourceDictionary.MergedDictionaries>
@@ -36,7 +44,7 @@
     <Grid Height="48"
           Padding="8,0"
           ColumnSpacing="2"
-          Background="Transparent">
+          Background="{ThemeResource ToolbarBackground}">
 
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto"/>

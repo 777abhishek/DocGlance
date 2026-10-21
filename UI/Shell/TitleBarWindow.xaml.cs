@@ -6,8 +6,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Composition;
-using Microsoft.UI.Composition.SystemBackdrops;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -44,9 +42,6 @@ public sealed partial class TitleBarWindow : Window
     // The permanent "home" tab
     private TabViewItem? _homeTab;
     private int _selectionChangeVersion;
-    private DesktopAcrylicController? _acrylicController;
-    private SystemBackdropConfiguration? _acrylicConfiguration;
-    private ICompositionSupportsSystemBackdrop? _acrylicTarget;
     private bool _homePageInitialized;
     private bool _homePageInitializationQueued;
     private bool _deferHomePageInitialization;
@@ -161,12 +156,11 @@ public sealed partial class TitleBarWindow : Window
             }
         };
         
-        // Save session and release the custom backdrop controller when the window closes.
+        // Save session when the window closes.
         Closed += (s, e) =>
         {
             ReleaseQuickLookHotkeyOwner();
             SaveSession();
-            RemoveAcrylicBackdrop();
         };
 
         // Set the window icon
@@ -1206,81 +1200,6 @@ public sealed partial class TitleBarWindow : Window
         }
     }
 
-    private void ConfigureAcrylicBackdrop(bool isDark)
-    {
-        if (!isDark)
-        {
-            RemoveAcrylicBackdrop();
-            RootGrid.Background = new SolidColorBrush(Microsoft.UI.Colors.White);
-            return;
-        }
-
-        if (_acrylicController != null)
-        {
-            _acrylicConfiguration!.Theme = SystemBackdropTheme.Dark;
-            RootGrid.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-            return;
-        }
-
-        if (!DesktopAcrylicController.IsSupported())
-        {
-            RootGrid.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 30, 30, 30));
-            return;
-        }
-
-        var configuration = new SystemBackdropConfiguration
-        {
-            // Keep Desktop Acrylic active when another owned/system window (for example,
-            // the file picker) takes focus; the built-in backdrop replaces it with a flat tint.
-            IsInputActive = true,
-            Theme = SystemBackdropTheme.Dark
-        };
-        var controller = new DesktopAcrylicController
-        {
-            TintColor = Windows.UI.Color.FromArgb(255, 30, 30, 30),
-            FallbackColor = Windows.UI.Color.FromArgb(255, 30, 30, 30)
-        };
-        var target = this.As<ICompositionSupportsSystemBackdrop>();
-        try
-        {
-            controller.AddSystemBackdropTarget(target);
-            controller.SetSystemBackdropConfiguration(configuration);
-            _acrylicController = controller;
-            _acrylicConfiguration = configuration;
-            _acrylicTarget = target;
-            RootGrid.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-        }
-        catch (Exception ex)
-        {
-            controller.Dispose();
-            RootGrid.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 30, 30, 30));
-            Logger.Log($"[Backdrop] Failed to attach Desktop Acrylic: {ex.Message}");
-        }
-    }
-
-    private void RemoveAcrylicBackdrop()
-    {
-        if (_acrylicController == null)
-            return;
-
-        try
-        {
-            if (_acrylicTarget != null)
-                _acrylicController.RemoveSystemBackdropTarget(_acrylicTarget);
-        }
-        catch (Exception ex)
-        {
-            Logger.Log($"[Backdrop] Failed to detach Desktop Acrylic: {ex.Message}");
-        }
-        finally
-        {
-            _acrylicController.Dispose();
-            _acrylicController = null;
-            _acrylicConfiguration = null;
-            _acrylicTarget = null;
-        }
-    }
-
     // ── Title bar theme configuration ─────────────────────────────────────────
     
     public void ConfigureTitleBarTheme()
@@ -1296,12 +1215,13 @@ public sealed partial class TitleBarWindow : Window
                          (theme == ElementTheme.Default &&
                           Application.Current.RequestedTheme == ApplicationTheme.Dark);
 
-            ConfigureAcrylicBackdrop(isDark);
-
             var titleBar = AppWindow.TitleBar;
             if (titleBar == null) return;
 
-            // Transparent title-bar controls reveal the Acrylic window material in dark mode.
+            // DARK: Pure black #000000 for title bar | LIGHT: Pure white #FFFFFF for title bar
+            var titleBarBg = isDark ? Windows.UI.Color.FromArgb(255, 0, 0, 0)          // #000000 pure black
+                                    : Windows.UI.Color.FromArgb(255, 255, 255, 255);   // #FFFFFF pure white
+            
             var fg      = isDark ? Windows.UI.Color.FromArgb(255, 255, 255, 255)
                                  : Windows.UI.Color.FromArgb(255,   0,   0,   0);
             var fgDim   = isDark ? Windows.UI.Color.FromArgb(180, 255, 255, 255)
@@ -1312,8 +1232,9 @@ public sealed partial class TitleBarWindow : Window
                                  : Windows.UI.Color.FromArgb( 35,   0,   0,   0);
             var transp  = Windows.UI.Color.FromArgb(0, 0, 0, 0);
 
-            titleBar.BackgroundColor                 = transp;
-            titleBar.InactiveBackgroundColor         = transp;
+            // Title bar is pure black (dark) or pure white (light)
+            titleBar.BackgroundColor                 = titleBarBg;
+            titleBar.InactiveBackgroundColor         = titleBarBg;
             titleBar.ButtonBackgroundColor           = transp;
             titleBar.ButtonInactiveBackgroundColor   = transp;
             titleBar.ButtonForegroundColor           = fg;

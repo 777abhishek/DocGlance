@@ -4,6 +4,12 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Application.Resources>
         <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+                <ResourceDictionary Source="ms-appx:///UI/Styles/Theme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            
+            <!--  Legacy surface brushes for compatibility  -->
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="DocGlanceSurfaceBrush" Color="#FFFFFFFF" />
@@ -14,9 +20,6 @@
                     <SolidColorBrush x:Key="DocGlanceElevatedSurfaceBrush" Color="#FF2C2C2C" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
-            <ResourceDictionary.MergedDictionaries>
-                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
-            </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>
 </Application>
