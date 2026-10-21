@@ -5,18 +5,24 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:models="using:DocGlance.Core.Models"
     xmlns:components="using:DocGlance.Features.Viewer.Components"
-    Background="Transparent"
 >
 
     <Page.Transitions>
-        <TransitionCollection>
-            <EntranceThemeTransition />
-        </TransitionCollection>
+        <TransitionCollection />
     </Page.Transitions>
 
     <Page.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="PageBackground" Color="#202020"/>
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="PageBackground" Color="#F2F2F2"/>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
 
-        <!-- Toolbar icon button -->
+            <!-- Toolbar icon button -->
         <Style x:Key="IB" TargetType="Button">
             <Setter Property="Width"           Value="32"/>
             <Setter Property="Height"          Value="32"/>
@@ -72,9 +78,10 @@
             <Setter Property="VerticalContentAlignment"   Value="Center"/>
         </Style>
 
+        </ResourceDictionary>
     </Page.Resources>
 
-    <Grid x:Name="ViewerRoot">
+    <Grid x:Name="ViewerRoot" Background="{ThemeResource PageBackground}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -112,7 +119,7 @@
             </Grid.ColumnDefinitions>
 
             <!-- ── SIDEBAR ── -->
-            <Grid Grid.Column="0" x:Name="SidebarCard" Background="Transparent">
+            <Grid Grid.Column="0" x:Name="SidebarCard" Background="{ThemeResource PageBackground}">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
@@ -125,7 +132,7 @@
                     IsItemClickEnabled="True"
                     ItemClick="ThumbnailList_ItemClick"
                     Padding="4,4,4,4"
-                    Background="Transparent"
+                    Background="{ThemeResource PageBackground}"
                     KeyDown="DocumentScrollViewer_KeyDown">
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="models:PageThumbnailItem">
@@ -174,7 +181,7 @@
                 <!-- Outline tree — items wrap long titles -->
                 <TreeView x:Name="OutlineTree" Grid.Row="0"
                     Visibility="Collapsed" SelectionMode="Single"
-                    Padding="2,2" Background="Transparent"
+                    Padding="2,2" Background="{ThemeResource PageBackground}"
                     ItemInvoked="OutlineTree_ItemInvoked">
                     <TreeView.ItemTemplate>
                         <DataTemplate>
@@ -216,7 +223,7 @@
                     SelectionMode="None"
                     IsItemClickEnabled="True"
                     ItemClick="BookmarkList_ItemClick"
-                    Padding="2,4" Background="Transparent">
+                    Padding="2,4" Background="{ThemeResource PageBackground}">
                     <ListView.ItemTemplate>
                         <DataTemplate>
                             <Grid Padding="4,4" ColumnSpacing="6" MinHeight="36">
@@ -272,7 +279,7 @@
                     SelectionMode="None"
                     IsItemClickEnabled="True"
                     ItemClick="NotesList_ItemClick"
-                    Padding="2,4" Background="Transparent">
+                    Padding="2,4" Background="{ThemeResource PageBackground}">
                     <ListView.ItemTemplate>
                         <DataTemplate>
                             <StackPanel Padding="6,5" Spacing="3">
@@ -325,7 +332,7 @@
             </Grid>
 
             <!-- ── VIEWER CANVAS — takes full width when sidebar is collapsed ── -->
-            <Grid Grid.Column="1" Background="Transparent"
+            <Grid Grid.Column="1" Background="{ThemeResource PageBackground}"
                   HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
 
                 <ContentControl x:Name="PdfViewerHost"
@@ -481,7 +488,7 @@
         <!-- ── LOADING INDICATOR (overlay) ── -->
         <Grid x:Name="LoadingOverlay"
               Grid.Row="1"
-              Background="Transparent"
+              Background="{ThemeResource PageBackground}"
               Visibility="Collapsed">
             <Grid.OpacityTransition>
                 <ScalarTransition Duration="0:0:0.2" />
