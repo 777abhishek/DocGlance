@@ -9,10 +9,10 @@
         <ResourceDictionary>
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Dark">
-                    <SolidColorBrush x:Key="ToolbarBackground" Color="#202020"/>
+                    <StaticResource x:Key="ToolbarBackground" ResourceKey="AppContentBackground"/>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
-                    <SolidColorBrush x:Key="ToolbarBackground" Color="#F2F2F2"/>
+                    <StaticResource x:Key="ToolbarBackground" ResourceKey="AppContentBackground"/>
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
             <ResourceDictionary.MergedDictionaries>
