@@ -45,12 +45,26 @@ public class ThemeService
         var newPalette = new ResourceDictionary { Source = paletteUri };
         app.Resources.MergedDictionaries.Insert(insertIndex, newPalette);
 
-        // Force theme refresh by toggling RequestedTheme
+        // SMOOTH transition: Force theme refresh without visible flicker
+        // Just changing RequestedTheme triggers re-evaluation of all ThemeResource bindings
         if (TitleBarWindow.Current?.Content is FrameworkElement rootElement)
         {
+            // Store current theme
             var current = rootElement.RequestedTheme;
-            rootElement.RequestedTheme = current == ElementTheme.Dark ? ElementTheme.Light : ElementTheme.Dark;
-            rootElement.RequestedTheme = current;
+            
+            // If Default (System), temporarily set to explicit theme to force refresh
+            if (current == ElementTheme.Default)
+            {
+                bool isDark = Application.Current.RequestedTheme == ApplicationTheme.Dark;
+                rootElement.RequestedTheme = isDark ? ElementTheme.Dark : ElementTheme.Light;
+                rootElement.RequestedTheme = ElementTheme.Default;
+            }
+            else
+            {
+                // Toggle briefly to force refresh
+                rootElement.RequestedTheme = current == ElementTheme.Dark ? ElementTheme.Light : ElementTheme.Dark;
+                rootElement.RequestedTheme = current;
+            }
         }
     }
 

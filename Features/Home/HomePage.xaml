@@ -68,7 +68,7 @@
         <!-- ── Modern Document Card Component ────────────────────────────────
              Modular, reusable card component with hover effects -->
         <DataTemplate x:Key="GridCardTemplate" x:DataType="models:DocumentItem">
-            <controls:DocumentCard Document="{x:Bind Mode=OneWay}"/>
+            <controls:DocumentCardV2 Document="{x:Bind Mode=OneWay}"/>
         </DataTemplate>
 
         <!-- ── Folder chip ──────────────────────────────────────────── -->
@@ -113,7 +113,7 @@
         <!-- ── Workspace Card Component ──────────────────────────────────
              Modular, reusable workspace card component -->
         <DataTemplate x:Key="WorkspaceCardTemplate">
-            <controls:WorkspaceCard/>
+            <controls:WorkspaceCardV2/>
         </DataTemplate>
 
         </ResourceDictionary>
@@ -377,7 +377,7 @@
                         </ItemsRepeater.Layout>
                         <ItemsRepeater.ItemTemplate>
                             <DataTemplate x:DataType="models:DocumentItem">
-                                <controls:DocumentCard Document="{x:Bind Mode=OneWay}"/>
+                                <controls:DocumentCardV2 Document="{x:Bind Mode=OneWay}"/>
                             </DataTemplate>
                         </ItemsRepeater.ItemTemplate>
                     </ItemsRepeater>
@@ -438,7 +438,7 @@
                                         </ItemsRepeater.Layout>
                                         <ItemsRepeater.ItemTemplate>
                                             <DataTemplate x:DataType="models:DocumentItem">
-                                                <controls:DocumentCard Document="{x:Bind Mode=OneWay}"/>
+                                                <controls:DocumentCardV2 Document="{x:Bind Mode=OneWay}"/>
                                             </DataTemplate>
                                         </ItemsRepeater.ItemTemplate>
                                     </ItemsRepeater>
