@@ -15,10 +15,10 @@
         <ResourceDictionary>
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Dark">
-                    <SolidColorBrush x:Key="PageBackground" Color="#202020"/>
+                    <StaticResource x:Key="PageBackground" ResourceKey="AppContentBackground"/>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
-                    <SolidColorBrush x:Key="PageBackground" Color="#F2F2F2"/>
+                    <StaticResource x:Key="PageBackground" ResourceKey="AppContentBackground"/>
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 

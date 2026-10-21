@@ -1,0 +1,79 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--  Paper Palette - Warm sepia/paper theme (perfect for document viewer)  -->
+
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Dark">
+            <!-- Frame and structure -->
+            <Color x:Key="ColorFrameBackground">#15110C</Color>
+            <Color x:Key="ColorContentBackground">#211B13</Color>
+            <Color x:Key="ColorSurface">#2C241A</Color>
+            <Color x:Key="ColorSurfaceElevated">#3A2E20</Color>
+            
+            <!-- Strokes and dividers -->
+            <Color x:Key="ColorStroke">#4A3826</Color>
+            <Color x:Key="ColorStrokeWeak">#362C1E</Color>
+            
+            <!-- Text -->
+            <Color x:Key="ColorTextPrimary">#EADFC8</Color>
+            <Color x:Key="ColorTextSecondary">#C8B89B</Color>
+            <Color x:Key="ColorTextTertiary">#A6916E</Color>
+            <Color x:Key="ColorTextDisabled">#846A41</Color>
+            
+            <!-- Interactive states -->
+            <Color x:Key="ColorHover">#251E16</Color>
+            <Color x:Key="ColorPressed">#33291E</Color>
+            <Color x:Key="ColorSelected">#211B13</Color>
+            
+            <!-- Accent -->
+            <Color x:Key="ColorAccent">#D9A066</Color>
+            <Color x:Key="ColorAccentHover">#E3B380</Color>
+            <Color x:Key="ColorAccentPressed">#C28D4D</Color>
+            <Color x:Key="ColorOnAccent">#15110C</Color>
+            
+            <!-- Semantic colors -->
+            <Color x:Key="ColorSuccess">#7FB069</Color>
+            <Color x:Key="ColorWarning">#E7B10A</Color>
+            <Color x:Key="ColorError">#D1495B</Color>
+            <Color x:Key="ColorInfo">#5B9AA0</Color>
+        </ResourceDictionary>
+
+        <ResourceDictionary x:Key="Light">
+            <!-- Frame and structure -->
+            <Color x:Key="ColorFrameBackground">#EFE6D5</Color>
+            <Color x:Key="ColorContentBackground">#F8F1E3</Color>
+            <Color x:Key="ColorSurface">#FFFBF2</Color>
+            <Color x:Key="ColorSurfaceElevated">#F5EFE0</Color>
+            
+            <!-- Strokes and dividers -->
+            <Color x:Key="ColorStroke">#D6CAB3</Color>
+            <Color x:Key="ColorStrokeWeak">#E8DCC9</Color>
+            
+            <!-- Text -->
+            <Color x:Key="ColorTextPrimary">#3B2F20</Color>
+            <Color x:Key="ColorTextSecondary">#685844</Color>
+            <Color x:Key="ColorTextTertiary">#8F7F67</Color>
+            <Color x:Key="ColorTextDisabled">#B6A68A</Color>
+            
+            <!-- Interactive states -->
+            <Color x:Key="ColorHover">#F5EFE0</Color>
+            <Color x:Key="ColorPressed">#E8DFCC</Color>
+            <Color x:Key="ColorSelected">#F8F1E3</Color>
+            
+            <!-- Accent -->
+            <Color x:Key="ColorAccent">#A0522D</Color>
+            <Color x:Key="ColorAccentHover">#B55E35</Color>
+            <Color x:Key="ColorAccentPressed">#8B4625</Color>
+            <Color x:Key="ColorOnAccent">#FFFFFF</Color>
+            
+            <!-- Semantic colors -->
+            <Color x:Key="ColorSuccess">#5D8E46</Color>
+            <Color x:Key="ColorWarning">#C48F00</Color>
+            <Color x:Key="ColorError">#A83746</Color>
+            <Color x:Key="ColorInfo">#3F7A80</Color>
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+
+</ResourceDictionary>

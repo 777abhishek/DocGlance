@@ -96,7 +96,14 @@
                         <ComboBox x:Name="PaletteComboBox" Grid.Column="2" MinWidth="200"
                                   VerticalAlignment="Center"
                                   SelectionChanged="PaletteComboBox_SelectionChanged">
-                            <ComboBoxItem Content="Default" Tag="Midnight" IsSelected="True" />
+                            <ComboBoxItem Content="Midnight (Default)" Tag="Midnight" IsSelected="True" />
+                            <ComboBoxItem Content="Paper" Tag="Paper" />
+                            <ComboBoxItem Content="Forest" Tag="Forest" />
+                            <ComboBoxItem Content="Violet" Tag="Violet" />
+                            <ComboBoxItem Content="Ember" Tag="Ember" />
+                            <ComboBoxItem Content="Rose" Tag="Rose" />
+                            <ComboBoxItem Content="Nord" Tag="Nord" />
+                            <ComboBoxItem Content="Gruvbox" Tag="Gruvbox" />
                             <ComboBoxItem Content="Snow" Tag="Snow" />
                             <ComboBoxItem Content="Ocean" Tag="Ocean" />
                         </ComboBox>
