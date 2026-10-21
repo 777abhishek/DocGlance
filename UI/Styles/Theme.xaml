@@ -72,6 +72,16 @@
             <StaticResource x:Key="SystemFillColorSuccessBrush" ResourceKey="AppSuccess"/>
             <StaticResource x:Key="SystemFillColorCriticalBrush" ResourceKey="AppError"/>
             
+            <!--  Flyout, MenuFlyout, ToolTip backgrounds  -->
+            <StaticResource x:Key="FlyoutPresenterBackground" ResourceKey="AppSurfaceElevated"/>
+            <StaticResource x:Key="MenuFlyoutPresenterBackground" ResourceKey="AppSurfaceElevated"/>
+            <SolidColorBrush x:Key="MenuFlyoutPresenterBorderBrush" Color="{ThemeResource ColorStroke}"/>
+            <StaticResource x:Key="CommandBarBackground" ResourceKey="AppContentBackground"/>
+            <SolidColorBrush x:Key="CommandBarBorderBrush" Color="{ThemeResource ColorStroke}"/>
+            <StaticResource x:Key="ToolTipBackground" ResourceKey="AppSurfaceElevated"/>
+            <SolidColorBrush x:Key="ToolTipBorderBrush" Color="{ThemeResource ColorStroke}"/>
+            <StaticResource x:Key="ToolTipForeground" ResourceKey="AppTextPrimary"/>
+            
             <!--  TabView specific overrides  -->
             <StaticResource x:Key="TabViewBackground" ResourceKey="AppFrameBackground"/>
             <SolidColorBrush x:Key="TabViewTopBorderBrush" Color="Transparent"/>
@@ -133,6 +143,16 @@
             <StaticResource x:Key="TextOnAccentFillColorPrimaryBrush" ResourceKey="AppOnAccent"/>
             <StaticResource x:Key="SystemFillColorSuccessBrush" ResourceKey="AppSuccess"/>
             <StaticResource x:Key="SystemFillColorCriticalBrush" ResourceKey="AppError"/>
+            
+            <!--  Flyout, MenuFlyout, ToolTip backgrounds  -->
+            <StaticResource x:Key="FlyoutPresenterBackground" ResourceKey="AppSurfaceElevated"/>
+            <StaticResource x:Key="MenuFlyoutPresenterBackground" ResourceKey="AppSurfaceElevated"/>
+            <SolidColorBrush x:Key="MenuFlyoutPresenterBorderBrush" Color="{ThemeResource ColorStroke}"/>
+            <StaticResource x:Key="CommandBarBackground" ResourceKey="AppContentBackground"/>
+            <SolidColorBrush x:Key="CommandBarBorderBrush" Color="{ThemeResource ColorStroke}"/>
+            <StaticResource x:Key="ToolTipBackground" ResourceKey="AppSurfaceElevated"/>
+            <SolidColorBrush x:Key="ToolTipBorderBrush" Color="{ThemeResource ColorStroke}"/>
+            <StaticResource x:Key="ToolTipForeground" ResourceKey="AppTextPrimary"/>
             
             <!--  TabView specific overrides  -->
             <StaticResource x:Key="TabViewBackground" ResourceKey="AppFrameBackground"/>
