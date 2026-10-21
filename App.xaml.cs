@@ -151,12 +151,16 @@ public partial class App : Application
 
                             // File activation takes precedence. Session I/O runs off-thread.
                             if (!openedFromActivation && !openedFromCommandLine &&
-                                m_window is TitleBarWindow restoreWindow &&
-                                AppSettings.RestoreLastSession)
+                                m_window is TitleBarWindow restoreWindow)
                             {
-                                Infrastructure.Diagnostics.DiagnosticsService.Milestone(
-                                    "SessionRestoreScheduled");
-                                restoreWindow.RestoreSession();
+                                bool startupWorkspaceRestored =
+                                    restoreWindow.RestoreStartupWorkspace();
+                                if (!startupWorkspaceRestored && AppSettings.RestoreLastSession)
+                                {
+                                    Infrastructure.Diagnostics.DiagnosticsService.Milestone(
+                                        "SessionRestoreScheduled");
+                                    restoreWindow.RestoreSession();
+                                }
                             }
                         }
                         catch (Exception ex)
