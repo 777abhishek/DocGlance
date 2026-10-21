@@ -21,7 +21,7 @@ public sealed partial class SettingsPage : Page
 {
     private const string GitHubOwner = "777abhishek"; // TODO: Update with your GitHub username
     private const string GitHubRepo = "DocGlance";
-    private bool _isLoadingSettings;
+    private bool _isLoadingSettings = true;
 
     public SettingsPage()
     {
@@ -60,79 +60,125 @@ public sealed partial class SettingsPage : Page
     
     private void LoadSettings()
     {
-        _isLoadingSettings = true;
-
-        // Appearance
-        ThemeComboBox.SelectedIndex = AppSettings.Theme switch
+        try
         {
-            "Light" => 0,
-            "Dark" => 1,
-            _ => 2 // System
-        };
+            _isLoadingSettings = true;
 
-        // Viewer
-        ViewModeComboBox.SelectedIndex = AppSettings.DefaultZoomMode switch
+            // Appearance - theme mode
+            string savedTheme = AppSettings.Theme;
+            ThemeComboBox.SelectedIndex = savedTheme switch
+            {
+                "Dark" => 0,
+                "Light" => 1,
+                _ => 2 // Default/System
+            };
+
+            // Palette selector is always visible
+
+            // Palette selection
+            string savedPalette = AppSettings.ColorPalette;
+            for (int i = 0; i < PaletteComboBox.Items.Count; i++)
+            {
+                if (PaletteComboBox.Items[i] is ComboBoxItem item && 
+                    item.Tag?.ToString() == savedPalette)
+                {
+                    PaletteComboBox.SelectedIndex = i;
+                    break;
+                }
+            }
+
+            // Viewer
+            ViewModeComboBox.SelectedIndex = AppSettings.DefaultZoomMode switch
+            {
+                "FitWidth" => 0,
+                "FitPage" => 1,
+                "ActualSize" => 2,
+                _ => 0
+            };
+            ZoomSlider.Value = AppSettings.DefaultZoomPercent;
+            ZoomValueText.Text = $"{AppSettings.DefaultZoomPercent}%";
+            ThumbnailsToggle.IsOn = AppSettings.ShowThumbnails;
+            SidebarToggle.IsOn = AppSettings.ShowSidebar;
+            RememberViewToggle.IsOn = AppSettings.RememberViewState;
+            QuickLookSpaceToggle.IsOn = AppSettings.QuickLookSpaceShortcutEnabled;
+
+            // Home & Browser
+            DefaultHomeViewComboBox.SelectedIndex = AppSettings.DefaultHomeView == "Recent" ? 0 : 1;
+            RecentFilesSlider.Value = AppSettings.RecentFilesLimit;
+            RecentFilesValueText.Text = AppSettings.RecentFilesLimit.ToString();
+
+            // Session & Startup
+            RestoreSessionToggle.IsOn = AppSettings.RestoreLastSession;
+            RestoreWindowToggle.IsOn = AppSettings.RestoreWindowSize;
+
+            QuickLookHotkeyText.Text = FormatQuickLookHotkey(
+                AppSettings.QuickLookHotkeyModifiers,
+                AppSettings.QuickLookHotkeyKey);
+            UpdateQuickLookHotkeyStatus();
+
+            // Performance
+            CacheSizeSlider.Value = AppSettings.ThumbnailCacheSizeMB;
+            CacheSizeValueText.Text = $"{AppSettings.ThumbnailCacheSizeMB} MB";
+        }
+        finally
         {
-            "FitWidth" => 0,
-            "FitPage" => 1,
-            "ActualSize" => 2,
-            _ => 0
-        };
-        ZoomSlider.Value = AppSettings.DefaultZoomPercent;
-        ZoomValueText.Text = $"{AppSettings.DefaultZoomPercent}%";
-        ThumbnailsToggle.IsOn = AppSettings.ShowThumbnails;
-        SidebarToggle.IsOn = AppSettings.ShowSidebar;
-        RememberViewToggle.IsOn = AppSettings.RememberViewState;
-        QuickLookSpaceToggle.IsOn = AppSettings.QuickLookSpaceShortcutEnabled;
-
-        // Home & Browser
-        DefaultHomeViewComboBox.SelectedIndex = AppSettings.DefaultHomeView == "Recent" ? 0 : 1;
-        RecentFilesSlider.Value = AppSettings.RecentFilesLimit;
-        RecentFilesValueText.Text = AppSettings.RecentFilesLimit.ToString();
-
-        // Session & Startup
-        RestoreSessionToggle.IsOn = AppSettings.RestoreLastSession;
-        RestoreWindowToggle.IsOn = AppSettings.RestoreWindowSize;
-
-        QuickLookHotkeyText.Text = FormatQuickLookHotkey(
-            AppSettings.QuickLookHotkeyModifiers,
-            AppSettings.QuickLookHotkeyKey);
-        UpdateQuickLookHotkeyStatus();
-
-        // Performance
-        CacheSizeSlider.Value = AppSettings.ThumbnailCacheSizeMB;
-        CacheSizeValueText.Text = $"{AppSettings.ThumbnailCacheSizeMB} MB";
-        _isLoadingSettings = false;
+            _isLoadingSettings = false;
+        }
     }
 
     // ── Theme ─────────────────────────────────────────────────────────────────
 
     private void ThemeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (ThemeComboBox.SelectedIndex < 0) return;
+        if (_isLoadingSettings) return;
+        if (ThemeComboBox.SelectedItem is not ComboBoxItem selectedItem) return;
+        
+        string themeMode = selectedItem.Tag?.ToString() ?? "Default";
+        AppSettings.Theme = themeMode;
 
-        string themeValue = ThemeComboBox.SelectedIndex switch
-        {
-            0 => "Light",
-            1 => "Dark",
-            _ => "System"
-        };
-        AppSettings.Theme = themeValue;
+        // Palette selector is always visible (removed hide/show logic)
 
-        ElementTheme theme = ThemeComboBox.SelectedIndex switch
+        // Apply theme mode
+        ElementTheme theme = themeMode switch
         {
-            0 => ElementTheme.Light,
-            1 => ElementTheme.Dark,
+            "Light" => ElementTheme.Light,
+            "Dark" => ElementTheme.Dark,
             _ => ElementTheme.Default,
         };
-
         ((DocGlance.App)Application.Current).SetTheme(theme);
+        
+        // Apply current palette with the new theme
+        ApplyCurrentPalette();
+        
+        // Refresh title bar colors
+        TitleBarWindow.Current?.ConfigureTitleBarTheme();
+    }
+
+    private void PaletteComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isLoadingSettings) return;
+        if (PaletteComboBox.SelectedItem is not ComboBoxItem selectedItem) return;
+        
+        string paletteName = selectedItem.Tag?.ToString() ?? "Midnight";
+        AppSettings.ColorPalette = paletteName;
+
+        ApplyCurrentPalette();
+        
+        // Refresh title bar colors
+        TitleBarWindow.Current?.ConfigureTitleBarTheme();
+    }
+
+    private void ApplyCurrentPalette()
+    {
+        string paletteName = AppSettings.ColorPalette;
+        Services.Themes.ThemeService.Instance.ApplyPalette(paletteName);
     }
     
     // ── Viewer ────────────────────────────────────────────────────────────────
 
     private void ViewModeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (_isLoadingSettings) return;
         if (ViewModeComboBox.SelectedIndex < 0) return;
 
         AppSettings.DefaultZoomMode = ViewModeComboBox.SelectedIndex switch
@@ -146,6 +192,8 @@ public sealed partial class SettingsPage : Page
 
     private void ZoomSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
     {
+        if (_isLoadingSettings) return;
+        
         int zoomPercent = (int)ZoomSlider.Value;
         AppSettings.DefaultZoomPercent = zoomPercent;
         if (ZoomValueText != null)
@@ -156,16 +204,22 @@ public sealed partial class SettingsPage : Page
     
     private void ThumbnailsToggle_Toggled(object sender, RoutedEventArgs e)
     {
+        if (_isLoadingSettings) return;
+        
         AppSettings.ShowThumbnails = ThumbnailsToggle.IsOn;
     }
 
     private void SidebarToggle_Toggled(object sender, RoutedEventArgs e)
     {
+        if (_isLoadingSettings) return;
+        
         AppSettings.ShowSidebar = SidebarToggle.IsOn;
     }
 
     private void RememberViewToggle_Toggled(object sender, RoutedEventArgs e)
     {
+        if (_isLoadingSettings) return;
+        
         AppSettings.RememberViewState = RememberViewToggle.IsOn;
     }
 
@@ -290,6 +344,7 @@ public sealed partial class SettingsPage : Page
 
     private void DefaultHomeViewComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (_isLoadingSettings) return;
         if (DefaultHomeViewComboBox.SelectedIndex < 0) return;
 
         AppSettings.DefaultHomeView = DefaultHomeViewComboBox.SelectedIndex == 0 ? "Recent" : "All";
@@ -297,6 +352,8 @@ public sealed partial class SettingsPage : Page
 
     private void RecentFilesSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
     {
+        if (_isLoadingSettings) return;
+        
         int limit = (int)RecentFilesSlider.Value;
         AppSettings.RecentFilesLimit = limit;
         if (RecentFilesValueText != null)
@@ -309,11 +366,15 @@ public sealed partial class SettingsPage : Page
 
     private void RestoreSessionToggle_Toggled(object sender, RoutedEventArgs e)
     {
+        if (_isLoadingSettings) return;
+        
         AppSettings.RestoreLastSession = RestoreSessionToggle.IsOn;
     }
 
     private void RestoreWindowToggle_Toggled(object sender, RoutedEventArgs e)
     {
+        if (_isLoadingSettings) return;
+        
         AppSettings.RestoreWindowSize = RestoreWindowToggle.IsOn;
     }
 
@@ -321,6 +382,8 @@ public sealed partial class SettingsPage : Page
 
     private void CacheSizeSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
     {
+        if (_isLoadingSettings) return;
+        
         int sizeMB = (int)CacheSizeSlider.Value;
         AppSettings.ThumbnailCacheSizeMB = sizeMB;
         if (CacheSizeValueText != null)

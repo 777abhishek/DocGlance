@@ -24,6 +24,12 @@ public static class AppSettings
         set { _data.Theme = value; Save(); }
     }
 
+    public static string ColorPalette
+    {
+        get => _data.ColorPalette;
+        set { _data.ColorPalette = value; Save(); }
+    }
+
     // ── Viewer ────────────────────────────────────────────────────────────────
     
     public static string DefaultZoomMode
@@ -147,7 +153,8 @@ public static class AppSettings
     private sealed class AppSettingsData
     {
         // Appearance
-        public string Theme { get; set; } = "System";
+        public string Theme { get; set; } = "Default";
+        public string ColorPalette { get; set; } = "Midnight";
 
         // Viewer
         public string DefaultZoomMode { get; set; } = "FitWidth"; // FitWidth, FitPage, ActualSize

@@ -166,6 +166,10 @@ public sealed partial class TitleBarWindow : Window
         // Set the window icon
         SetWindowIcon();
         
+        // Apply saved color palette
+        string savedPalette = Infrastructure.Configuration.AppSettings.ColorPalette;
+        Services.Themes.ThemeService.Instance.ApplyPalette(savedPalette);
+        
         // Configure title bar button colors for theme support
         ConfigureTitleBarTheme();
 
@@ -1206,49 +1210,80 @@ public sealed partial class TitleBarWindow : Window
     {
         try
         {
-            // Determine current theme
-            var theme = ElementTheme.Default;
-            if (Content is FrameworkElement root)
-                theme = root.ActualTheme;
-
-            bool isDark = theme == ElementTheme.Dark ||
-                         (theme == ElementTheme.Default &&
-                          Application.Current.RequestedTheme == ApplicationTheme.Dark);
-
             var titleBar = AppWindow.TitleBar;
             if (titleBar == null) return;
 
-            // DARK: Pure black #000000 for title bar | LIGHT: Pure white #FFFFFF for title bar
-            var titleBarBg = isDark ? Windows.UI.Color.FromArgb(255, 0, 0, 0)          // #000000 pure black
-                                    : Windows.UI.Color.FromArgb(255, 255, 255, 255);   // #FFFFFF pure white
-            
-            var fg      = isDark ? Windows.UI.Color.FromArgb(255, 255, 255, 255)
-                                 : Windows.UI.Color.FromArgb(255,   0,   0,   0);
-            var fgDim   = isDark ? Windows.UI.Color.FromArgb(180, 255, 255, 255)
-                                 : Windows.UI.Color.FromArgb(180,   0,   0,   0);
-            var hoverBg = isDark ? Windows.UI.Color.FromArgb( 20, 255, 255, 255)
-                                 : Windows.UI.Color.FromArgb( 20,   0,   0,   0);
-            var pressBg = isDark ? Windows.UI.Color.FromArgb( 35, 255, 255, 255)
-                                 : Windows.UI.Color.FromArgb( 35,   0,   0,   0);
-            var transp  = Windows.UI.Color.FromArgb(0, 0, 0, 0);
+            // Use ActualTheme from the page, not system theme
+            bool isDark = true;
+            if (Content is FrameworkElement root)
+            {
+                isDark = root.ActualTheme == ElementTheme.Dark ||
+                        (root.ActualTheme == ElementTheme.Default &&
+                         Application.Current.RequestedTheme == ApplicationTheme.Dark);
+            }
 
-            // Title bar is pure black (dark) or pure white (light)
-            titleBar.BackgroundColor                 = titleBarBg;
-            titleBar.InactiveBackgroundColor         = titleBarBg;
+            // Read colors from current theme dictionary
+            var frameColor = GetColorFromTheme("ColorFrameBackground", isDark);
+            var textPrimary = GetColorFromTheme("ColorTextPrimary", isDark);
+            var textSecondary = GetColorFromTheme("ColorTextSecondary", isDark);
+            var hoverColor = GetColorFromTheme("ColorHover", isDark);
+            var pressedColor = GetColorFromTheme("ColorPressed", isDark);
+            var transp = Windows.UI.Color.FromArgb(0, 0, 0, 0);
+
+            // Title bar uses frame background color
+            titleBar.BackgroundColor                 = frameColor;
+            titleBar.InactiveBackgroundColor         = frameColor;
             titleBar.ButtonBackgroundColor           = transp;
             titleBar.ButtonInactiveBackgroundColor   = transp;
-            titleBar.ButtonForegroundColor           = fg;
-            titleBar.ButtonInactiveForegroundColor   = fgDim;
-            titleBar.ButtonHoverForegroundColor      = fg;
-            titleBar.ButtonHoverBackgroundColor      = hoverBg;
-            titleBar.ButtonPressedForegroundColor    = fgDim;
-            titleBar.ButtonPressedBackgroundColor    = pressBg;
+            titleBar.ButtonForegroundColor           = textPrimary;
+            titleBar.ButtonInactiveForegroundColor   = textSecondary;
+            titleBar.ButtonHoverForegroundColor      = textPrimary;
+            titleBar.ButtonHoverBackgroundColor      = hoverColor;
+            titleBar.ButtonPressedForegroundColor    = textSecondary;
+            titleBar.ButtonPressedBackgroundColor    = pressedColor;
         }
         catch (Exception ex)
         {
             DocGlance.Infrastructure.Logging.Logger.Log(
                 $"[Theme] ConfigureTitleBarTheme failed: {ex.Message}");
         }
+    }
+
+    private Windows.UI.Color GetColorFromTheme(string resourceKey, bool isDark)
+    {
+        try
+        {
+            var app = Application.Current;
+            if (app?.Resources == null)
+                return Windows.UI.Color.FromArgb(255, 0, 0, 0);
+
+            // Find palette dictionary
+            var palette = app.Resources.MergedDictionaries
+                .FirstOrDefault(d => d.Source?.OriginalString?.Contains("Palettes/Palette.") == true);
+
+            if (palette?.ThemeDictionaries != null)
+            {
+                string themeKey = isDark ? "Dark" : "Light";
+                if (palette.ThemeDictionaries.TryGetValue(themeKey, out var themeDict) &&
+                    themeDict is ResourceDictionary dict)
+                {
+                    if (dict.TryGetValue(resourceKey, out var resource))
+                    {
+                        if (resource is Windows.UI.Color color)
+                            return color;
+                        if (resource is SolidColorBrush brush)
+                        {
+                            var c = brush.Color;
+                            return Windows.UI.Color.FromArgb(c.A, c.R, c.G, c.B);
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+        
+        // Fallback
+        return Windows.UI.Color.FromArgb(255, 0, 0, 0);
     }
 
     // ── Session State Management ──────────────────────────────────────────────

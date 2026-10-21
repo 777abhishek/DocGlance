@@ -68,14 +68,37 @@
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                             <TextBlock Text="App theme" />
                             <TextBlock Style="{StaticResource SettingDescriptionStyle}"
-                                       Text="Select which app theme to display" />
+                                       Text="Select light or dark mode" />
                         </StackPanel>
                         <ComboBox x:Name="ThemeComboBox" Grid.Column="2" MinWidth="200"
                                   VerticalAlignment="Center"
                                   SelectionChanged="ThemeComboBox_SelectionChanged">
-                            <ComboBoxItem Content="Light" />
-                            <ComboBoxItem Content="Dark" />
-                            <ComboBoxItem Content="Use system setting" IsSelected="True" />
+                            <ComboBoxItem Content="Dark" Tag="Dark" />
+                            <ComboBoxItem Content="Light" Tag="Light" />
+                            <ComboBoxItem Content="Use system setting" Tag="Default" IsSelected="True" />
+                        </ComboBox>
+                    </Grid>
+                </Border>
+
+                <Border x:Name="PaletteCard" Style="{StaticResource SettingCardStyle}">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Grid.Column="0" Glyph="&#xE771;" Style="{StaticResource SettingIconStyle}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                            <TextBlock Text="Color palette" />
+                            <TextBlock Style="{StaticResource SettingDescriptionStyle}"
+                                       Text="Choose color scheme variant for selected theme" />
+                        </StackPanel>
+                        <ComboBox x:Name="PaletteComboBox" Grid.Column="2" MinWidth="200"
+                                  VerticalAlignment="Center"
+                                  SelectionChanged="PaletteComboBox_SelectionChanged">
+                            <ComboBoxItem Content="Default" Tag="Midnight" IsSelected="True" />
+                            <ComboBoxItem Content="Snow" Tag="Snow" />
+                            <ComboBoxItem Content="Ocean" Tag="Ocean" />
                         </ComboBox>
                     </Grid>
                 </Border>
