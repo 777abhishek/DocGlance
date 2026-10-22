@@ -25,7 +25,7 @@ public sealed partial class TextViewer : UserControl, IDocumentViewer, ISupports
         ".cs", ".vb", ".fs", ".csx", ".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx",
         ".py", ".pyw", ".java", ".kt", ".kts", ".cpp", ".c", ".h", ".hpp", ".cc",
         ".go", ".rs", ".swift", ".rb", ".php", ".pl", ".sh", ".bash", ".zsh",
-        ".ps1", ".psm1", ".bat", ".cmd", ".html", ".htm", ".cshtml", ".razor",
+        ".ps1", ".psm1", ".bat", ".cmd", ".cshtml", ".razor",
         ".css", ".scss", ".less", ".json", ".jsonc", ".json5", ".xml", ".xaml",
         ".sql", ".graphql", ".gql", ".r", ".lua", ".dart", ".ex", ".exs",
     };
@@ -401,7 +401,7 @@ public sealed class TextViewerFactory : IDocumentViewerFactory
         ".ts", ".tsx", ".py", ".pyw", ".java", ".kt", ".kts",
         ".cpp", ".c", ".h", ".hpp", ".cc", ".go", ".rs", ".swift",
         ".rb", ".php", ".pl", ".sh", ".bash", ".zsh", ".ps1", ".psm1",
-        ".bat", ".cmd", ".html", ".htm", ".cshtml", ".razor", ".css",
+        ".bat", ".cmd", ".cshtml", ".razor", ".css",
         ".scss", ".less", ".json", ".jsonc", ".json5", ".xml", ".xaml",
         ".csproj", ".sln", ".props", ".targets", ".sql", ".graphql",
         ".gql", ".dockerfile", ".makefile", ".r", ".lua", ".dart", ".ex", ".exs",

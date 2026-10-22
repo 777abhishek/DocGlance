@@ -42,7 +42,6 @@ public sealed partial class DocumentCardV2 : UserControl
 
         var style = FileTypePalette.Get(doc.FileType);
         FileTypeDesc.Text   = style.Description;
-        BadgeText.Text      = style.Ext.Length > 4 ? style.Ext[..4] : style.Ext;
         WatermarkText.Text  = style.Ext.Length > 4 ? style.Ext[..4] : style.Ext;
         GradientStart.Color = style.Start;
         GradientEnd.Color   = style.End;
@@ -55,7 +54,7 @@ public sealed partial class DocumentCardV2 : UserControl
     private void ClearCard()
     {
         FileNameText.Text = FileTypeDesc.Text = FileSizeText.Text = ModifiedText.Text = string.Empty;
-        BadgeText.Text = WatermarkText.Text = string.Empty;
+        WatermarkText.Text = string.Empty;
         ThumbnailImage.Source = null;
         ThumbnailImage.Visibility = Visibility.Collapsed;
     }

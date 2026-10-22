@@ -33,6 +33,8 @@ using DocGlance.Features.Viewer.Formats.Pptx;
 using DocGlance.Features.Viewer.Formats.Spreadsheet;
 using DocGlance.Features.Viewer.Formats.Images;
 using DocGlance.Features.Viewer.Formats.Markdown;
+using DocGlance.Features.Viewer.Formats.Rtf;
+using DocGlance.Features.Viewer.Formats.Html;
 
 namespace DocGlance.Features.Viewer;
 
@@ -44,6 +46,8 @@ public sealed partial class ViewerPage : Page
             new PdfViewerFactory(),
             new DocxViewerFactory(),
             new PptxViewerFactory(),
+            new RtfViewerFactory(),
+            new HtmlViewerFactory(),
             new TextViewerFactory(),
             new MarkdownViewerFactory(),
             new SpreadsheetViewerFactory(),
