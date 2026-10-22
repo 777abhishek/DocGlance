@@ -17,8 +17,9 @@ public sealed partial class ViewerPage
 
     private void InitializeViewerShortcuts()
     {
-        AddViewerShortcut(VirtualKey.F11, VirtualKeyModifiers.None,
-            () => _doc != null, TogglePresentationMode);
+        // F11 disabled - caused unwanted popups
+        // AddViewerShortcut(VirtualKey.F11, VirtualKeyModifiers.None,
+        //     () => _doc != null, TogglePresentationMode);
         AddViewerShortcut(VirtualKey.Escape, VirtualKeyModifiers.None,
             () => _isPresentationMode, ExitPresentationMode);
 
@@ -79,6 +80,9 @@ public sealed partial class ViewerPage
         {
             Key = key,
             Modifiers = modifiers,
+            IsEnabled = true,
+            // Disable the visual key indicator popup
+            ScopeOwner = null,
         };
         accelerator.Invoked += (_, args) =>
         {
@@ -127,7 +131,8 @@ public sealed partial class ViewerPage
         var sections = new StackPanel { Spacing = 14 };
         AddKeyboardShortcutSection(sections, "Presentation", new[]
         {
-            ("F11", "Toggle presentation mode"),
+            // F11 disabled - caused unwanted popups
+            // ("F11", "Toggle presentation mode"),
             ("Esc", "Exit presentation mode or close Find"),
             ("Right / Space / Page Down", "Next page or sheet (presentation mode)"),
             ("Left / Backspace / Page Up", "Previous page or sheet (presentation mode)"),
