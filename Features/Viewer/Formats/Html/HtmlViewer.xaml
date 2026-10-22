@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="DocGlance.Features.Viewer.Formats.Html.HtmlViewer"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid Background="{ThemeResource AppContentBackground}">
+        <!-- Not supported message -->
+        <Grid x:Name="MessageOverlay">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" 
+                        Spacing="16" MaxWidth="450" Padding="32">
+                <FontIcon Glyph="&#xE946;" FontSize="64"
+                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                <TextBlock Text="HTML Preview Not Supported"
+                           FontSize="24" FontWeight="SemiBold"
+                           TextAlignment="Center"
+                           Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                <TextBlock TextWrapping="Wrap" TextAlignment="Center"
+                           FontSize="14" LineHeight="22"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}">
+                    <Run Text="HTML rendering requires a browser component which uses high memory."/>
+                    <LineBreak/><LineBreak/>
+                    <Run Text="To view this HTML file:"/>
+                    <LineBreak/>
+                    <Run Text="• Open it in your default browser"/>
+                    <LineBreak/>
+                    <Run Text="• View the source in a text editor"/>
+                </TextBlock>
+                
+                <StackPanel Orientation="Horizontal" Spacing="12" 
+                            HorizontalAlignment="Center" Margin="0,16,0,0">
+                    <Button Style="{StaticResource AccentButtonStyle}"
+                            Click="OpenInBrowser_Click" Padding="12,8">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE774;" FontSize="16"/>
+                            <TextBlock Text="Open in Browser" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Click="ViewSource_Click" Padding="12,8">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE8A5;" FontSize="16"/>
+                            <TextBlock Text="View Source" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</UserControl>

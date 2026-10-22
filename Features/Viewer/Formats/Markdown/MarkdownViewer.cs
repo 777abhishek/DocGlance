@@ -156,7 +156,7 @@ public sealed class MarkdownViewer : UserControl, IDocumentViewer, ISupportsSear
             if (item.End <= range.Start || item.Start >= end)
                 continue;
 
-            item.Run.Foreground = new SolidColorBrush(Color.FromArgb(255, 255, 140, 0));
+            item.Run.Foreground = GetBrush("SystemFillColorCriticalBrush");
             item.Run.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
             item.Host.StartBringIntoView();
         }

@@ -153,20 +153,20 @@ namespace DocGlance.UI.Controls
             var style = FileTypePalette.Get(ext);
             string label = style.Ext.Length > 4 ? style.Ext[..4] : style.Ext;
 
-            var content = new Grid { Padding = new Thickness(10, 9, 10, 0) };
+            var content = new Grid { Padding = new Thickness(10, 10, 10, 0) };
             content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
             var tag = new TextBlock
             {
                 Text = label,
-                FontSize = 13,
+                FontSize = 15,
                 FontWeight = Microsoft.UI.Text.FontWeights.Bold,
                 Foreground = new SolidColorBrush(Colors.White)
             };
             Grid.SetRow(tag, 0);
 
-            var lines = new StackPanel { Spacing = 5, Margin = new Thickness(0, 10, 0, 0) };
+            var lines = new StackPanel { Spacing = 6, Margin = new Thickness(0, 12, 0, 0) };
             foreach (var w in new double[] { 60, 70, 48 })
                 lines.Children.Add(new Border
                 {
@@ -217,17 +217,17 @@ namespace DocGlance.UI.Controls
 
         private static Border CreateChip(string text, Color accent)
         {
-            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
             row.Children.Add(new Ellipse
             {
-                Width = 6, Height = 6,
+                Width = 8, Height = 8,
                 VerticalAlignment = VerticalAlignment.Center,
                 Fill = new SolidColorBrush(accent)
             });
             row.Children.Add(new TextBlock
             {
                 Text = text,
-                FontSize = 10,
+                FontSize = 12,
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 VerticalAlignment = VerticalAlignment.Center,
                 Foreground = (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"]
@@ -235,8 +235,8 @@ namespace DocGlance.UI.Controls
 
             return new Border
             {
-                Padding = new Thickness(6, 2, 7, 2),
-                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(8, 4, 9, 4),
+                CornerRadius = new CornerRadius(10),
                 Background = new SolidColorBrush(Color.FromArgb(40, accent.R, accent.G, accent.B)),
                 Child = row
             };

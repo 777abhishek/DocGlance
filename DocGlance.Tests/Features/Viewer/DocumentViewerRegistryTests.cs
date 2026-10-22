@@ -8,6 +8,7 @@ using DocGlance.Features.Viewer.Formats.Spreadsheet;
 using DocGlance.Features.Viewer.Formats.Text;
 using DocGlance.Features.Viewer.Formats.Images;
 using DocGlance.Features.Viewer.Formats.Markdown;
+using DocGlance.Features.Viewer.Formats.Html;
 
 namespace DocGlance.Tests.Features.Viewer;
 
@@ -27,14 +28,15 @@ public sealed class DocumentViewerRegistryTests
     public void Resolve_UsesTextAndSpreadsheetFactoriesForTheirFormats()
     {
         var text = new TextViewerFactory();
+        var html = new HtmlViewerFactory();
         var spreadsheet = new SpreadsheetViewerFactory();
         var registry = new DocumentViewerRegistry(
-            new IDocumentViewerFactory[] { text, spreadsheet },
+            new IDocumentViewerFactory[] { text, html, spreadsheet },
             new FallbackViewerFactory());
 
         registry.Resolve(".CSV").Should().BeSameAs(text);
-        registry.Resolve(".html").Should().BeSameAs(text);
-        registry.Resolve(@"C:\documents\page.HTML").Should().BeSameAs(text);
+        registry.Resolve(".html").Should().BeSameAs(html);
+        registry.Resolve(@"C:\documents\page.HTML").Should().BeSameAs(html);
         registry.Resolve(".xlsx").Should().BeSameAs(spreadsheet);
     }
 
