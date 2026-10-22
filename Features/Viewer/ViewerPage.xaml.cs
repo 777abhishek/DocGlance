@@ -535,6 +535,11 @@ public sealed partial class ViewerPage : Page
                 ShowImageViewer();
                 return ImageViewerControl;
 
+            case RtfViewerFactory:
+            case HtmlViewerFactory:
+                // RTF and HTML viewers show their own messages, not fallback
+                return ActivateFallbackViewer(factory, doc);
+
             default:
                 return ActivateFallbackViewer(factory, doc);
         }
@@ -542,11 +547,23 @@ public sealed partial class ViewerPage : Page
 
     private IDocumentViewer ActivateFallbackViewer(IDocumentViewerFactory factory, DocumentItem doc)
     {
+        // Cleanup previous fallback viewer
         if (_fallbackViewer != null)
             _ = _fallbackViewer.CleanupAsync();
 
-        _fallbackViewer = (FallbackViewer)factory.Create(ViewModel);
-        _fallbackViewer.OpenRequested += (_, _) => OpenExternalButton_Click(this, EventArgs.Empty);
+        // Create the viewer
+        var viewer = factory.Create(ViewModel);
+        
+        // Only try to cast to FallbackViewer if it's actually a FallbackViewerFactory
+        if (factory is FallbackViewerFactory)
+        {
+            _fallbackViewer = (FallbackViewer)viewer;
+            _fallbackViewer.OpenRequested += (_, _) => OpenExternalButton_Click(this, EventArgs.Empty);
+        }
+        else
+        {
+            _fallbackViewer = null;
+        }
 
         PdfViewerHost.Visibility          = Visibility.Collapsed;
         DocxViewerHost.Visibility         = Visibility.Collapsed;
@@ -557,7 +574,7 @@ public sealed partial class ViewerPage : Page
         SpreadsheetViewerHost.Visibility  = Visibility.Collapsed;
         ImageViewerHost.Visibility        = Visibility.Collapsed;
         ErrorMessage.Visibility           = Visibility.Collapsed;
-        UnsupportedFileMessage.Content    = _fallbackViewer.Control;
+        UnsupportedFileMessage.Content    = viewer.Control;
         UnsupportedFileMessage.Visibility = Visibility.Visible;
 
         SidebarCard.Visibility              = Visibility.Collapsed;
@@ -565,7 +582,7 @@ public sealed partial class ViewerPage : Page
         Toolbar.SidebarButtonVisibility     = Visibility.Collapsed;
         Toolbar.RotationButtonsVisibility   = Visibility.Collapsed;
 
-        return _fallbackViewer;
+        return viewer;
     }
 
     // ── Post-load configuration ───────────────────────────────────────────────
