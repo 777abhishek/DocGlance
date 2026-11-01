@@ -5,6 +5,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
+using Windows.UI;
 using Windows.Storage;
 using Windows.Storage.Streams;
 using DocGlance.Core.Models;
@@ -22,6 +24,7 @@ public sealed partial class RtfViewer : UserControl, IDocumentViewer
     public RtfViewer()
     {
         InitializeComponent();
+        ActualThemeChanged += (_, _) => ApplyThemeTextColor();
     }
 
     public FrameworkElement Control => this;
@@ -45,6 +48,7 @@ public sealed partial class RtfViewer : UserControl, IDocumentViewer
                 RichEditor.Document.LoadFromStream(Microsoft.UI.Text.TextSetOptions.FormatRtf, stream);
             }
 
+            ApplyThemeTextColor();
             ShowLoading(false);
             Logger.Log($"[RtfViewer] Successfully loaded RTF: {Path.GetFileName(filePath)}");
         }
@@ -76,6 +80,21 @@ public sealed partial class RtfViewer : UserControl, IDocumentViewer
         ErrorOverlay.Visibility = Visibility.Visible;
         LoadingOverlay.Visibility = Visibility.Collapsed;
         RichEditor.Visibility = Visibility.Collapsed;
+    }
+
+    private void ApplyThemeTextColor()
+    {
+        if (RichEditor.Foreground is not SolidColorBrush textBrush)
+            return;
+
+        RichEditor.Document.GetText(
+            Microsoft.UI.Text.TextGetOptions.None,
+            out string documentText);
+        if (documentText.Length > 0)
+        {
+            RichEditor.Document.GetRange(0, documentText.Length)
+                .CharacterFormat.ForegroundColor = textBrush.Color;
+        }
     }
 }
 
