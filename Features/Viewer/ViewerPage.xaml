@@ -357,7 +357,9 @@
 
                 <ContentControl
                     x:Name="UnsupportedFileMessage"
-                    Visibility="Collapsed"/>
+                    Visibility="Collapsed"
+                    HorizontalContentAlignment="Stretch"
+                    VerticalContentAlignment="Stretch"/>
 
                 <!-- Error message (same pattern as HomePage empty state) -->
                 <StackPanel
@@ -384,14 +386,20 @@
                 </StackPanel>
 
                 <ContentControl x:Name="TextViewerHost"
-                    Visibility="Collapsed"/>
+                    Visibility="Collapsed"
+                    HorizontalContentAlignment="Stretch"
+                    VerticalContentAlignment="Stretch"/>
 
                 <ContentControl x:Name="MarkdownViewerHost"
-                    Visibility="Collapsed"/>
+                    Visibility="Collapsed"
+                    HorizontalContentAlignment="Stretch"
+                    VerticalContentAlignment="Stretch"/>
 
                 <!-- ── SPREADSHEET viewer — native Win2D cell grid ── -->
                 <ContentControl x:Name="SpreadsheetViewerHost"
-                    Visibility="Collapsed"/>
+                    Visibility="Collapsed"
+                    HorizontalContentAlignment="Stretch"
+                    VerticalContentAlignment="Stretch"/>
 
                 <Border x:Name="FindBar"
                     Visibility="Collapsed"
