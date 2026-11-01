@@ -17,7 +17,11 @@
                      Padding="32,24,32,32"
                      Background="{ThemeResource AppContentBackground}"
                      Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                     BorderThickness="0"/>
+                     BorderThickness="0"
+                     ToolTipService.ToolTip=""
+                     KeyboardAcceleratorPlacementMode="Hidden"
+                     VerticalAlignment="Stretch"
+                     HorizontalAlignment="Stretch"/>
 
         <!-- Loading overlay -->
         <Grid x:Name="LoadingOverlay" Visibility="Collapsed"

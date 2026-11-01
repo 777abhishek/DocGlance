@@ -401,7 +401,7 @@ public sealed class TextViewerFactory : IDocumentViewerFactory
         ".ts", ".tsx", ".py", ".pyw", ".java", ".kt", ".kts",
         ".cpp", ".c", ".h", ".hpp", ".cc", ".go", ".rs", ".swift",
         ".rb", ".php", ".pl", ".sh", ".bash", ".zsh", ".ps1", ".psm1",
-        ".bat", ".cmd", ".cshtml", ".razor", ".css",
+        ".bat", ".cmd", ".html", ".htm", ".cshtml", ".razor", ".css",
         ".scss", ".less", ".json", ".jsonc", ".json5", ".xml", ".xaml",
         ".csproj", ".sln", ".props", ".targets", ".sql", ".graphql",
         ".gql", ".dockerfile", ".makefile", ".r", ".lua", ".dart", ".ex", ".exs",
