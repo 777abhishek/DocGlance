@@ -44,7 +44,7 @@
             Style="{StaticResource MarkupToggleButtonStyle}"
             Click="PenToolButton_Click"
             ToolTipService.ToolTip="Freehand pen">
-            <FontIcon Glyph="{StaticResource ViewerIcon.Pen}" FontSize="19"/>
+            <FontIcon Glyph="{StaticResource ViewerIcon.Pen}" FontSize="16"/>
         </ToggleButton>
 
         <ToggleButton
@@ -52,7 +52,7 @@
             Style="{StaticResource MarkupToggleButtonStyle}"
             Click="MarkupToolButton_Click"
             ToolTipService.ToolTip="Drag across text to highlight">
-            <FontIcon Glyph="{StaticResource ViewerIcon.Markup}" FontSize="20"/>
+            <FontIcon Glyph="{StaticResource ViewerIcon.Markup}" FontSize="16"/>
         </ToggleButton>
 
         <ToggleButton
@@ -60,7 +60,7 @@
             Style="{StaticResource MarkupToggleButtonStyle}"
             Click="EraserToolButton_Click"
             ToolTipService.ToolTip="Erase annotations">
-            <FontIcon Glyph="{StaticResource ViewerIcon.Eraser}" FontSize="19"/>
+            <FontIcon Glyph="{StaticResource ViewerIcon.Eraser}" FontSize="16"/>
         </ToggleButton>
 
         <ToggleButton
@@ -68,7 +68,7 @@
             Style="{StaticResource MarkupToggleButtonStyle}"
             Click="NoteToolButton_Click"
             ToolTipService.ToolTip="Add a note">
-            <FontIcon Glyph="{StaticResource ViewerIcon.Note}" FontSize="19"/>
+            <FontIcon Glyph="{StaticResource ViewerIcon.Note}" FontSize="16"/>
         </ToggleButton>
 
         <ToggleButton
@@ -76,7 +76,7 @@
             Style="{StaticResource MarkupToggleButtonStyle}"
             Click="TextToolButton_Click"
             ToolTipService.ToolTip="Add a text box">
-            <FontIcon Glyph="{StaticResource ViewerIcon.Text}" FontSize="19"/>
+            <FontIcon Glyph="{StaticResource ViewerIcon.Text}" FontSize="16"/>
         </ToggleButton>
 
         <ToggleButton
@@ -84,7 +84,7 @@
             Style="{StaticResource MarkupToggleButtonStyle}"
             Click="SignatureToolButton_Click"
             ToolTipService.ToolTip="Draw a signature">
-            <FontIcon Glyph="{StaticResource ViewerIcon.Signature}" FontSize="19"/>
+            <FontIcon Glyph="{StaticResource ViewerIcon.Signature}" FontSize="16"/>
         </ToggleButton>
 
         <ToggleButton
@@ -92,7 +92,7 @@
             Style="{StaticResource MarkupToggleButtonStyle}"
             Click="ImageToolButton_Click"
             ToolTipService.ToolTip="Insert an image">
-            <FontIcon Glyph="{StaticResource ViewerIcon.Image}" FontSize="19"/>
+            <FontIcon Glyph="{StaticResource ViewerIcon.Image}" FontSize="16"/>
         </ToggleButton>
 
         <Button
@@ -101,7 +101,7 @@
             Click="UndoAnnotationButton_Click"
             IsEnabled="False"
             ToolTipService.ToolTip="Undo annotation">
-            <FontIcon Glyph="{StaticResource ViewerIcon.Undo}" FontSize="19"/>
+            <FontIcon Glyph="{StaticResource ViewerIcon.Undo}" FontSize="16"/>
         </Button>
 
         <Button
@@ -110,13 +110,13 @@
             Click="RedoAnnotationButton_Click"
             IsEnabled="False"
             ToolTipService.ToolTip="Redo annotation">
-            <FontIcon Glyph="{StaticResource ViewerIcon.Redo}" FontSize="19"/>
+            <FontIcon Glyph="{StaticResource ViewerIcon.Redo}" FontSize="16"/>
         </Button>
 
         <Button
             Style="{StaticResource MarkupButtonStyle}"
             ToolTipService.ToolTip="Markup settings">
-            <FontIcon Glyph="{StaticResource ViewerIcon.MarkupSettings}" FontSize="18"/>
+            <FontIcon Glyph="{StaticResource ViewerIcon.MarkupSettings}" FontSize="16"/>
             <Button.Flyout>
                 <Flyout Placement="Bottom">
                     <StackPanel Spacing="10" MinWidth="220" Padding="8">

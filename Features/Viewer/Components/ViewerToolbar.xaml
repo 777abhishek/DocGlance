@@ -67,7 +67,7 @@
             <FontIcon
                 FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
                 Glyph="{StaticResource ViewerIcon.Sidebar}"
-                FontSize="20"/>
+                FontSize="16"/>
         </ToggleButton>
 
         <!-- Page counter -->
@@ -121,7 +121,7 @@
                 <FontIcon
                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
                     Glyph="{StaticResource ViewerIcon.FitWidth}"
-                    FontSize="20"/>
+                    FontSize="16"/>
             </ToggleButton>
 
             <ToggleButton
@@ -132,7 +132,7 @@
                 <FontIcon
                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
                     Glyph="{StaticResource ViewerIcon.FitPage}"
-                    FontSize="20"/>
+                    FontSize="16"/>
             </ToggleButton>
         </StackPanel>
 
@@ -151,7 +151,7 @@
                 <FontIcon
                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
                     Glyph="{StaticResource ViewerIcon.RotateLeft}"
-                    FontSize="20"/>
+                    FontSize="16"/>
             </Button>
 
             <Button
@@ -161,7 +161,7 @@
                 <FontIcon
                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
                     Glyph="{StaticResource ViewerIcon.RotateRight}"
-                    FontSize="20"/>
+                    FontSize="16"/>
             </Button>
         </StackPanel>
 
@@ -186,7 +186,7 @@
                 <FontIcon
                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
                     Glyph="{StaticResource ViewerIcon.WordWrap}"
-                    FontSize="20"/>
+                    FontSize="16"/>
             </ToggleButton>
 
             <!-- Search -->
@@ -198,7 +198,7 @@
                 <FontIcon
                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
                     Glyph="{StaticResource ViewerIcon.Find}"
-                    FontSize="20"/>
+                    FontSize="16"/>
             </Button>
 
             <!-- Open with -->
@@ -209,7 +209,7 @@
                 <FontIcon
                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
                     Glyph="{StaticResource ViewerIcon.OpenExternal}"
-                    FontSize="20"/>
+                    FontSize="16"/>
             </Button>
 
             <!-- Show in File Explorer -->
@@ -220,7 +220,7 @@
                 <FontIcon
                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
                     Glyph="{StaticResource ViewerIcon.ShowInExplorer}"
-                    FontSize="20"/>
+                    FontSize="16"/>
             </Button>
 
             <!-- Document information -->
@@ -232,7 +232,7 @@
                 <FontIcon
                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
                     Glyph="{StaticResource ViewerIcon.DocumentInfo}"
-                    FontSize="20"/>
+                    FontSize="16"/>
             </Button>
 
             <!-- More options -->
@@ -243,7 +243,7 @@
                 <FontIcon
                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
                     Glyph="{StaticResource ViewerIcon.MoreOptions}"
-                    FontSize="20"/>
+                    FontSize="16"/>
 
                 <Button.Flyout>
                     <MenuFlyout Placement="BottomEdgeAlignedRight">
@@ -255,7 +255,7 @@
                                 <FontIcon
                                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
                                     Glyph="{StaticResource ViewerIcon.DocumentInfo}"
-                                    FontSize="20"/>
+                                    FontSize="16"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 
@@ -264,7 +264,7 @@
                             ToolTipService.ToolTip="Presentation mode"
                             Click="PresentationModeMenuItem_Click">
                             <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="{StaticResource ViewerIcon.PresentationMode}" FontSize="20"/>
+                                <FontIcon Glyph="{StaticResource ViewerIcon.PresentationMode}" FontSize="16"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 
@@ -272,7 +272,7 @@
                             Text="Bookmark this page"
                             Click="BookmarkMenuItem_Click">
                             <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="{StaticResource ViewerIcon.Bookmark}" FontSize="20"/>
+                                <FontIcon Glyph="{StaticResource ViewerIcon.Bookmark}" FontSize="16"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 
@@ -281,7 +281,7 @@
                             Text="Print"
                             Click="PrintMenuItem_Click">
                             <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="{StaticResource ViewerIcon.Print}" FontSize="20"/>
+                                <FontIcon Glyph="{StaticResource ViewerIcon.Print}" FontSize="16"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 
@@ -289,7 +289,7 @@
                             Text="Copy page text"
                             Click="CopyPageTextMenuItem_Click">
                             <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="{StaticResource ViewerIcon.CopyPageText}" FontSize="20"/>
+                                <FontIcon Glyph="{StaticResource ViewerIcon.CopyPageText}" FontSize="16"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 
@@ -297,7 +297,7 @@
                             Text="Copy file path"
                             Click="CopyPathMenuItem_Click">
                             <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="{StaticResource ViewerIcon.CopyPath}" FontSize="20"/>
+                                <FontIcon Glyph="{StaticResource ViewerIcon.CopyPath}" FontSize="16"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 
@@ -309,7 +309,7 @@
                                 <FontIcon
                                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
                                     Glyph="{StaticResource ViewerIcon.OpenExternal}"
-                                    FontSize="20"/>
+                                    FontSize="16"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 
@@ -320,7 +320,7 @@
                                 <FontIcon
                                     FontFamily="ms-appx:///Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons-Regular"
                                     Glyph="{StaticResource ViewerIcon.ShowInExplorer}"
-                                    FontSize="20"/>
+                                    FontSize="16"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 
@@ -329,7 +329,7 @@
                             Text="Document tools"
                             Click="ToolsMenuItem_Click">
                             <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="{StaticResource ViewerIcon.Tools}" FontSize="20"/>
+                                <FontIcon Glyph="{StaticResource ViewerIcon.Tools}" FontSize="16"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 
@@ -337,7 +337,7 @@
                             Text="Settings"
                             Click="SettingsMenuItem_Click">
                             <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="{StaticResource ViewerIcon.Settings}" FontSize="20"/>
+                                <FontIcon Glyph="{StaticResource ViewerIcon.Settings}" FontSize="16"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 
@@ -345,7 +345,7 @@
                             Text="Keyboard shortcuts"
                             Click="KeyboardShortcutsMenuItem_Click">
                             <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="{StaticResource ViewerIcon.KeyboardShortcuts}" FontSize="20"/>
+                                <FontIcon Glyph="{StaticResource ViewerIcon.KeyboardShortcuts}" FontSize="16"/>
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 

@@ -8,9 +8,9 @@ name = "pdfcraft_ffi"
 crate-type = ["cdylib"]
 
 [dependencies]
-pdfcraft-cos = { git = "https://github.com/storytold/pdfcraft", tag = "v0.7.1" }
-pdfcraft-render = { git = "https://github.com/storytold/pdfcraft", tag = "v0.7.1" }
-pdfcraft-organize = { git = "https://github.com/storytold/pdfcraft", tag = "v0.7.1" }
+pdfcraft-cos = { git = "https://github.com/storytold/pdfcraft", tag = "v0.18.1" }
+pdfcraft-render = { git = "https://github.com/storytold/pdfcraft", tag = "v0.18.1" }
+pdfcraft-organize = { git = "https://github.com/storytold/pdfcraft", tag = "v0.18.1" }
 png = "0.18"
 lopdf = { path = "vendor/lopdf" }
 
@@ -20,6 +20,8 @@ hayro-interpret = { path = "vendor/hayro-interpret" }
 hayro-syntax = { path = "vendor/hayro-syntax" }
 hayro-jbig2 = { path = "vendor/hayro-jbig2" }
 lopdf = { path = "vendor/lopdf" }
+vello_common = { path = "vendor/vello_common" }
+vello_cpu = { path = "vendor/vello_cpu" }
 
 [profile.release]
 opt-level     = 3

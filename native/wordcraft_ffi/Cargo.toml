@@ -8,16 +8,19 @@ name = "wordcraft_ffi"
 crate-type = ["cdylib"]
 
 [dependencies]
-wordcraft-docx   = { git = "https://github.com/storytold/wordcraft", branch = "main" }
-wordcraft-layout = { git = "https://github.com/storytold/wordcraft", branch = "main" }
-wordcraft-render = { git = "https://github.com/storytold/wordcraft", branch = "main" }
-wordcraft-doc    = { git = "https://github.com/storytold/wordcraft", branch = "main" }
-wordcraft-geom   = { git = "https://github.com/storytold/wordcraft", branch = "main" }
-wordcraft-pdf    = { git = "https://github.com/storytold/wordcraft", branch = "main" }
+wordcraft-docx   = { git = "https://github.com/storytold/wordcraft", tag = "v0.15.1" }
+wordcraft-layout = { git = "https://github.com/storytold/wordcraft", tag = "v0.15.1" }
+wordcraft-render = { git = "https://github.com/storytold/wordcraft", tag = "v0.15.1" }
+wordcraft-doc    = { git = "https://github.com/storytold/wordcraft", tag = "v0.15.1" }
+wordcraft-geom   = { git = "https://github.com/storytold/wordcraft", tag = "v0.15.1" }
+wordcraft-pdf    = { git = "https://github.com/storytold/wordcraft", tag = "v0.15.1" }
 regex            = { version = "1", default-features = false, features = ["std", "unicode"] }
+
+[patch.crates-io]
+krilla = { git = "https://github.com/storytold/craft-libs", rev = "92d392cff132eaf53e13afff77f38b5c11b73aa0" }
 
 [profile.release]
 opt-level     = 3
-lto           = "thin"
+lto            = "thin"
 codegen-units = 1
 strip         = "symbols"

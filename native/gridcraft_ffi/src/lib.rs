@@ -17,7 +17,7 @@ use std::panic;
 use std::slice;
 
 use gridcraft_engine::cmd::print::{layout_sheet, render_pdf, PrintOptions, SheetLayout};
-use gridcraft_engine::DocState;
+use gridcraft_engine::{DocState, Trust};
 
 fn leak_ffi_bytes(bytes: Vec<u8>) -> (*mut u8, usize) {
     let boxed = bytes.into_boxed_slice();
@@ -113,7 +113,7 @@ pub extern "C" fn gc_open_xlsx(data: *const u8, len: usize) -> *mut GcDocument {
             Err(_) => return std::ptr::null_mut(),
         };
 
-        let doc = DocState::new(wb, None, "Workbook".to_string());
+        let doc = DocState::new(wb, None, "Workbook".to_string(), Trust::FromFile);
         let gc_doc = Box::new(GcDocument { doc });
         Box::into_raw(gc_doc)
     })

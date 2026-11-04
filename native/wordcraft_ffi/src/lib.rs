@@ -200,6 +200,7 @@ pub extern "C" fn wc_render_page(doc: *const WcDocument, index: u32, scale: f64)
             text_darkening: false,
             dark: false,
             dark_paper: wordcraft_render::DARK_PAPER,
+            read_paper: None,
         };
 
         let rendered = render_page(&doc.doc, page, scale as f32, &opts);
