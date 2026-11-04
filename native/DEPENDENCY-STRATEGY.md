@@ -1,178 +1,47 @@
-# Dependency Strategy for DocGlance Native Libraries
+# Native FFI Dependency Strategy
 
-## Current Situation
+## Engines
 
-DocGlance uses three **external rendering libraries** via FFI:
-- **deckcraft** - PPTX (PowerPoint) parsing and rendering
-- **gridcraft** - XLSX (Excel) parsing and rendering  
-- **wordcraft** - DOCX (Word) parsing and rendering
+DocGlance's native FFI projects use four external document engines:
 
-These are NOT your libraries - they're maintained by the [storytold](https://github.com/storytold) organization.
+- `deckcraft_ffi` — PPTX parsing and rendering
+- `gridcraft_ffi` — XLSX parsing, calculation, and rendering
+- `wordcraft_ffi` — DOCX parsing, layout, and rendering
+- `pdfcraft_ffi` — PDF rendering and document operations
 
-## The Problem with "Always Latest"
+The engines are maintained in the [storytold organization](https://github.com/storytold).
+`translation_ffi` is separate and is not included in this engine-update policy.
 
-### What We Just Configured (Auto-Update on Every Build)
-```toml
-deckcraft-pptx = { git = "https://github.com/storytold/deckcraft", branch = "main" }
-```
-+ `cargo update` before every build
+## Pinned upstream releases
 
-**Risks:**
-1. **Breaking Changes** - Upstream can break your FFI interface at any time
-2. **Unpredictable Behavior** - Different builds may use different versions
-3. **Difficult Debugging** - "It worked yesterday" becomes impossible to diagnose
-4. **No Rollback** - If a bad commit breaks your app, you can't easily go back
-5. **Build Reproducibility** - Two developers building the same commit get different binaries
+As of 2026-11-04, the FFI manifests and lockfiles pin:
 
-## Recommended Strategy: Pin to Tested Commits
+| FFI project | Upstream repository | Release tag | Locked commit |
+|---|---|---|---|
+| `deckcraft_ffi` | [deckcraft](https://github.com/storytold/deckcraft) | `v0.15.0` | `3e178d8f` |
+| `gridcraft_ffi` | [gridcraft](https://github.com/storytold/gridcraft) | `v0.16.0` | `85e51e00` |
+| `wordcraft_ffi` | [wordcraft](https://github.com/storytold/wordcraft) | `v0.15.1` | `08afab50` |
+| `pdfcraft_ffi` | [pdfcraft](https://github.com/storytold/pdfcraft) | `v0.18.1` | `8bb0528b` |
 
-### Option 1: Pin to Specific Commits (RECOMMENDED)
-```toml
-[dependencies]
-deckcraft-pptx = { git = "https://github.com/storytold/deckcraft", rev = "688c7ef5" }
-```
+Use release tags in `Cargo.toml` and commit each FFI project's `Cargo.lock`.
+Do not track upstream `main` or run `cargo update` automatically during normal
+builds: updates must be deliberate, reviewed, and tested.
 
-**Advantages:**
-- ✅ Reproducible builds
-- ✅ Control over when to update
-- ✅ Test updates in isolation
-- ✅ Easy rollback if issues arise
-- ✅ CI/CD produces consistent artifacts
+PdfCraft's release also supplies path-patched renderer and parser crates. The
+active `pdfcraft_ffi` vendor copies and `[patch.crates-io]` entries must stay
+aligned with the selected PdfCraft tag; do not update the engine tag while
+leaving those copies on an older release.
 
-**Update Process:**
-1. Update `Cargo.toml` with new commit hash
-2. Test thoroughly in development
-3. Commit the change with test results
-4. Deploy with confidence
+## Updating
 
-### Option 2: Track Branch with Manual Updates (Current Setup)
-```toml
-[dependencies]
-deckcraft-pptx = { git = "https://github.com/storytold/deckcraft", branch = "main" }
-```
+1. Check the upstream releases and compare their notes with the feature and bug
+   fixes needed by DocGlance.
+2. Change the dependency tag in the relevant FFI project's `Cargo.toml`.
+3. Run `cargo update --manifest-path native\<project>\Cargo.toml`.
+4. Build the affected FFI crate and run the corresponding DocGlance tests.
+5. Test representative documents and review the generated lockfile before
+   committing the manifest and lockfile together.
 
-**Keep:**
-- Leave branch tracking in place
-- Remove automatic `cargo update` from build script
-
-**Update Process:**
-1. Manually run `cargo update` when you want updates
-2. Test the changes
-3. Commit `Cargo.lock` with the new hashes
-4. Deploy
-
-This gives you control while staying current.
-
-### Option 3: Use Released Versions (IDEAL - if available)
-```toml
-[dependencies]
-deckcraft-pptx = "0.6.1"
-```
-
-**Check if these crates are published to crates.io:**
-```powershell
-cargo search deckcraft-pptx
-cargo search gridcraft-core
-cargo search wordcraft-docx
-```
-
-If they're published, use semantic versioning for stability.
-
-## When to Auto-Update
-
-**Good use cases:**
-- Internal libraries you control
-- Development/testing environments
-- Proof-of-concept projects
-- When you're actively contributing to the upstream library
-
-**Bad use cases:**
-- Production applications (like DocGlance)
-- FFI boundaries (ABI stability is critical)
-- External dependencies you don't control
-- Applications with users who expect stability
-
-## Current State (After Recent Changes)
-
-You're now on **Option 2** with aggressive auto-update:
-- Branch: `main` tracking
-- Auto-update: ✅ Runs on every build
-- Control: ❌ None - gets latest code automatically
-
-## Recommended Changes for DocGlance
-
-### 1. Remove Auto-Update from Build Script
-The build script should just build, not update:
-```powershell
-# Remove this line:
-cargo update
-
-# Keep only:
-cargo build --release
-```
-
-### 2. Choose Your Strategy
-
-**For Production Stability (Recommended):**
-```toml
-# Pin to tested commits
-deckcraft-pptx = { git = "https://github.com/storytold/deckcraft", rev = "688c7ef5" }
-```
-
-**For Staying Current with Control:**
-```toml
-# Track main, but update manually
-deckcraft-pptx = { git = "https://github.com/storytold/deckcraft", branch = "main" }
-```
-
-### 3. Commit Cargo.lock
-Always commit `Cargo.lock` to git for applications. This ensures everyone builds with the same dependencies.
-
-## Update Workflow (Recommended)
-
-### Monthly or Quarterly:
-1. Create a branch: `git checkout -b update-native-deps`
-2. Update dependencies: `cd native/<project> && cargo update`
-3. Rebuild: `.\native\build-native.ps1`
-4. Test all document types: PPTX, DOCX, XLSX
-5. Check for regressions:
-   - Rendering quality
-   - Search functionality
-   - Text extraction
-   - Export features
-6. If all tests pass: `git commit -am "Update native dependencies"`
-7. Merge to main
-
-### On-Demand (Bug Fixes):
-1. Check upstream repos for relevant fixes
-2. Update to specific commit if needed
-3. Test the specific fix
-4. Deploy
-
-## Monitoring Upstream Changes
-
-Set up GitHub notifications:
-```
-Watch → Custom → Releases only
-```
-For:
-- https://github.com/storytold/deckcraft
-- https://github.com/storytold/gridcraft
-- https://github.com/storytold/wordcraft
-
-## Current Versions (as of 2026-10-12)
-- **deckcraft**: v0.6.1 @ `688c7ef5`
-- **gridcraft**: v0.6.1 @ `fc45b7f6`
-- **wordcraft**: v0.6.1 @ `159b84f5`
-
-All packages are stable at version 0.6.1.
-
-## TL;DR
-
-**What You Asked For:** "Update all Cargo repos and add something every time it builds using latest updates"
-
-**What That Means:** Every build fetches the absolute latest code from GitHub main branches, potentially breaking your app without warning.
-
-**What You Probably Want:** Control over when dependencies update, with testing in between.
-
-**Recommendation:** Remove `cargo update` from build script, commit `Cargo.lock`, and update dependencies manually on a schedule after testing.
+The `native\build-native.ps1` script builds the FFI projects. Do not use it as
+an update mechanism; dependency resolution is controlled by the committed
+manifests and lockfiles.

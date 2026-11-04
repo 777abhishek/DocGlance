@@ -8,10 +8,10 @@ name = "gridcraft_ffi"
 crate-type = ["cdylib"]
 
 [dependencies]
-gridcraft-core    = { git = "https://github.com/storytold/gridcraft", branch = "main" }
-gridcraft-model   = { git = "https://github.com/storytold/gridcraft", branch = "main" }
-gridcraft-xlsx    = { git = "https://github.com/storytold/gridcraft", branch = "main" }
-gridcraft-engine  = { git = "https://github.com/storytold/gridcraft", branch = "main" }
+gridcraft-core    = { git = "https://github.com/storytold/gridcraft", tag = "v0.16.0" }
+gridcraft-model   = { git = "https://github.com/storytold/gridcraft", tag = "v0.16.0" }
+gridcraft-xlsx    = { git = "https://github.com/storytold/gridcraft", tag = "v0.16.0" }
+gridcraft-engine  = { git = "https://github.com/storytold/gridcraft", tag = "v0.16.0" }
 regex             = { version = "1", default-features = false, features = ["std", "unicode"] }
 
 [profile.release]

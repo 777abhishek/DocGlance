@@ -8,7 +8,6 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Windows.UI;
 using Windows.Storage;
-using Windows.Storage.Streams;
 using DocGlance.Core.Models;
 using DocGlance.Features.Viewer.Contracts;
 using DocGlance.Infrastructure.Logging;
@@ -42,7 +41,7 @@ public sealed partial class RtfViewer : UserControl, IDocumentViewer
             // Try to load RTF file
             var file = await StorageFile.GetFileFromPathAsync(filePath);
             
-            using (var stream = await file.OpenReadAsync())
+            using (var stream = await file.OpenAsync(FileAccessMode.Read))
             {
                 // Load RTF into RichEditBox
                 RichEditor.Document.LoadFromStream(Microsoft.UI.Text.TextSetOptions.FormatRtf, stream);
@@ -90,10 +89,18 @@ public sealed partial class RtfViewer : UserControl, IDocumentViewer
         RichEditor.Document.GetText(
             Microsoft.UI.Text.TextGetOptions.None,
             out string documentText);
-        if (documentText.Length > 0)
+        if (documentText.Length == 0)
+            return;
+
+        RichEditor.IsReadOnly = false;
+        try
         {
             RichEditor.Document.GetRange(0, documentText.Length)
                 .CharacterFormat.ForegroundColor = textBrush.Color;
+        }
+        finally
+        {
+            RichEditor.IsReadOnly = true;
         }
     }
 }

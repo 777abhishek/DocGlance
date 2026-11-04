@@ -1,90 +1,28 @@
-# Native Rust Dependencies - Update Policy
+# Native FFI Dependency Update Record
 
-## Overview
-All native Rust FFI libraries in this project are configured to automatically fetch and use the latest commits from their upstream repositories on every build.
+## Review date: 2026-11-04
 
-## Updated Cargo.toml Files
+Reviewed the official upstream releases for all native document engines.
+`translation_ffi` was explicitly excluded.
 
-### 1. deckcraft_ffi
-- **Repository**: https://github.com/storytold/deckcraft
-- **Branch**: `main`
-- **Dependencies**:
-  - deckcraft-pptx
-  - deckcraft-render
-  - deckcraft-model
-  - deckcraft-fonts
-  - deckcraft-geom
+| FFI project | Previous lock | Official release selected | Notable upstream changes |
+|---|---|---|---|
+| `deckcraft_ffi` | `0.6.1` at `688c7ef5` | [DeckCraft v0.15.0](https://github.com/storytold/deckcraft/releases/tag/v0.15.0) | Shape rendering fixes, text inset layout improvements, color alpha handling, PPTX tag import limits, and invalid slide-index validation. |
+| `gridcraft_ffi` | `0.6.1` at `fc45b7f6` | [GridCraft v0.16.0](https://github.com/storytold/gridcraft/releases/tag/v0.16.0) | New formula/equation support and fixes/features for charts, calculation, and spreadsheet data handling. |
+| `wordcraft_ffi` | `0.6.1` at `159b84f5` | [WordCraft v0.15.1](https://github.com/storytold/wordcraft/releases/tag/v0.15.1) | Parser hardening for malformed TIFF and WOFF2/font metadata, plus DOC/DOCX import, layout, and proofing improvements. |
+| `pdfcraft_ffi` | `0.7.1` at `7163ba3d` | [PdfCraft v0.18.1](https://github.com/storytold/pdfcraft/releases/tag/v0.18.1) | PDF rendering/open performance improvements, fixes across redaction/accessibility/forms, and export/optimization improvements. |
 
-### 2. gridcraft_ffi
-- **Repository**: https://github.com/storytold/gridcraft
-- **Branch**: `main`
-- **Dependencies**:
-  - gridcraft-core
-  - gridcraft-model
-  - gridcraft-xlsx
-  - gridcraft-engine
+Each FFI project's `Cargo.toml` now pins the selected tag, and its lockfile
+records the corresponding upstream commit. Translation dependencies were not
+changed. `pdfcraft_ffi` also carries the active path-patched renderer/parser
+crates from PdfCraft v0.18.1; these were synchronized with that release to
+resolve API incompatibilities and retain its decoding/resource-limit fixes.
 
-### 3. wordcraft_ffi
-- **Repository**: https://github.com/storytold/wordcraft
-- **Branch**: `main`
-- **Dependencies**:
-  - wordcraft-docx
-  - wordcraft-layout
-  - wordcraft-render
-  - wordcraft-doc
-  - wordcraft-geom
+## Ongoing policy
 
-## Build Process
-
-The `build-native.ps1` script now includes `cargo update` before each build:
-
-1. **cargo update** - Fetches the latest commits from git repositories and updates Cargo.lock
-2. **cargo build --release** - Compiles with the latest dependencies
-
-This ensures every build uses the most recent upstream changes.
-
-## Latest Update Summary
-
-**Date**: 2026-10-12
-
-### deckcraft_ffi
-- Updated from commit `84acb498` to `688c7ef5`
-- All packages updated to version `0.6.1`
-
-### gridcraft_ffi
-- Updated from commit `47dcd84e` to `fc45b7f6`
-- All packages updated to version `0.6.1`
-
-### wordcraft_ffi
-- Updated from commit `dbfa2af6` to `159b84f5`
-- All packages already at version `0.6.1`, fetched latest commits
-
-## Manual Update
-
-To manually update dependencies without building:
-
-```powershell
-cd native\deckcraft_ffi
-cargo update
-
-cd ..\gridcraft_ffi
-cargo update
-
-cd ..\wordcraft_ffi
-cargo update
-```
-
-## Version Pinning
-
-If you need to pin to a specific commit instead of tracking the latest:
-
-```toml
-[dependencies]
-package-name = { git = "https://github.com/org/repo", rev = "commit-hash" }
-```
-
-## Notes
-
-- Git dependencies are cached in `~/.cargo/git/`
-- `Cargo.lock` files track exact commit hashes and are updated by `cargo update`
-- The `branch = "main"` specification ensures tracking the main branch head
+- Keep native engine dependencies pinned to reviewed upstream release tags.
+- Do not fetch latest branch heads or run `cargo update` during normal builds.
+- For an update, review the official release notes, update only the affected
+  FFI crate, build it, and exercise representative documents before committing
+  the manifest and lockfile.
+- Keep the engine-specific strategy in [DEPENDENCY-STRATEGY.md](./DEPENDENCY-STRATEGY.md).
