@@ -1,16 +1,4 @@
-using System.Reflection;
 using System.Runtime.CompilerServices;
 
-// Manual attribute: GenerateAssemblyInfo=false in DocGlance.csproj suppresses the
-// SDK-generated InternalsVisibleTo item, so the test project needs it declared here.
+// The SDK generates version, company, and product attributes from DocGlance.csproj.
 [assembly: InternalsVisibleTo("DocGlance.Tests")]
-
-// GenerateAssemblyInfo=false also means the <AssemblyVersion>/<FileVersion>/<InformationalVersion>
-// properties in DocGlance.csproj are NOT emitted — without these attributes the app reports
-// version 0.0.0.0 (and the updater would treat every release as newer).
-// Keep these in sync with the values in DocGlance.csproj when bumping a release.
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
-[assembly: AssemblyInformationalVersion("1.0.0")]
-[assembly: AssemblyCompany("777abhishek")]
-[assembly: AssemblyProduct("DocGlance")]

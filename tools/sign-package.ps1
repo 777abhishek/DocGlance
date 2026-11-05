@@ -84,7 +84,7 @@ if (-not $Path) {
         "$Root\publish"
     )
     $installer = $candidates |
-        ForEach-Object { Get-ChildItem $_ -Filter DocGlance-Setup-x64.exe -ErrorAction SilentlyContinue } |
+        ForEach-Object { Get-ChildItem $_ -Filter "DocGlance-*-Setup-x64.exe" -ErrorAction SilentlyContinue } |
         Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if (-not $installer) { Write-Fail "No installer executable found. Build first with .\build-installer.ps1 -InstallerOnly."; exit 1 }
     $Path = $installer.FullName

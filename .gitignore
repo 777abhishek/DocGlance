@@ -6,6 +6,8 @@ artifacts/
 TestResults/
 coverage/
 installer/output/
+GitHubRelease/*
+!GitHubRelease/README.md
 AppPackages/
 BundleArtifacts/
 packages/

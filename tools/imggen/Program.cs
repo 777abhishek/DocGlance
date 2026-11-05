@@ -9,9 +9,14 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Drawing.Text;
+using System.Xml.Linq;
 
 // Resolve workspace root relative to this exe's location (bin/.../net8.0-windows/imggen.exe)
 var root     = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+var version  = XDocument.Load(Path.Combine(root, "DocGlance.csproj"))
+    .Descendants()
+    .First(element => element.Name.LocalName == "Version")
+    .Value;
 var srcPath  = Path.Combine(root, "Assets", "AppIconNew.png");
 var icoOut   = Path.Combine(root, "Assets", "AppIcon.ico");
 var outDir   = Path.Combine(root, "installer", "assets");
@@ -179,7 +184,7 @@ using var src = (Bitmap)Image.FromFile(srcPath);
     }
 
     // version
-    DrawCentered(g, "Version 1.0.0", "Segoe UI", 6.5f, FontStyle.Regular,
+    DrawCentered(g, $"Version {version}", "Segoe UI", 6.5f, FontStyle.Regular,
                  Color.FromArgb(135, 135, 135), new RectangleF(0, H - 20, W, 16));
 
     var outPath = Path.Combine(outDir, "wizard-sidebar.bmp");
