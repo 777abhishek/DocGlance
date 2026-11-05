@@ -58,7 +58,8 @@ public static class WorkspaceStore
 
         string normalizedName = name.Trim();
         List<string> paths = filePaths
-            .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+            .Where(path => !string.IsNullOrWhiteSpace(path) &&
+                           StorageAccessStore.HasRememberedFile(path))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
         if (paths.Count == 0)
@@ -106,8 +107,8 @@ public static class WorkspaceStore
     public static void AddDocument(string workspaceId, string filePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
-        if (!File.Exists(filePath))
-            throw new FileNotFoundException("The document no longer exists.", filePath);
+        if (!StorageAccessStore.HasRememberedFile(filePath))
+            throw new InvalidOperationException("The document's access permission has expired. Reopen it before adding it to a workspace.");
 
         lock (Gate)
         {

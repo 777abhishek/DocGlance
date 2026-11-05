@@ -256,8 +256,9 @@ if ($BuildInstaller) {
     }
 
     Write-Step "Signing DocGlance.exe…"
-    & $signtool sign /sha1 $signingCertificate.Thumbprint /fd SHA256 `
-        /tr http://timestamp.digicert.com /td SHA256 $exePath
+    & "$PSHOME\powershell.exe" -NoProfile -ExecutionPolicy Bypass `
+        -File "$Root\tools\sign-authenticode.ps1" `
+        -SignTool $signtool -Thumbprint $signingCertificate.Thumbprint -Path $exePath
     if ($LASTEXITCODE -ne 0) { Write-Fail "Signing DocGlance.exe failed (exit $LASTEXITCODE)" }
     Write-OK "Signed DocGlance.exe as $($signingCertificate.Subject)"
     Write-Info "This is a self-signed test certificate; other PCs must explicitly trust it."
@@ -467,9 +468,11 @@ if ($BuildInstaller) {
 
     # Inno Setup signs both Setup and the generated uninstaller with the same
     # certificate used for the published app executable.
-    $signToolCommand = '$q' + $signtool + '$q sign /sha1 ' +
-        $signingCertificate.Thumbprint +
-        ' /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $f'
+    $signingScript = "$Root\tools\sign-authenticode.ps1"
+    $signToolCommand = '$q' + "$PSHOME\powershell.exe" +
+        '$q -NoProfile -ExecutionPolicy Bypass -File $q' + $signingScript +
+        '$q -SignTool $q' + $signtool + '$q -Thumbprint ' +
+        $signingCertificate.Thumbprint + ' -Path $f'
 
     # Inject version and the SDK signing command at compile time.
     & $iscc `

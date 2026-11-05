@@ -18,6 +18,16 @@ public static class PathValidator
     /// <param name="error">Description of validation failure if path is invalid</param>
     /// <returns>True if path is safe to use, false otherwise</returns>
     public static bool IsValidFilePath(string? path, out string error)
+        => IsValidFilePath(path, null, out error);
+
+    /// <summary>
+    /// Validates a file path without rejecting it because of linked ancestors above an
+    /// explicitly user-selected scan root.
+    /// </summary>
+    public static bool IsValidFilePathWithinRoot(string? path, string root, out string error)
+        => IsValidFilePath(path, root, out error);
+
+    private static bool IsValidFilePath(string? path, string? allowedRoot, out string error)
     {
         error = string.Empty;
 
@@ -54,6 +64,21 @@ public static class PathValidator
                 return false;
             }
 
+            string? fullRoot = null;
+            if (allowedRoot != null)
+            {
+                fullRoot = Path.GetFullPath(allowedRoot);
+                string relativePath = Path.GetRelativePath(fullRoot, fullPath);
+                if (Path.IsPathRooted(relativePath) ||
+                    relativePath == "." ||
+                    relativePath == ".." ||
+                    relativePath.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+                {
+                    error = "File is outside the selected folder";
+                    return false;
+                }
+            }
+
             // Check for symlinks / junctions on the file itself
             if (IsSymlinkOrJunction(new FileInfo(fullPath)))
             {
@@ -61,7 +86,8 @@ public static class PathValidator
                 return false;
             }
 
-            // Check parent directories for symlinks / junctions
+            // Check parent directories for symlinks / junctions. For a picker-authorized
+            // scan, ancestors above the selected root are outside the validation boundary.
             var directory = Path.GetDirectoryName(fullPath);
             while (!string.IsNullOrEmpty(directory))
             {
@@ -70,6 +96,10 @@ public static class PathValidator
                     error = "Parent directory contains symbolic links or junctions";
                     return false;
                 }
+
+                if (fullRoot != null &&
+                    string.Equals(directory, fullRoot, StringComparison.OrdinalIgnoreCase))
+                    break;
 
                 // Stop at drive root
                 var parent = Path.GetDirectoryName(directory);

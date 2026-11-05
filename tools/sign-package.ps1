@@ -102,11 +102,12 @@ $kits = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Directory -E
 if (-not $kits) { Write-Fail "Windows SDK signtool not found. Install the Windows SDK."; exit 1 }
 
 $signed = $false
+$signingScript = Join-Path $PSScriptRoot "sign-authenticode.ps1"
 foreach ($kit in $kits) {
     $signtool = Join-Path $kit.FullName "x64\signtool.exe"
     if (-not (Test-Path $signtool)) { continue }
-    & $signtool sign /fd SHA256 /f $PfxPath /p $PfxPassword `
-        /tr http://timestamp.digicert.com /td SHA256 $Path
+    & "$PSHOME\powershell.exe" -NoProfile -ExecutionPolicy Bypass `
+        -File $signingScript -SignTool $signtool -Thumbprint $cert.Thumbprint -Path $Path
     if ($LASTEXITCODE -eq 0) {
         Write-OK "Signed with $signtool"
         & $signtool verify /pa /v $Path
