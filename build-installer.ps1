@@ -11,6 +11,7 @@
 #    .\build-installer.ps1 -MsixOnly           (signed sideload MSIX only)
 #    .\build-installer.ps1 -InstallMsix        (build, trust, replace, and install sideload MSIX)
 #    .\build-installer.ps1 -InstallerOnly      (EXE installer only)
+#    .\build-installer.ps1 -InstallerOnly -Unsigned (unsigned EXE for public release)
 #    .\build-installer.ps1 -SkipPublish        (reuse existing publish folder)
 #
 #  Requirements:
@@ -23,7 +24,8 @@ param(
     [switch]$MsixOnly,
     [switch]$StoreUpload,
     [switch]$InstallMsix,
-    [switch]$InstallerOnly
+    [switch]$InstallerOnly,
+    [switch]$Unsigned
 )
 
 Set-StrictMode -Version Latest
@@ -144,6 +146,9 @@ if (($StoreUpload -and ($InstallMsix -or $MsixOnly -or $InstallerOnly)) -or
     ($MsixOnly -and $InstallerOnly)) {
     Write-Fail "Choose one packaging mode: -StoreUpload, -InstallMsix, -MsixOnly, -InstallerOnly, or the default combined build."
 }
+if ($Unsigned -and (-not $InstallerOnly -or $SkipPublish)) {
+    Write-Fail "-Unsigned requires a fresh publish and is only supported with -InstallerOnly (do not use -SkipPublish)."
+}
 
 $BuildMsix = $StoreUpload -or $InstallMsix -or $MsixOnly -or (-not $InstallerOnly)
 $BuildInstaller = -not ($StoreUpload -or $InstallMsix -or $MsixOnly)
@@ -172,7 +177,8 @@ if ($StoreUpload) {
 } elseif ($MsixOnly) {
     Write-Info "Mode: Signed sideload MSIX only"
 } elseif ($InstallerOnly) {
-    Write-Info "Mode: EXE installer only"
+    $installerMode = if ($Unsigned) { "Unsigned EXE installer only" } else { "EXE installer only" }
+    Write-Info "Mode: $installerMode"
 } else {
     Write-Info "Mode: Signed sideload MSIX + EXE installer"
 }
@@ -192,14 +198,20 @@ Write-OK "Native libraries built and copied to the .NET output locations"
 
 # ── 1. Publish (for unpackaged EXE installer) ─────────────────────────────────
 if ($BuildInstaller) {
-    $signingCertificate = Get-OrCreateDocGlanceSigningCertificate
-    if (-not $signingCertificate -or -not $signingCertificate.HasPrivateKey) {
-        Write-Fail "Could not create or find the CN=777abhishek EXE signing certificate."
-    }
+    $signingCertificate = $null
+    $signtool = $null
+    if (-not $Unsigned) {
+        $signingCertificate = Get-OrCreateDocGlanceSigningCertificate
+        if (-not $signingCertificate -or -not $signingCertificate.HasPrivateKey) {
+            Write-Fail "Could not create or find the CN=777abhishek EXE signing certificate."
+        }
 
-    $signtool = Get-WindowsSdkSignTool
-    if (-not $signtool) {
-        Write-Fail "Windows SDK signtool.exe not found. Install the Windows SDK."
+        $signtool = Get-WindowsSdkSignTool
+        if (-not $signtool) {
+            Write-Fail "Windows SDK signtool.exe not found. Install the Windows SDK."
+        }
+    } else {
+        Write-Info "Unsigned release mode: no local self-signed certificate will be applied."
     }
 
     if (-not $SkipPublish) {
@@ -255,13 +267,17 @@ if ($BuildInstaller) {
         Write-Fail "Published app executable not found: $exePath"
     }
 
-    Write-Step "Signing DocGlance.exe…"
-    & "$PSHOME\powershell.exe" -NoProfile -ExecutionPolicy Bypass `
-        -File "$Root\tools\sign-authenticode.ps1" `
-        -SignTool $signtool -Thumbprint $signingCertificate.Thumbprint -Path $exePath
-    if ($LASTEXITCODE -ne 0) { Write-Fail "Signing DocGlance.exe failed (exit $LASTEXITCODE)" }
-    Write-OK "Signed DocGlance.exe as $($signingCertificate.Subject)"
-    Write-Info "This is a self-signed test certificate; other PCs must explicitly trust it."
+    if (-not $Unsigned) {
+        Write-Step "Signing DocGlance.exe…"
+        & "$PSHOME\powershell.exe" -NoProfile -ExecutionPolicy Bypass `
+            -File "$Root\tools\sign-authenticode.ps1" `
+            -SignTool $signtool -Thumbprint $signingCertificate.Thumbprint -Path $exePath
+        if ($LASTEXITCODE -ne 0) { Write-Fail "Signing DocGlance.exe failed (exit $LASTEXITCODE)" }
+        Write-OK "Signed DocGlance.exe as $($signingCertificate.Subject)"
+        Write-Info "This is a self-signed test certificate; other PCs must explicitly trust it."
+    } else {
+        Write-Info "DocGlance.exe is unsigned. Windows may show SmartScreen warnings until reputation is established."
+    }
 }
 
 # ── 3. Build the requested MSIX package ────────────────────────────────────────
@@ -469,16 +485,20 @@ if ($BuildInstaller) {
     # Inno Setup signs both Setup and the generated uninstaller with the same
     # certificate used for the published app executable.
     $signingScript = "$Root\tools\sign-authenticode.ps1"
-    $signToolCommand = '$q' + "$PSHOME\powershell.exe" +
-        '$q -NoProfile -ExecutionPolicy Bypass -File $q' + $signingScript +
-        '$q -SignTool $q' + $signtool + '$q -Thumbprint ' +
-        $signingCertificate.Thumbprint + ' -Path $f'
+    $installerVersion = ($PackageVersion.Split('.') | Select-Object -First 3) -join '.'
+    $innoArgs = @("/DAppVersion=$installerVersion")
+    if ($Unsigned) {
+        $innoArgs += "/DUnsignedBuild"
+    } else {
+        $signToolCommand = '$q' + "$PSHOME\powershell.exe" +
+            '$q -NoProfile -ExecutionPolicy Bypass -File $q' + $signingScript +
+            '$q -SignTool $q' + $signtool + '$q -Thumbprint ' +
+            $signingCertificate.Thumbprint + ' -Path $f'
+        $innoArgs += "/SDocGlanceSign=$signToolCommand"
+    }
 
-    # Inject version and the SDK signing command at compile time.
-    & $iscc `
-        "/DAppVersion=$PackageVersion" `
-        "/SDocGlanceSign=$signToolCommand" `
-        $IssFile
+    # Inject version and, for local builds, the SDK signing command at compile time.
+    & $iscc @innoArgs $IssFile
 
     if ($LASTEXITCODE -ne 0) { Write-Fail "iscc failed (exit $LASTEXITCODE)" }
 

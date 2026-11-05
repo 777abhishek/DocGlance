@@ -5,27 +5,39 @@
 
 .EXAMPLE
     .\installer\generate-winget-manifest.ps1
-    .\installer\generate-winget-manifest.ps1 -Version "1.0.1" -DownloadUrl "https://github.com/myorg/DocGlance/releases/download/v1.0.1/DocGlance-Setup-x64.exe"
+    .\installer\generate-winget-manifest.ps1 -Version "1.0.1"
 #>
 
 [CmdletBinding()]
 param(
     [string]$Version = "1.0.0",
-    [string]$DownloadUrl = "https://github.com/your-org/DocGlance/releases/download/v1.0.0/DocGlance-Setup-x64.exe",
-    [string]$InstallerPath = "$PSScriptRoot\output\DocGlance-Setup-x64.exe"
+    [string]$DownloadUrl = "",
+    [string]$InstallerPath = ""
 )
 
 $ErrorActionPreference = "Stop"
 
+if ($Version -notmatch '^\d+\.\d+\.\d+$') {
+    throw "Version must use the three-part format MAJOR.MINOR.PATCH."
+}
+
+if ([string]::IsNullOrWhiteSpace($DownloadUrl)) {
+    $DownloadUrl = "https://github.com/777abhishek/QuickView/releases/download/v$Version/DocGlance-Setup-x64.exe"
+}
+
+if ([string]::IsNullOrWhiteSpace($InstallerPath)) {
+    $InstallerPath = Join-Path $PSScriptRoot "output\DocGlance-Setup-x64.exe"
+}
+
 if (-not (Test-Path $InstallerPath)) {
-    Write-Error "Installer not found at '$InstallerPath'. Please build it first with .\build-installer.ps1."
+    throw "Installer not found at '$InstallerPath'. Build it first with .\build-installer.ps1."
 }
 
 Write-Host "Computing SHA-256 hash for $InstallerPath..." -ForegroundColor Cyan
 $hash = (Get-FileHash -Path $InstallerPath -Algorithm SHA256).Hash
 Write-Host "SHA-256: $hash" -ForegroundColor Green
 
-$manifestDir = "$PSScriptRoot\winget\manifests\q\DocGlance\DocGlance\$Version"
+$manifestDir = "$PSScriptRoot\output\winget\manifests\q\DocGlance\DocGlance\$Version"
 New-Item -ItemType Directory -Force -Path $manifestDir | Out-Null
 
 $installerYaml = @"
@@ -33,7 +45,7 @@ $installerYaml = @"
 
 PackageIdentifier: DocGlance.DocGlance
 PackageVersion: $Version
-MinimumOSVersion: 10.0.17763.0
+MinimumOSVersion: 10.0.19041.0
 InstallerType: inno
 InstallModes:
   - interactive
@@ -56,9 +68,53 @@ ManifestType: installer
 ManifestVersion: 1.6.0
 "@
 
-$targetFile = "$manifestDir\DocGlance.DocGlance.installer.yaml"
-Set-Content -Path $targetFile -Value $installerYaml -Encoding UTF8
-Write-Host "Generated: $targetFile" -ForegroundColor Green
+$defaultLocaleYaml = @"
+# yaml-language-server: `$schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+
+PackageIdentifier: DocGlance.DocGlance
+PackageVersion: $Version
+PackageLocale: en-US
+Publisher: 777abhishek
+PublisherUrl: https://github.com/777abhishek/QuickView
+PublisherSupportUrl: https://github.com/777abhishek/QuickView/issues
+Author: 777abhishek
+PackageName: DocGlance
+PackageUrl: https://github.com/777abhishek/QuickView
+License: MIT
+LicenseUrl: https://github.com/777abhishek/QuickView/blob/main/LICENSE
+Copyright: Copyright (c) 2026 777abhishek
+ShortDescription: Native Windows viewer for documents, spreadsheets, presentations, and text files
+Description: DocGlance is a 64-bit Windows desktop application built with .NET 8, WinUI 3, and native Rust rendering engines.
+Moniker: DocGlance
+Tags:
+  - viewer
+  - pdf
+  - preview
+  - document-viewer
+  - file-preview
+  - winui3
+ReleaseNotesUrl: https://github.com/777abhishek/QuickView/releases/tag/v$Version
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0
+"@
+
+$versionYaml = @"
+# yaml-language-server: `$schema=https://aka.ms/winget-manifest.version.1.6.0.schema.json
+
+PackageIdentifier: DocGlance.DocGlance
+PackageVersion: $Version
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.6.0
+"@
+
+$installerManifest = Join-Path $manifestDir "DocGlance.DocGlance.installer.yaml"
+$localeManifest = Join-Path $manifestDir "DocGlance.DocGlance.locale.en-US.yaml"
+$versionManifest = Join-Path $manifestDir "DocGlance.DocGlance.yaml"
+Set-Content -Path $installerManifest -Value $installerYaml -Encoding UTF8
+Set-Content -Path $localeManifest -Value $defaultLocaleYaml -Encoding UTF8
+Set-Content -Path $versionManifest -Value $versionYaml -Encoding UTF8
+Write-Host "Generated Winget manifests under: $manifestDir" -ForegroundColor Green
 Write-Host ""
 Write-Host "To test locally with winget:" -ForegroundColor Yellow
 Write-Host "  winget install --manifest `"$manifestDir`"" -ForegroundColor White

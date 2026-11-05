@@ -19,8 +19,8 @@ namespace DocGlance.Features.Settings;
 
 public sealed partial class SettingsPage : Page
 {
-    private const string GitHubOwner = "777abhishek"; // TODO: Update with your GitHub username
-    private const string GitHubRepo = "DocGlance";
+    private const string GitHubOwner = "777abhishek";
+    private const string GitHubRepo = "QuickView";
     private bool _isLoadingSettings = true;
 
     public SettingsPage()

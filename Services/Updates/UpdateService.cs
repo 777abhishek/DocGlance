@@ -286,7 +286,7 @@ public static class UpdateService
     {
         // AssemblyVersion uses semantic versioning (e.g. 1.0.0.0) so it can be
         // compared against GitHub release tags like "v1.2.0".
-        // InformationalVersion holds the display version (e.g. "20.10.26") and is
+        // InformationalVersion holds the display version (e.g. "1.0.0") and is
         // used only for display in the About dialog — not for numeric comparison.
         var v = Assembly.GetExecutingAssembly().GetName().Version;
         return v ?? new Version(1, 0, 0);

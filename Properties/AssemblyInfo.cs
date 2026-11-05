@@ -10,7 +10,7 @@ using System.Runtime.CompilerServices;
 // version 0.0.0.0 (and the updater would treat every release as newer).
 // Keep these in sync with the values in DocGlance.csproj when bumping a release.
 [assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("20.10.26.0")]
-[assembly: AssemblyInformationalVersion("20.10.26")]
+[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyInformationalVersion("1.0.0")]
 [assembly: AssemblyCompany("777abhishek")]
 [assembly: AssemblyProduct("DocGlance")]

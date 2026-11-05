@@ -15,7 +15,7 @@ Namespace changes in the remaining delta: moved responsibilities carry `DocGlanc
 | `DocGlance.csproj` | FINAL | — | stale `Assets\windows|SampleMedia` excludes already removed (supersedes AF-12) |
 | `Program.cs` | FINAL | — | 232 LOC; Win32 P/Invoke sanctioned |
 | `App.xaml` / `App.xaml.cs` | FINAL | — | 208 LOC; activation/session extracted |
-| `Package.appxmanifest`, `app.manifest`, `.gitignore`, `DocGlance.cer`, `build.ps1`, `build-installer.ps1` | FINAL | — | — |
+| `Package.appxmanifest`, `app.manifest`, `.gitignore`, `build.ps1`, `build-installer.ps1` | FINAL | — | — |
 | `README.md`, `LICENSE` | FINAL | — | added in `10db6a8` |
 
 ## Common (5) — all FINAL
