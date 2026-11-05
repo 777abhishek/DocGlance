@@ -1,43 +1,55 @@
 ﻿<#
 .SYNOPSIS
-    Generates the winget installer manifest with the exact SHA-256 hash
-    of the built installer (installer\output\DocGlance-Setup-x64.exe).
+    Generates versioned WinGet manifests for a GitHub release installer.
 
 .EXAMPLE
     .\installer\generate-winget-manifest.ps1
-    .\installer\generate-winget-manifest.ps1 -Version "1.0.1"
+    .\installer\generate-winget-manifest.ps1 -Version "1.0.1" -InstallerPath ".\GitHubRelease\v1.0.1\DocGlance-1.0.1-Setup-x64.exe"
 #>
 
 [CmdletBinding()]
 param(
-    [string]$Version = "1.0.0",
+    [string]$Version = "",
     [string]$DownloadUrl = "",
-    [string]$InstallerPath = ""
+    [string]$InstallerPath = "",
+    [string]$OutputDirectory = ""
 )
 
 $ErrorActionPreference = "Stop"
+$repositoryRoot = Split-Path -Parent $PSScriptRoot
+
+if ([string]::IsNullOrWhiteSpace($Version)) {
+    [xml]$projectXml = Get-Content (Join-Path $repositoryRoot "DocGlance.csproj") -Raw
+    $Version = $projectXml.SelectSingleNode("/*[local-name()='Project']/*[local-name()='PropertyGroup']/*[local-name()='Version']").InnerText
+}
 
 if ($Version -notmatch '^\d+\.\d+\.\d+$') {
     throw "Version must use the three-part format MAJOR.MINOR.PATCH."
 }
 
+$installerFileName = "DocGlance-$Version-Setup-x64.exe"
+$defaultReleaseDirectory = Join-Path $repositoryRoot "GitHubRelease\v$Version"
 if ([string]::IsNullOrWhiteSpace($DownloadUrl)) {
-    $DownloadUrl = "https://github.com/777abhishek/QuickView/releases/download/v$Version/DocGlance-Setup-x64.exe"
+    $DownloadUrl = "https://github.com/777abhishek/QuickView/releases/download/v$Version/$installerFileName"
 }
 
 if ([string]::IsNullOrWhiteSpace($InstallerPath)) {
-    $InstallerPath = Join-Path $PSScriptRoot "output\DocGlance-Setup-x64.exe"
+    $InstallerPath = Join-Path $defaultReleaseDirectory $installerFileName
 }
 
 if (-not (Test-Path $InstallerPath)) {
-    throw "Installer not found at '$InstallerPath'. Build it first with .\build-installer.ps1."
+    throw "Installer not found at '$InstallerPath'. Build a GitHub release first with .\build-installer.ps1 -GitHubRelease."
+}
+
+if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
+    $OutputDirectory = Join-Path $defaultReleaseDirectory "winget"
 }
 
 Write-Host "Computing SHA-256 hash for $InstallerPath..." -ForegroundColor Cyan
 $hash = (Get-FileHash -Path $InstallerPath -Algorithm SHA256).Hash
 Write-Host "SHA-256: $hash" -ForegroundColor Green
 
-$manifestDir = "$PSScriptRoot\output\winget\manifests\q\DocGlance\DocGlance\$Version"
+$manifestDir = Join-Path $OutputDirectory "manifests\q\DocGlance\DocGlance\$Version"
 New-Item -ItemType Directory -Force -Path $manifestDir | Out-Null
 
 $installerYaml = @"

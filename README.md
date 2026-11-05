@@ -71,21 +71,16 @@ To create an MSIX package for local testing, use `.\build-installer.ps1 -MsixOnl
 
 ### Build a GitHub release installer
 
-Build an unsigned installer for public distribution:
+Build a complete unsigned GitHub release bundle:
 
 ```powershell
-.\build-installer.ps1 -InstallerOnly -Unsigned
+.\build-installer.ps1 -GitHubRelease
 ```
 
-Upload `installer\output\DocGlance-Setup-x64.exe` to a GitHub release tagged with the same version (for example, `v1.0.0`). This mode deliberately avoids the local self-signed certificate; Windows may still show SmartScreen warnings. Do not distribute a self-signed development certificate as proof of publisher identity. `-InstallMsix` is for local sideload testing, and `-StoreUpload` is for Partner Center—not GitHub releases.
+The version in `DocGlance.csproj` uses stable Semantic Versioning (`MAJOR.MINOR.PATCH`) and controls the Windows package version, installer name, and release directory. For version `1.0.0`, the script creates `GitHubRelease\v1.0.0\` with the unsigned `DocGlance-1.0.0-Setup-x64.exe`, `ReleaseNotes.md`, `SHA256SUMS.txt`, and a `winget\` folder containing the package manifests.
 
-After uploading the installer, generate the matching Winget manifests and SHA-256:
+Upload the versioned installer and release notes to a GitHub Release tagged `v1.0.0`; retain the checksum and WinGet manifests for verification and package-manager submission. The unsigned installer may prompt a SmartScreen warning. Do not distribute a self-signed development certificate as proof of publisher identity. `-InstallMsix` is for local sideload testing, and `-StoreUpload` is for Partner Center—not GitHub releases.
 
-```powershell
-.\installer\generate-winget-manifest.ps1 -Version "1.0.0"
-```
-
-The generated manifests are placed under `installer\output\winget\manifests\`; review them and submit them to the Winget repository after confirming the published release URL works.
 
 ### Run tests
 

@@ -1,17 +1,17 @@
 ﻿; ─────────────────────────────────────────────────────────────────────────────
 ;  DocGlance — Inno Setup 6 script
-;  Produces:  DocGlance-Setup-x64.exe
+;  Produces:  DocGlance-<version>-Setup-x64.exe
 ;
 ;  Self-contained installer: all .NET runtime DLLs are bundled.
 ;  Windows App SDK 2.4 is downloaded and installed on demand if missing.
 ;
-;  Compile through build-installer.ps1 so Inno Setup receives the local
-;  Windows SDK signing command for the app, setup, and uninstaller.
+; Compile through build-installer.ps1 to set release metadata and signing mode.
 ; ─────────────────────────────────────────────────────────────────────────────
 
 #define AppName      "DocGlance"
 #define AppVersion   "1.0.0"
 #define AppFileVersion AppVersion + ".0"
+#define OutputBaseFilename "DocGlance-" + AppVersion + "-Setup-x64"
 #define AppPublisher "777abhishek"
 #define AppURL       "https://github.com/777abhishek/QuickView"
 #define AppExeName   "DocGlance.exe"
@@ -36,7 +36,7 @@ Compression=lzma2/ultra64
 SolidCompression=yes
 ; Output
 OutputDir=output
-OutputBaseFilename=DocGlance-Setup-x64
+OutputBaseFilename={#OutputBaseFilename}
 ; Require 64-bit Windows 10 2004+ (19041)
 ArchitecturesInstallIn64BitMode=x64compatible
 ArchitecturesAllowed=x64compatible

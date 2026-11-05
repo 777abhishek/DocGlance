@@ -5,6 +5,12 @@
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
     <UseWinUI>true</UseWinUI>
+    <Version>1.0.0</Version>
+    <PackageNumericVersion>$([System.Text.RegularExpressions.Regex]::Replace('$(Version)', '[-+].*$', ''))</PackageNumericVersion>
+    <AssemblyVersion>$(PackageNumericVersion).0</AssemblyVersion>
+    <FileVersion>$(PackageNumericVersion).0</FileVersion>
+    <InformationalVersion>$(Version)</InformationalVersion>
+    <AppxPackageVersion>$(PackageNumericVersion).0</AppxPackageVersion>
     <Platforms>x64</Platforms>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <Nullable>enable</Nullable>
@@ -43,9 +49,6 @@
     <!-- Suppress CA1416 (Windows-only API) and MVVMTK0045 floods from WinAppSDK -->
     <NoWarn>$(NoWarn);CA1416;MVVMTK0045</NoWarn>
 
-    <!-- Suppress duplicate assembly attribute warnings (CS0579) when both
-         -r win-x64 and -p:Platform=x64 are passed to dotnet publish. -->
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
 
     <!-- Use our custom Program.cs main so we can set PerMonitorV2 DPI awareness
@@ -56,9 +59,6 @@
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
 
     <!-- Version / file info -->
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.0.0</FileVersion>
-    <InformationalVersion>1.0.0</InformationalVersion>
     <Company>777abhishek</Company>
     <Product>DocGlance</Product>
     <Description>Fast universal file viewer for Windows</Description>

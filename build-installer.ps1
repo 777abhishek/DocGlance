@@ -12,6 +12,7 @@
 #    .\build-installer.ps1 -InstallMsix        (build, trust, replace, and install sideload MSIX)
 #    .\build-installer.ps1 -InstallerOnly      (EXE installer only)
 #    .\build-installer.ps1 -InstallerOnly -Unsigned (unsigned EXE for public release)
+#    .\build-installer.ps1 -GitHubRelease      (build versioned public release bundle)
 #    .\build-installer.ps1 -SkipPublish        (reuse existing publish folder)
 #
 #  Requirements:
@@ -25,7 +26,9 @@ param(
     [switch]$StoreUpload,
     [switch]$InstallMsix,
     [switch]$InstallerOnly,
-    [switch]$Unsigned
+    [switch]$Unsigned,
+    [switch]$GitHubRelease,
+    [string]$ReleaseNotesPath
 )
 
 Set-StrictMode -Version Latest
@@ -37,6 +40,7 @@ $PublishDir    = "$Root\publish"
 $Installer     = "$Root\installer"
 $IssFile       = "$Installer\DocGlance.iss"
 $OutputDir     = "$Installer\output"
+$GitHubReleaseRoot = "$Root\GitHubRelease"
 $rcedit        = "$Root\tools\rcedit.exe"
 $Ico           = "$Root\Assets\AppIcon.ico"
 $Manifest      = "$Root\Package.appxmanifest"
@@ -141,10 +145,17 @@ Write-Host "  ╔═════════════════════
 Write-Host "  ║  DocGlance Package Builder                                 ║" -ForegroundColor Magenta
 Write-Host "  ╚═══════════════════════════════════════════════════════════╝" -ForegroundColor Magenta
 
+if ($GitHubRelease -and ($SkipPublish -or $MsixOnly -or $StoreUpload -or $InstallMsix -or $InstallerOnly -or $Unsigned)) {
+    Write-Fail "-GitHubRelease cannot be combined with other build mode switches."
+}
 if (($StoreUpload -and ($InstallMsix -or $MsixOnly -or $InstallerOnly)) -or
     ($InstallMsix -and $InstallerOnly) -or
     ($MsixOnly -and $InstallerOnly)) {
     Write-Fail "Choose one packaging mode: -StoreUpload, -InstallMsix, -MsixOnly, -InstallerOnly, or the default combined build."
+}
+if ($GitHubRelease) {
+    $InstallerOnly = $true
+    $Unsigned = $true
 }
 if ($Unsigned -and (-not $InstallerOnly -or $SkipPublish)) {
     Write-Fail "-Unsigned requires a fresh publish and is only supported with -InstallerOnly (do not use -SkipPublish)."
@@ -153,18 +164,35 @@ if ($Unsigned -and (-not $InstallerOnly -or $SkipPublish)) {
 $BuildMsix = $StoreUpload -or $InstallMsix -or $MsixOnly -or (-not $InstallerOnly)
 $BuildInstaller = -not ($StoreUpload -or $InstallMsix -or $MsixOnly)
 
+[xml]$projectXml = Get-Content -Path $Project -Raw
+$versionNode = $projectXml.SelectSingleNode("/*[local-name()='Project']/*[local-name()='PropertyGroup']/*[local-name()='Version']")
+$PackageVersion = if ($versionNode) { $versionNode.InnerText.Trim() } else { "" }
+if ($PackageVersion -notmatch '^\d+\.\d+\.\d+$') {
+    Write-Fail "DocGlance.csproj must define a stable Semantic Version in MAJOR.MINOR.PATCH form; found '$PackageVersion'."
+}
+$PackageNumericVersion = "$PackageVersion.0"
+$InstallerFileName = "DocGlance-$PackageVersion-Setup-x64.exe"
+$ReleaseDirectory = Join-Path $GitHubReleaseRoot "v$PackageVersion"
+$ReleaseNotesSource = if ([string]::IsNullOrWhiteSpace($ReleaseNotesPath)) {
+    Join-Path $Root "release-notes\v$PackageVersion.md"
+} else {
+    $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ReleaseNotesPath)
+}
+if ($GitHubRelease -and -not (Test-Path -LiteralPath $ReleaseNotesSource -PathType Leaf)) {
+    Write-Fail "Release notes are required at '$ReleaseNotesSource'. Add the notes for v$PackageVersion or pass -ReleaseNotesPath."
+}
+
 [xml]$manifestXml = Get-Content -Path $Manifest -Raw
 $manifestIdentity = $manifestXml.SelectSingleNode("/*[local-name()='Package']/*[local-name()='Identity']")
 if (-not $manifestIdentity) { Write-Fail "Package Identity was not found in $Manifest" }
 $PackageName = $manifestIdentity.GetAttribute("Name")
 $PackagePublisher = $manifestIdentity.GetAttribute("Publisher")
-$PackageVersion = $manifestIdentity.GetAttribute("Version")
+$ManifestPackageVersion = $manifestIdentity.GetAttribute("Version")
 $publisherDisplayNode = $manifestXml.SelectSingleNode("/*[local-name()='Package']/*[local-name()='Properties']/*[local-name()='PublisherDisplayName']")
 $PackagePublisherDisplayName = if ($publisherDisplayNode) { $publisherDisplayNode.InnerText } else { "" }
-if (-not $PackageName -or -not $PackagePublisher -or $PackageVersion -notmatch '^\d+\.\d+\.\d+\.\d+$') {
+if (-not $PackageName -or -not $PackagePublisher -or $ManifestPackageVersion -notmatch '^\d+\.\d+\.\d+\.\d+$') {
     Write-Fail "Manifest identity must define Name, Publisher, and a four-part numeric Version."
 }
-
 if ($StoreUpload) {
     if ($PackageName -ne "777abhishek.DocGlance" -or
         $PackagePublisher -ne "CN=BBE5B101-6F9F-4DD1-B36A-16425B608E84" -or
@@ -177,7 +205,13 @@ if ($StoreUpload) {
 } elseif ($MsixOnly) {
     Write-Info "Mode: Signed sideload MSIX only"
 } elseif ($InstallerOnly) {
-    $installerMode = if ($Unsigned) { "Unsigned EXE installer only" } else { "EXE installer only" }
+    $installerMode = if ($GitHubRelease) {
+        "GitHub release bundle v$PackageVersion"
+    } elseif ($Unsigned) {
+        "Unsigned EXE installer only"
+    } else {
+        "EXE installer only"
+    }
     Write-Info "Mode: $installerMode"
 } else {
     Write-Info "Mode: Signed sideload MSIX + EXE installer"
@@ -238,7 +272,8 @@ if ($BuildInstaller) {
             "-p:PublishReadyToRun=true",                 # AOT for faster startup
             "-p:DebugType=embedded",                     # embed PDB for crash reports
             "-p:DebugSymbols=true",
-            "-p:GenerateAssemblyInfo=false",             # avoid duplicate attributes
+            "-p:Version=$PackageVersion",
+            "-p:AppxPackageVersion=$PackageNumericVersion",
             "-p:GenerateTargetFrameworkAttribute=false",
             "-p:DefineConstants=`"TRACE%3BDISABLE_XAML_GENERATED_MAIN`"",  # No PACKAGED; keep custom entry point
             "--output", $PublishDir,
@@ -331,6 +366,7 @@ if ($BuildMsix) {
         "-c", "Release",
         "-p:Platform=x64",
         "-p:AppxPackageDir=$msixOutputDir\",
+        "-p:AppxPackageVersion=$PackageNumericVersion",
         "-p:UapAppxPackageBuildMode=$packageBuildMode",
         "-p:AppxBundle=Never",
         "-p:AppxPackageSigningEnabled=$packageSigningEnabled",
@@ -485,8 +521,11 @@ if ($BuildInstaller) {
     # Inno Setup signs both Setup and the generated uninstaller with the same
     # certificate used for the published app executable.
     $signingScript = "$Root\tools\sign-authenticode.ps1"
-    $installerVersion = ($PackageVersion.Split('.') | Select-Object -First 3) -join '.'
-    $innoArgs = @("/DAppVersion=$installerVersion")
+    $innoArgs = @(
+        "/DAppVersion=$PackageVersion",
+        "/DAppFileVersion=$PackageNumericVersion",
+        "/DOutputBaseFilename=DocGlance-$PackageVersion-Setup-x64"
+    )
     if ($Unsigned) {
         $innoArgs += "/DUnsignedBuild"
     } else {
@@ -502,13 +541,42 @@ if ($BuildInstaller) {
 
     if ($LASTEXITCODE -ne 0) { Write-Fail "iscc failed (exit $LASTEXITCODE)" }
 
-    $exeInstaller = "$OutputDir\DocGlance-Setup-x64.exe"
+    $exeInstaller = Join-Path $OutputDir $InstallerFileName
     if (-not (Test-Path $exeInstaller)) {
         Write-Fail "EXE installer not produced at: $exeInstaller"
     }
 
     $sizeMb = [math]::Round((Get-Item $exeInstaller).Length / 1MB, 1)
     Write-OK "EXE installer: $exeInstaller  ($sizeMb MB)"
+
+    if ($GitHubRelease) {
+        New-Item -ItemType Directory -Force -Path $ReleaseDirectory | Out-Null
+        $releaseInstaller = Join-Path $ReleaseDirectory $InstallerFileName
+        $releaseNotes = Join-Path $ReleaseDirectory "ReleaseNotes.md"
+        $checksumFile = Join-Path $ReleaseDirectory "SHA256SUMS.txt"
+
+        Copy-Item -LiteralPath $exeInstaller -Destination $releaseInstaller -Force
+        Copy-Item -LiteralPath $ReleaseNotesSource -Destination $releaseNotes -Force
+
+        $releaseHash = (Get-FileHash -LiteralPath $releaseInstaller -Algorithm SHA256).Hash
+        [System.IO.File]::WriteAllText(
+            $checksumFile,
+            "$releaseHash  $InstallerFileName`r`n",
+            [System.Text.UTF8Encoding]::new($false))
+
+        $wingetOutput = Join-Path $ReleaseDirectory "winget"
+        & "$PSHOME\powershell.exe" -NoProfile -ExecutionPolicy Bypass `
+            -File "$Installer\generate-winget-manifest.ps1" `
+            -Version $PackageVersion `
+            -InstallerPath $releaseInstaller `
+            -OutputDirectory $wingetOutput
+        if ($LASTEXITCODE -ne 0) {
+            Write-Fail "WinGet manifest generation failed (exit $LASTEXITCODE)"
+        }
+
+        Write-OK "GitHub release bundle: $ReleaseDirectory"
+        Write-Info "Installer SHA-256: $releaseHash"
+    }
 }
 
 # ── Summary ───────────────────────────────────────────────────────────────────
@@ -525,8 +593,11 @@ if ($StoreUpload) {
 }
 
 if ($BuildInstaller) {
-    Write-Info "EXE installer → $OutputDir\DocGlance-Setup-x64.exe"
+    Write-Info "EXE installer → $(Join-Path $OutputDir $InstallerFileName)"
     Write-Info "  Use for: GitHub releases, direct distribution"
+}
+if ($GitHubRelease) {
+    Write-Info "Complete versioned release → $ReleaseDirectory"
 }
 
 Write-Host ""
