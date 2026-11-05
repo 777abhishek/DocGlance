@@ -309,6 +309,35 @@ public class HomeViewModelTests
         vm.BackgroundIndex.First().FilePath.Should().Contain("Work");
     }
 
+    [Fact]
+    public void RemoveFolderFromIndex_DoesNotRemoveSiblingWithSharedPrefix()
+    {
+        var vm = new HomeViewModel();
+        vm.BackgroundIndex.Add(MakeDoc("Report", "PDF", folder: @"C:\Docs\"));
+        vm.BackgroundIndex.Add(MakeDoc("Budget", "XLSX", folder: @"C:\Documents\"));
+
+        vm.RemoveFolderFromIndex(@"C:\Docs");
+
+        vm.BackgroundIndex.Should().ContainSingle()
+            .Which.FilePath.Should().Contain("Documents");
+    }
+
+    [Fact]
+    public void ReconcileIndexedFolder_RemovesStaleEntriesOnlyAfterCompleteScan()
+    {
+        var vm = new HomeViewModel();
+        vm.BackgroundIndex.Add(MakeDoc("Stale", "PDF", folder: @"C:\Docs\"));
+        vm.BackgroundIndex.Add(MakeDoc("OtherRoot", "PDF", folder: @"C:\Work\"));
+        var discovered = MakeDoc("Found", "PDF", folder: @"C:\Docs\");
+
+        vm.ReconcileIndexedFolder(@"C:\Docs", new[] { discovered }, isComplete: false);
+        vm.BackgroundIndex.Should().Contain(item => item.Title == "Stale");
+
+        vm.ReconcileIndexedFolder(@"C:\Docs", new[] { discovered }, isComplete: true);
+        vm.BackgroundIndex.Select(item => item.Title)
+            .Should().BeEquivalentTo("Found", "OtherRoot");
+    }
+
     // ── MatchTypeGroup ────────────────────────────────────────────────────────
 
     [Theory]

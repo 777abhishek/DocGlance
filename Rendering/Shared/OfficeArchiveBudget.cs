@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.IO.Compression;
 using System.Threading;
+using DocGlance.Infrastructure.Diagnostics;
 
 namespace DocGlance.Rendering.Shared;
 
@@ -13,8 +14,24 @@ internal static class OfficeArchiveBudget
 
     internal static void Validate(string filePath, CancellationToken cancellationToken = default)
     {
-        using ZipArchive archive = ZipFile.OpenRead(filePath);
-        Validate(archive, MaximumEntries, MaximumEntryBytes, MaximumTotalExpandedBytes, cancellationToken);
+        DocumentOpenTrace.Current?.Mark("OfficeArchiveValidationStarted");
+        try
+        {
+            using ZipArchive archive = ZipFile.OpenRead(filePath);
+            Validate(archive, MaximumEntries, MaximumEntryBytes, MaximumTotalExpandedBytes, cancellationToken);
+            DocumentOpenTrace.Current?.Mark("OfficeArchiveValidationCompleted",
+                $"Entries={archive.Entries.Count}");
+        }
+        catch (OperationCanceledException)
+        {
+            DocumentOpenTrace.Current?.Mark("OfficeArchiveValidationCanceled");
+            throw;
+        }
+        catch
+        {
+            DocumentOpenTrace.Current?.Mark("OfficeArchiveValidationFailed");
+            throw;
+        }
     }
 
     internal static void Validate(

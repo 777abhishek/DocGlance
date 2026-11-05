@@ -18,6 +18,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using DocGlance.Infrastructure.Diagnostics;
 using Windows.ApplicationModel.DataTransfer;
 using DocGlance.Infrastructure.Logging;
 using DocGlance.Rendering.Xlsx;
@@ -56,6 +57,7 @@ public sealed partial class SpreadsheetViewer : UserControl,
 
     // ── State ─────────────────────────────────────────────────────────────────
     private SpreadsheetDocument? _doc;
+    private DocumentOpenTrace? _openTrace;
     private int _sheetLoadGeneration;
     private SheetData?           _data;
     private Dictionary<(int, int), CellData>? _cellMap;
@@ -265,6 +267,7 @@ public sealed partial class SpreadsheetViewer : UserControl,
             ?? throw new ArgumentException("The document has no file path.", nameof(document));
 
         await CleanupAsync();
+        _openTrace = DocumentOpenTrace.For(document);
         var openedDocument = await SpreadsheetDocument.OpenAsync(filePath, cancellationToken);
         if (openedDocument == null)
             throw new InvalidOperationException("Cannot open spreadsheet — file may be corrupt or unsupported.");
@@ -508,6 +511,7 @@ public sealed partial class SpreadsheetViewer : UserControl,
     {
         _sheetLoadGeneration++;
         _doc = null;
+        _openTrace = null;
         _data = null;
         _cellMap = null;
         _activeSheet = 0;
@@ -556,11 +560,15 @@ public sealed partial class SpreadsheetViewer : UserControl,
 
         _data    = SheetData.FromJson(json);
         if (_data == null) return;
+        _openTrace?.Mark("SpreadsheetSheetDataLoaded",
+            $"Sheet={index} Rows={_data.RowCount} Columns={_data.ColCount} Cells={_data.Cells.Count}");
 
         _cellMap = _data.BuildCellMap();
         BuildMergeIndex();
         BuildLayoutArrays();
         UpdateVisibleSearchMatches();
+        _openTrace?.Mark("SpreadsheetLayoutBuilt",
+            $"Sheet={index} VisibleCellMapCount={_cellMap.Count}");
 
         ApplyCanvasSizes();
 
@@ -791,7 +799,13 @@ public sealed partial class SpreadsheetViewer : UserControl,
 
     private void CellCanvas_Draw(CanvasControl sender, CanvasDrawEventArgs args)
     {
-        try { CellCanvas_DrawCore(args); OnDrawSucceeded(); }
+        try
+        {
+            CellCanvas_DrawCore(args);
+            OnDrawSucceeded();
+            if (_data != null)
+                _openTrace?.MarkFirstContentRendered();
+        }
         catch (Exception ex) { OnDrawFailed("CellCanvas", ex); }
     }
 

@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml.Media.Imaging;
 using DocGlance.Common.Validators;
 using DocGlance.Interop.PdfCraft;
 using DocGlance.Rendering.Shared;
+using DocGlance.Infrastructure.Diagnostics;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -40,9 +41,14 @@ public static class PdfRenderer
     public static async Task<PdfOpenResult> OpenDocumentAsync(
         string filePath, CancellationToken ct = default, string? password = null)
     {
+        DocumentOpenTrace.Current?.Mark("ValidationStarted", "Format=PDF");
         if (!FileSizeValidator.IsFileValidAndSafe(filePath, out var validationError))
+        {
+            DocumentOpenTrace.Current?.Mark("ValidationFailed", "Format=PDF");
             return new PdfOpenResult(null, $"Validation failed: {validationError}");
+        }
 
+        DocumentOpenTrace.Current?.Mark("ValidationCompleted", "Format=PDF");
         if (password != null)
             return await OpenPasswordProtectedDocumentAsync(filePath, password, ct);
 
@@ -51,6 +57,7 @@ public static class PdfRenderer
         {
             ct.ThrowIfCancellationRequested();
             EnsureInitialized();
+            DocumentOpenTrace.Current?.Mark("NativeParseStarted", "Format=PDF Method=Path");
             byte[] pathBytes = Encoding.UTF8.GetBytes(filePath);
             IntPtr document;
             unsafe
@@ -61,11 +68,15 @@ public static class PdfRenderer
 
             if (document == IntPtr.Zero)
             {
+                DocumentOpenTrace.Current?.Mark("NativePathOpenFailed", "Trying managed byte fallback");
                 byte[] bytes = File.ReadAllBytes(filePath);
                 return OpenDocumentFromBytesCore(bytes, ct);
             }
 
-            return FinishOpen(document);
+            PdfOpenResult result = FinishOpen(document);
+            DocumentOpenTrace.Current?.Mark("NativeParseCompleted",
+                $"Format=PDF Success={result.Ok} Pages={result.Document?.PageCount ?? 0}");
+            return result;
         }, ct);
     }
 
@@ -84,6 +95,8 @@ public static class PdfRenderer
     {
         ct.ThrowIfCancellationRequested();
         EnsureInitialized();
+        DocumentOpenTrace.Current?.Mark("NativeBytesParseStarted",
+            $"Format=PDF Bytes={bytes.Length}");
         IntPtr document;
         unsafe
         {
@@ -95,12 +108,18 @@ public static class PdfRenderer
         {
             // PdfCraft does not support encryption; give the user a precise reason instead of
             // a generic parse failure.
-            return LooksEncrypted(bytes)
+            PdfOpenResult failedResult = LooksEncrypted(bytes)
                 ? new PdfOpenResult(null, EncryptedMessage, true)
                 : new PdfOpenResult(null, "PdfCraft could not parse the PDF.");
+            DocumentOpenTrace.Current?.Mark("NativeBytesParseCompleted",
+                $"Format=PDF Success=false PasswordRequired={failedResult.NeedsPassword}");
+            return failedResult;
         }
 
-        return FinishOpen(document);
+        PdfOpenResult result = FinishOpen(document);
+        DocumentOpenTrace.Current?.Mark("NativeBytesParseCompleted",
+            $"Format=PDF Success={result.Ok} Pages={result.Document?.PageCount ?? 0}");
+        return result;
     }
 
     private const string EncryptedMessage =
@@ -109,6 +128,7 @@ public static class PdfRenderer
     private static async Task<PdfOpenResult> OpenPasswordProtectedDocumentAsync(
         string filePath, string password, CancellationToken ct)
     {
+        DocumentOpenTrace.Current?.Mark("ManagedParseStarted", "Format=PDF Method=Windows.Data.Pdf");
         try
         {
             ct.ThrowIfCancellationRequested();
@@ -129,15 +149,21 @@ public static class PdfRenderer
                 pageSizes.Add((page.Size.Width * 0.75, page.Size.Height * 0.75));
             }
 
-            return new PdfOpenResult(new PdfDocumentState(document, (int)document.PageCount, pageSizes), null);
+            PdfOpenResult result = new(
+                new PdfDocumentState(document, (int)document.PageCount, pageSizes), null);
+            DocumentOpenTrace.Current?.Mark("ManagedParseCompleted",
+                $"Format=PDF Success=true Pages={result.Document?.PageCount ?? 0}");
+            return result;
         }
         catch (OperationCanceledException)
         {
+            DocumentOpenTrace.Current?.Mark("ManagedParseCanceled", "Format=PDF");
             throw;
         }
         catch (Exception)
         {
             // Windows.Data.Pdf reports an invalid/missing password as a load failure.
+            DocumentOpenTrace.Current?.Mark("ManagedParseFailed", "Format=PDF");
             return new PdfOpenResult(null, "That password did not open the PDF. Please check it and try again.", true);
         }
     }

@@ -681,6 +681,8 @@ public sealed partial class PdfViewer
                 img.Source = bitmap;
                 img.Opacity = 1.0;
                 _pdfPageDpi[pageIndex] = dpi;
+                if (pageIndex == 0)
+                    _openTrace?.MarkFirstContentRendered();
 
                 // FEAT-004: Track bitmap byte size
                 long byteSize = (long)renderW * renderH * 4;

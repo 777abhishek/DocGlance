@@ -321,6 +321,9 @@ public sealed partial class TitleBarWindow : Window
                               StringComparison.OrdinalIgnoreCase))
             {
                 Infrastructure.Logging.Logger.Log($"[TitleBarWindow] File already open, focusing tab");
+                var existingTrace = Infrastructure.Diagnostics.DocumentOpenTrace.Start(doc);
+                existingTrace.Mark("ExistingTabFocused");
+                existingTrace.MarkFirstContentRendered();
                 Tabs.SelectedItem = kv.Key;
                 if (ReferenceEquals(Tabs.SelectedItem, kv.Key))
                     ShowDocumentTab(kv.Key, kv.Value);
@@ -331,18 +334,21 @@ public sealed partial class TitleBarWindow : Window
         if (!_documentOpensInProgress.Add(doc.FilePath))
             return;
 
-        _ = OpenDocumentWithAccessAsync(doc);
+        _ = OpenDocumentWithAccessAsync(doc, Infrastructure.Diagnostics.DocumentOpenTrace.Start(doc));
     }
 
-    private async Task OpenDocumentWithAccessAsync(DocumentItem doc)
+    private async Task OpenDocumentWithAccessAsync(
+        DocumentItem doc, Infrastructure.Diagnostics.DocumentOpenTrace trace)
     {
         try
         {
             await DocGlance.Services.Storage.StorageAccessStore.GetFileAsync(doc.FilePath);
-            OpenDocumentCore(doc);
+            trace.Mark("FileAccessAcquired");
+            OpenDocumentCore(doc, trace);
         }
         catch (Exception ex)
         {
+            trace.Mark("FileAccessFailed", $"ErrorType={ex.GetType().Name}");
             Infrastructure.Logging.Logger.Error($"Failed to obtain access to '{doc.FilePath}'", ex);
             await ShowShellMessageAsync(
                 "Can't open file",
@@ -354,7 +360,8 @@ public sealed partial class TitleBarWindow : Window
         }
     }
 
-    private void OpenDocumentCore(DocumentItem doc)
+    private void OpenDocumentCore(
+        DocumentItem doc, Infrastructure.Diagnostics.DocumentOpenTrace trace)
     {
         // Another open may have completed while access was being restored.
         foreach (var kv in _tabData)
@@ -362,6 +369,8 @@ public sealed partial class TitleBarWindow : Window
             if (string.Equals(kv.Value.doc.FilePath, doc.FilePath,
                               StringComparison.OrdinalIgnoreCase))
             {
+                trace.Mark("ExistingTabFocused");
+                trace.MarkFirstContentRendered();
                 Tabs.SelectedItem = kv.Key;
                 if (ReferenceEquals(Tabs.SelectedItem, kv.Key))
                     ShowDocumentTab(kv.Key, kv.Value);
@@ -374,6 +383,7 @@ public sealed partial class TitleBarWindow : Window
         DocGlance.Services.Storage.RecentFilesStore.Push(doc.FilePath);
         RefreshRecentDocuments();
         var tab = CreateDocumentTab(doc);
+        trace.Mark("TabCreated");
         Tabs.SelectedItem = tab;
 
         Infrastructure.Logging.Logger.Log($"[TitleBarWindow] OpenDocument complete");
@@ -672,8 +682,11 @@ public sealed partial class TitleBarWindow : Window
         if (data.viewer != null)
             return (data.viewer, data.doc);
 
+        var openTrace = Infrastructure.Diagnostics.DocumentOpenTrace.For(data.doc);
+        openTrace?.Mark("ViewerConstructionStarted");
         var viewer = new ViewerPage();
         _tabData[tab] = (viewer, data.doc);
+        openTrace?.Mark("ViewerConstructed");
         viewer.LoadDocument(data.doc);
         return (viewer, data.doc);
     }

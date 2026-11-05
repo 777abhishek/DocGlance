@@ -392,10 +392,13 @@ public sealed partial class ViewerPage : Page
         }
         catch (OperationCanceledException)
         {
+            Infrastructure.Diagnostics.DocumentOpenTrace.For(doc)?.Mark("OpenCanceled");
             // Expected when switching documents or closing a tab mid-load.
         }
         catch (Exception ex)
         {
+            Infrastructure.Diagnostics.DocumentOpenTrace.For(doc)?.Mark(
+                "OpenFailed", $"ErrorType={ex.GetType().Name}");
             Logger.Error($"[Viewer] LoadDocumentAsync failed for {doc.FilePath}", ex);
             ShowErrorCard($"Cannot open document: {ex.Message}");
         }
@@ -405,6 +408,11 @@ public sealed partial class ViewerPage : Page
 
     private async Task LoadDocumentCoreAsync(DocumentItem doc)
     {
+        Infrastructure.Diagnostics.DocumentOpenTrace? openTrace =
+            Infrastructure.Diagnostics.DocumentOpenTrace.For(doc);
+        using IDisposable? traceScope = openTrace?.Activate();
+        openTrace?.Mark("ViewerLoadStarted");
+
         if (!await FlushPendingPdfAnnotationsAsync())
             throw new InvalidOperationException(
                 "The previous PDF still has unsaved annotation changes. " +
@@ -470,18 +478,24 @@ public sealed partial class ViewerPage : Page
         {
             IDocumentViewer viewer = ActivateHostedViewer(factory, doc);
             _activeViewer = viewer;
+            openTrace?.Mark("ViewerActivated", $"Viewer={viewer.GetType().Name}");
 
+            openTrace?.Mark("FormatLoadStarted", $"Viewer={viewer.GetType().Name}");
             await viewer.LoadAsync(doc, ct);
             ct.ThrowIfCancellationRequested();
+            openTrace?.Mark("FormatParseCompleted", $"Viewer={viewer.GetType().Name}");
 
             await ApplyPostLoadConfigAsync(viewer, ct);
+            openTrace?.Mark("NavigationReady");
         }
         catch (OperationCanceledException)
         {
+            openTrace?.Mark("OpenCanceled");
             throw;
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
+            openTrace?.Mark("FormatLoadFailed", $"ErrorType={ex.GetType().Name}");
             Logger.Error($"[Viewer] LoadDocumentCoreAsync: {ex.Message}", ex);
             ShowErrorCard($"Cannot open document: {ex.Message}");
         }

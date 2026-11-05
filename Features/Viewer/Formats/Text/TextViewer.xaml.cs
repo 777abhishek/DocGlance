@@ -1,6 +1,7 @@
 using DocGlance.Core.Models;
 using DocGlance.Features.Viewer.Components;
 using DocGlance.Features.Viewer.Contracts;
+using DocGlance.Infrastructure.Diagnostics;
 using DocGlance.Rendering.Shared;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -113,6 +114,7 @@ public sealed partial class TextViewer : UserControl, IDocumentViewer, ISupports
         LineNumberBlock.LineHeight = 22;
         GenerateLineNumbers(lineCount);
         ClearHighlight();
+        DocumentOpenTrace.For(document)?.MarkFirstContentRendered();
         Infrastructure.Logging.Logger.Log(
             $"[TextViewer] {lineCount:N0} lines, {loaded.FileBytes / 1024.0:F1} KB");
     }
