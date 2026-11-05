@@ -35,6 +35,7 @@ public sealed partial class TitleBarWindow : Window
 
     // ── Per-tab state: tab item → (optional ViewerPage, DocumentItem) ────────
     private readonly Dictionary<TabViewItem, (ViewerPage? viewer, DocumentItem doc)> _tabData = new();
+    private readonly HashSet<string> _documentOpensInProgress = new(StringComparer.OrdinalIgnoreCase);
     
     // Special tabs (Settings, etc.) that don't show documents
     private readonly Dictionary<TabViewItem, UIElement> _specialTabs = new();
@@ -320,6 +321,47 @@ public sealed partial class TitleBarWindow : Window
                               StringComparison.OrdinalIgnoreCase))
             {
                 Infrastructure.Logging.Logger.Log($"[TitleBarWindow] File already open, focusing tab");
+                Tabs.SelectedItem = kv.Key;
+                if (ReferenceEquals(Tabs.SelectedItem, kv.Key))
+                    ShowDocumentTab(kv.Key, kv.Value);
+                return;
+            }
+        }
+
+        if (!_documentOpensInProgress.Add(doc.FilePath))
+            return;
+
+        _ = OpenDocumentWithAccessAsync(doc);
+    }
+
+    private async Task OpenDocumentWithAccessAsync(DocumentItem doc)
+    {
+        try
+        {
+            await DocGlance.Services.Storage.StorageAccessStore.GetFileAsync(doc.FilePath);
+            OpenDocumentCore(doc);
+        }
+        catch (Exception ex)
+        {
+            Infrastructure.Logging.Logger.Error($"Failed to obtain access to '{doc.FilePath}'", ex);
+            await ShowShellMessageAsync(
+                "Can't open file",
+                $"{Path.GetFileName(doc.FilePath)}\n\n{ex.Message}");
+        }
+        finally
+        {
+            _documentOpensInProgress.Remove(doc.FilePath);
+        }
+    }
+
+    private void OpenDocumentCore(DocumentItem doc)
+    {
+        // Another open may have completed while access was being restored.
+        foreach (var kv in _tabData)
+        {
+            if (string.Equals(kv.Value.doc.FilePath, doc.FilePath,
+                              StringComparison.OrdinalIgnoreCase))
+            {
                 Tabs.SelectedItem = kv.Key;
                 if (ReferenceEquals(Tabs.SelectedItem, kv.Key))
                     ShowDocumentTab(kv.Key, kv.Value);
@@ -1080,6 +1122,7 @@ public sealed partial class TitleBarWindow : Window
     private static async System.Threading.Tasks.Task<DocumentItem>
         DocumentItemFromStorageFile(StorageFile file)
     {
+        DocGlance.Services.Storage.StorageAccessStore.RememberFile(file);
         var props = await file.GetBasicPropertiesAsync();
         double bytes = props.Size;
         string[] units = { "B","KB","MB","GB" };

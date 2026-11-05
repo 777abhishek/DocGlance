@@ -1,13 +1,14 @@
 using DocGlance.Infrastructure.Logging;
 using DocGlance.Core.Models;
+using DocGlance.Common.Formatters;
 using DocGlance.Common.Validators;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Windows.Storage;
+using FileAttributes = System.IO.FileAttributes;
 
 namespace DocGlance.Services.FileSystem.Scanner;
 
@@ -25,112 +26,85 @@ public static class FolderScanner
             ".png", ".svg", ".svgz", ".tif", ".tiff", ".wdp",
         };
 
-    public static Task<List<DocumentItem>> ScanFolderAsync(
-        string folderPath, CancellationToken ct = default)
-        => Task.Run(() =>
+    public static async Task<List<DocumentItem>> ScanFolderAsync(
+        StorageFolder root, CancellationToken ct = default)
+    {
+        Logger.Log($"[SCAN] Starting: {root.Path}");
+        var results = new List<DocumentItem>();
+        var pending = new Stack<StorageFolder>();
+        pending.Push(root);
+
+        while (pending.Count > 0)
         {
-            Logger.Log($"[SCAN] Starting: {folderPath}");
-            var result = ScanCore(folderPath, ct);
-            Logger.Log($"[SCAN] Done: {folderPath} — {result.Count} files");
-            return result;
-        }, ct);
+            ct.ThrowIfCancellationRequested();
+            StorageFolder folder = pending.Pop();
 
-    public static async Task<List<DocumentItem>> ScanFoldersAsync(
-        IEnumerable<string> folderPaths,
-        IProgress<int>? progress = null,
-        CancellationToken ct = default)
-    {
-        var paths = folderPaths.ToList();
-        if (paths.Count == 0) return new();
-
-        var bag = new ConcurrentBag<DocumentItem>();
-        int done = 0;
-
-        await Task.Run(() => Parallel.ForEach(paths,
-            new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount, CancellationToken = ct },
-            path =>
+            try
             {
-                try { foreach (var item in ScanCore(path, ct)) bag.Add(item); }
-                catch (OperationCanceledException) { throw; }
-                catch { }
-                finally { progress?.Report(Interlocked.Increment(ref done)); }
-            }), ct);
-
-        return bag.GroupBy(d => d.FilePath, StringComparer.OrdinalIgnoreCase)
-                  .Select(g => g.First()).ToList();
-    }
-
-    // ── Core ──────────────────────────────────────────────────────────────────
-
-    private static List<DocumentItem> ScanCore(string root, CancellationToken ct)
-    {
-        var results = new ConcurrentBag<DocumentItem>();
-        if (!Directory.Exists(root)) return results.ToList();
-
-        Parallel.ForEach(
-            AllDirs(root, ct),
-            new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount / 2, CancellationToken = ct },
-            dir =>
-            {
-                ct.ThrowIfCancellationRequested();
-                ScanDir(dir, results, ct);
-            });
-
-        return results.ToList();
-    }
-
-    private static IEnumerable<string> AllDirs(string root, CancellationToken ct)
-    {
-        var bag = new ConcurrentBag<string> { root };
-        try
-        {
-            foreach (var d in Directory.EnumerateDirectories(root, "*", new EnumerationOptions
-            {
-                RecurseSubdirectories  = true,
-                IgnoreInaccessible     = true,
-                ReturnSpecialDirectories = false,
-                AttributesToSkip       = FileAttributes.System | FileAttributes.Hidden,
-            }))
-            {
-                ct.ThrowIfCancellationRequested();
-                bag.Add(d);
-            }
-        }
-        catch (OperationCanceledException) { throw; }
-        catch { }
-        return bag;
-    }
-
-    private static void ScanDir(string dir, ConcurrentBag<DocumentItem> results, CancellationToken ct)
-    {
-        try
-        {
-            foreach (var path in Directory.EnumerateFiles(dir, "*.*", new EnumerationOptions
-            {
-                RecurseSubdirectories = false,
-                IgnoreInaccessible    = true,
-                AttributesToSkip      = FileAttributes.System | FileAttributes.Hidden,
-            }))
-            {
-                ct.ThrowIfCancellationRequested();
-                try
+                foreach (StorageFile file in await folder.GetFilesAsync())
                 {
-                    var fi = new FileInfo(path);
-                    
-                    // SEC-05: Validate file path before adding to index
-                    if (!PathValidator.IsValidFilePath(fi.FullName, out var reason))
-                    {
-                        Logger.Log($"[SCAN] Skipped invalid path: {fi.Name} (Reason: {reason})");
+                    ct.ThrowIfCancellationRequested();
+                    if (!SupportedExtensions.Contains(Path.GetExtension(file.Name)))
                         continue;
+
+                    try
+                    {
+                        var attributes = File.GetAttributes(file.Path);
+                        if ((attributes & FileAttributes.Hidden) != 0 ||
+                            (attributes & FileAttributes.System) != 0)
+                            continue;
+
+                        if (!PathValidator.IsValidFilePathWithinRoot(file.Path, root.Path, out var reason))
+                        {
+                            Logger.Log($"[SCAN] Skipped invalid path: {file.Name} (Reason: {reason})");
+                            continue;
+                        }
+
+                        var properties = await file.GetBasicPropertiesAsync();
+                        DateTime lastWriteTime = properties.DateModified.DateTime;
+                        long fileSize = checked((long)properties.Size);
+                        results.Add(new DocumentItem
+                        {
+                            Title = file.Name,
+                            FilePath = file.Path,
+                            FolderPath = folder.Path,
+                            FileType = Path.GetExtension(file.Name).TrimStart('.').ToUpperInvariant(),
+                            FileSizeBytes = fileSize,
+                            FileSize = FileSizeFormatter.Format(fileSize),
+                            LastWriteTime = lastWriteTime,
+                            LastModified = lastWriteTime.ToString("MMM dd, yyyy"),
+                        });
                     }
-                    
-                    if (SupportedExtensions.Contains(fi.Extension))
-                        results.Add(DocumentItem.FromFileInfo(fi));
+                    catch (Exception ex)
+                    {
+                        Logger.Warn($"[SCAN] Skipped file '{file.Path}': {ex.Message}");
+                    }
                 }
-                catch { }
+
+                foreach (StorageFolder child in await folder.GetFoldersAsync())
+                {
+                    ct.ThrowIfCancellationRequested();
+                    try
+                    {
+                        var attributes = File.GetAttributes(child.Path);
+                        if ((attributes & FileAttributes.Hidden) == 0 &&
+                            (attributes & FileAttributes.System) == 0)
+                            pending.Push(child);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warn($"[SCAN] Skipped folder '{child.Path}': {ex.Message}");
+                    }
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                Logger.Warn($"[SCAN] Skipped folder '{folder.Path}': {ex.Message}");
             }
         }
-        catch (OperationCanceledException) { throw; }
-        catch { }
+
+        Logger.Log($"[SCAN] Done: {root.Path} — {results.Count} files");
+        return results;
     }
 }

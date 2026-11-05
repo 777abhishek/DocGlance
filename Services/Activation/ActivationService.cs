@@ -51,6 +51,12 @@ public static class ActivationService
         Logger.Log($"[Activation] TryOpenFromActivationArgs: Kind={args.Kind}, " +
                    $"DataType={args.Data?.GetType().Name ?? "null"}");
 
+        if (args.Data is Windows.ApplicationModel.Activation.IFileActivatedEventArgs fileArgs)
+        {
+            foreach (var file in fileArgs.Files.OfType<Windows.Storage.StorageFile>())
+                DocGlance.Services.Storage.StorageAccessStore.RememberFile(file);
+        }
+
         var filePaths = ActivationPaths.FromActivationArgs(args);
 
         if (filePaths.Count == 0)

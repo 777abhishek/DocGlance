@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace DocGlance.Services.Session;
 
@@ -16,7 +17,8 @@ public static class SessionService
         try
         {
             var filePaths = documents
-                .Where(document => !string.IsNullOrEmpty(document.FilePath) && File.Exists(document.FilePath))
+                .Where(document => !string.IsNullOrEmpty(document.FilePath) &&
+                                   StorageAccessStore.HasRememberedFile(document.FilePath))
                 .Select(document => document.FilePath)
                 .ToList();
 
@@ -35,7 +37,7 @@ public static class SessionService
     {
         DocGlance.Infrastructure.Diagnostics.DiagnosticsService.Milestone("SessionRestoreStarted");
 
-        _ = System.Threading.Tasks.Task.Run(() =>
+        _ = Task.Run(async () =>
         {
             try
             {
@@ -50,13 +52,7 @@ public static class SessionService
                         var filePath = state.OpenFiles[i];
                         try
                         {
-                            if (!File.Exists(filePath))
-                            {
-                                Logger.Log($"[Session] Skipping missing file: {filePath}");
-                                continue;
-                            }
-
-                            var document = DocumentItem.FromFileInfo(new FileInfo(filePath));
+                            var document = await CreateDocumentAsync(filePath);
                             if (i == state.SelectedTabIndex)
                                 selectedDocumentIndex = documents.Count;
                             documents.Add(document);
@@ -106,7 +102,7 @@ public static class SessionService
         int selectedIndex,
         Action<IReadOnlyList<DocumentItem>, int> restoreDocuments)
     {
-        _ = System.Threading.Tasks.Task.Run(() =>
+        _ = Task.Run(async () =>
         {
             try
             {
@@ -117,15 +113,10 @@ public static class SessionService
                     string filePath = filePaths[i];
                     try
                     {
-                        if (!File.Exists(filePath))
-                        {
-                            Logger.Log($"[Workspace] Skipping missing file: {filePath}");
-                            continue;
-                        }
-
+                        DocumentItem document = await CreateDocumentAsync(filePath);
                         if (i == selectedIndex)
                             restoredSelectedIndex = documents.Count;
-                        documents.Add(DocumentItem.FromFileInfo(new FileInfo(filePath)));
+                        documents.Add(document);
                     }
                     catch (Exception ex)
                     {
@@ -155,5 +146,26 @@ public static class SessionService
                 Logger.Error("Workspace restore failed", ex);
             }
         });
+    }
+
+    private static async Task<DocumentItem> CreateDocumentAsync(string filePath)
+    {
+        Windows.Storage.StorageFile file =
+            await StorageAccessStore.GetFileAsync(filePath);
+        var properties = await file.GetBasicPropertiesAsync();
+        long size = checked((long)properties.Size);
+        DateTime modified = properties.DateModified.DateTime;
+
+        return new DocumentItem
+        {
+            FilePath = file.Path,
+            Title = file.Name,
+            FolderPath = Path.GetDirectoryName(file.Path) ?? string.Empty,
+            FileType = file.FileType.TrimStart('.').ToUpperInvariant(),
+            FileSizeBytes = size,
+            FileSize = Common.Formatters.FileSizeFormatter.Format(size),
+            LastWriteTime = modified,
+            LastModified = modified.ToString("MMM dd, yyyy"),
+        };
     }
 }

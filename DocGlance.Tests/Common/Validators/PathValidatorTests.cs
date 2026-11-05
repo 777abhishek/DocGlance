@@ -29,6 +29,30 @@ public class PathValidatorTests : IDisposable
     }
 
     [Fact]
+    public void FileInsideSelectedRoot_IsValid()
+    {
+        var root = Path.Combine(_tempDir, "selected");
+        Directory.CreateDirectory(root);
+        var path = Path.Combine(root, "a.txt");
+        File.WriteAllText(path, "hi");
+
+        PathValidator.IsValidFilePathWithinRoot(path, root, out var error).Should().BeTrue();
+        error.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void FileOutsideSelectedRoot_IsRejected()
+    {
+        var root = Path.Combine(_tempDir, "selected");
+        Directory.CreateDirectory(root);
+        var path = Path.Combine(_tempDir, "outside.txt");
+        File.WriteAllText(path, "hi");
+
+        PathValidator.IsValidFilePathWithinRoot(path, root, out var error).Should().BeFalse();
+        error.Should().Contain("outside");
+    }
+
+    [Fact]
     public void MissingFile_IsRejected()
     {
         PathValidator.IsValidFilePath(Path.Combine(_tempDir, "nope.txt"), out var error).Should().BeFalse();

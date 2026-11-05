@@ -386,24 +386,14 @@
   <!-- ═══════════════════════════════════════════════════════════════
        CAPABILITIES
 
-       broadFileSystemAccess — required so the user can open files
-         from anywhere (Downloads, Documents, network shares, custom
-         paths typed directly). Without this, the packaged app can
-         only see files the user explicitly picked via a file picker.
-         The Store requires justification: "Users open arbitrary files
-         via Explorer context menu / drag-and-drop / command line."
-
        internetClient — required for the update checker (GitHub API).
-
-       Note: broadFileSystemAccess is a restricted capability that
-       receives extra scrutiny during Store certification. The review
-       team will check that it is genuinely needed (it is — file
-       viewer opening arbitrary user-selected files).
+       User documents and folders are accessed only after the user
+       selects them through the file/folder picker or opens them through
+       Windows file activation.
        ═══════════════════════════════════════════════════════════════ -->
   <Capabilities>
     <Capability Name="internetClient" />
     <rescap:Capability Name="runFullTrust" />
-    <rescap:Capability Name="broadFileSystemAccess" />
   </Capabilities>
 
 </Package>

@@ -90,8 +90,18 @@ public sealed partial class HomePage : Page
             var cachedFiles = await FileIndexService.LoadIndexedFilesAsync();
 
             foreach (var folder in folders)
+            {
                 if (!ViewModel.ScannedFolders.Contains(folder, StringComparer.OrdinalIgnoreCase))
                     ViewModel.ScannedFolders.Add(folder);
+                try
+                {
+                    await StorageAccessStore.GetFolderAsync(folder);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn($"[SCAN] Cached folder access is unavailable for '{folder}': {ex.Message}");
+                }
+            }
 
             var folderSet = new System.Collections.Generic.HashSet<string>(
                 folders.Select(f => HomeViewModel.NormalizePath(f)),
@@ -142,25 +152,30 @@ public sealed partial class HomePage : Page
 
     private async Task LoadRecentDocumentsAsync(int generation)
     {
-        List<DocumentItem> documents;
-        try
+        var documents = new List<DocumentItem>();
+        foreach (string path in RecentFilesStore.Load())
         {
-            documents = await Task.Run(() =>
+            try
             {
-                var recentDocuments = new List<DocumentItem>();
-                foreach (var path in RecentFilesStore.Load())
+                Windows.Storage.StorageFile file = await StorageAccessStore.GetFileAsync(path);
+                var properties = await file.GetBasicPropertiesAsync();
+                long fileSize = checked((long)properties.Size);
+                documents.Add(new DocumentItem
                 {
-                    if (!File.Exists(path)) continue;
-                    try { recentDocuments.Add(DocumentItem.FromFileInfo(new FileInfo(path))); }
-                    catch { }
-                }
-                return recentDocuments;
-            });
-        }
-        catch (Exception ex)
-        {
-            Logger.Log($"[RecentFiles] Failed to load recent documents: {ex.Message}");
-            return;
+                    FilePath = file.Path,
+                    Title = file.Name,
+                    FolderPath = Path.GetDirectoryName(file.Path) ?? string.Empty,
+                    FileType = file.FileType.TrimStart('.').ToUpperInvariant(),
+                    FileSizeBytes = fileSize,
+                    FileSize = FileSizeFormatter.Format(fileSize),
+                    LastWriteTime = properties.DateModified.DateTime,
+                    LastModified = properties.DateModified.DateTime.ToString("MMM dd, yyyy"),
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"[RecentFiles] Could not restore access to '{path}': {ex.Message}");
+            }
         }
 
         _dispatcherQueue.TryEnqueue(() =>
@@ -447,6 +462,7 @@ public sealed partial class HomePage : Page
 
             var file = await picker.PickSingleFileAsync();
             if (file == null) return;
+            StorageAccessStore.RememberFile(file);
 
             var props = await file.GetBasicPropertiesAsync();
             var doc = new DocumentItem
@@ -483,10 +499,11 @@ public sealed partial class HomePage : Page
 
             var folder = await picker.PickSingleFolderAsync();
             if (folder == null) return;
-            if (ScannedFolders.Contains(folder.Path, StringComparer.OrdinalIgnoreCase)) return;
 
-            ScannedFolders.Add(folder.Path);
-            await ScanFolderAsync(folder.Path);
+            StorageAccessStore.RememberFolder(folder);
+            if (!ScannedFolders.Contains(folder.Path, StringComparer.OrdinalIgnoreCase))
+                ScannedFolders.Add(folder.Path);
+            await ScanFolderAsync(folder);
         }
         catch (Exception ex) { Logger.Error("AddFolder_Click", ex); }
     }
@@ -495,6 +512,7 @@ public sealed partial class HomePage : Page
     {
         if (sender is not Button btn || btn.Tag is not string path) return;
 
+        StorageAccessStore.ForgetFolder(path);
         ViewModel.CancelScanForFolder(path);
         ViewModel.ScannedFolders.Remove(path);
         ViewModel.RemoveFolderFromIndex(path);
@@ -520,13 +538,27 @@ public sealed partial class HomePage : Page
 
     private async Task ScanFolderAsync(string folderPath)
     {
+        try
+        {
+            var folder = await StorageAccessStore.GetFolderAsync(folderPath);
+            await ScanFolderAsync(folder);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"[SCAN] Could not restore folder access: {folderPath}", ex);
+        }
+    }
+
+    private async Task ScanFolderAsync(Windows.Storage.StorageFolder folder)
+    {
+        string folderPath = folder.Path;
         var cts = ViewModel.CreateScanToken(folderPath);
         ViewModel.IsScanning = true;
         try
         {
             var known    = new System.Collections.Generic.HashSet<string>(
                 ViewModel.BackgroundIndex.Select(d => d.FilePath), StringComparer.OrdinalIgnoreCase);
-            var items    = await FolderScanner.ScanFolderAsync(folderPath, cts.Token);
+            var items    = await FolderScanner.ScanFolderAsync(folder, cts.Token);
             var newItems = items.Where(d => known.Add(d.FilePath)).ToList();
 
             foreach (var item in newItems) ViewModel.BackgroundIndex.Add(item);
