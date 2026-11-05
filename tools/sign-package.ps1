@@ -1,16 +1,16 @@
 # ─────────────────────────────────────────────────────────────────────────────
-#  DocGlance one-time signing setup + sign script
+#  DocGlance local signing setup + sign script
 #
 #  Creates a self-signed code-signing certificate (CN=777abhishek), exports
-#  DocGlance.pfx (private, gitignored) and DocGlance.cer (public), and signs
-#  the built MSIX. Self-signed certs are for local testing, not public trust.
+#  its public certificate under installer/output, and signs a chosen file.
+#  This is for local testing only, not for signing public releases.
 #
 #  Usage:
-#    .\tools\sign-package.ps1                     # create cert (if missing) + sign
+#    .\tools\sign-package.ps1                     # create cert (if missing) + sign installer
 #    .\tools\sign-package.ps1 -RecreateCert       # force a new certificate
-#    .\tools\sign-package.ps1 -CertificateOnly    # create/export without requiring an MSIX
+#    .\tools\sign-package.ps1 -CertificateOnly    # create/export without requiring a file
 #    .\tools\sign-package.ps1 -Trust              # trust on this test PC (needs admin)
-#    .\tools\sign-package.ps1 -Path <msix path>   # sign a specific package
+#    .\tools\sign-package.ps1 -Path <file path>   # sign a specific file
 # ─────────────────────────────────────────────────────────────────────────────
 param(
     [switch]$RecreateCert,
@@ -21,9 +21,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $Root      = Split-Path -Parent $PSScriptRoot
-$PfxPath   = "$Root\DocGlance.pfx"
-$CerPath   = "$Root\DocGlance.cer"
-$PfxPassword = "DocGlance2026!"   # keep in sync with DocGlance.csproj
+$OutputDir = "$Root\installer\output"
+$CerPath   = "$OutputDir\DocGlance-local-signing.cer"
 $Subject     = "CN=777abhishek"
 
 function Write-OK([string]$m)   { Write-Host "  OK  $m" -ForegroundColor Green }
@@ -49,11 +48,10 @@ if ($RecreateCert -or -not $cert) {
     Write-OK "Reusing certificate $($cert.Thumbprint)"
 }
 
-# ── 2. Export PFX (private, for signing) and CER (public, for trusting) ──────
-$pw = ConvertTo-SecureString -String $PfxPassword -Force -AsPlainText
-Export-PfxCertificate -Cert $cert -FilePath $PfxPath -Password $pw | Out-Null
+# ── 2. Export the public certificate for local trust setup ───────────────────
+New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 Export-Certificate  -Cert $cert -FilePath $CerPath | Out-Null
-Write-OK "Exported $PfxPath (keep private) and $CerPath (public certificate)"
+Write-OK "Exported $CerPath (public certificate only)"
 
 # ── 3. Trust the certificate on this test machine ─────────────────────────────
 if ($Trust) {
@@ -75,24 +73,21 @@ if ($Trust) {
 }
 
 if ($CertificateOnly) {
-    Write-OK "Certificate setup complete; skipped MSIX signing."
+    Write-OK "Certificate setup complete; skipped file signing."
     exit 0
 }
 
-# ── 4. Locate the MSIX ────────────────────────────────────────────────────────
+# ── 4. Locate the installer executable ──────────────────────────────────────
 if (-not $Path) {
     $candidates = @(
         "$Root\installer\output",
-        "$Root\bin\x64\Release\net8.0-windows10.0.19041.0\win-x64",
-        "$Root\bin\Release\net8.0-windows10.0.19041.0\win-x64",
-        "$Root\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64",
-        "$Root\bin\Debug\net8.0-windows10.0.19041.0\win-x64"
+        "$Root\publish"
     )
-    $msix = $candidates |
-        ForEach-Object { Get-ChildItem $_ -Filter *.msix -ErrorAction SilentlyContinue } |
+    $installer = $candidates |
+        ForEach-Object { Get-ChildItem $_ -Filter DocGlance-Setup-x64.exe -ErrorAction SilentlyContinue } |
         Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    if (-not $msix) { Write-Fail "No .msix found. Build first: dotnet build -c Release -p:Platform=x64"; exit 1 }
-    $Path = $msix.FullName
+    if (-not $installer) { Write-Fail "No installer executable found. Build first with .\build-installer.ps1 -InstallerOnly."; exit 1 }
+    $Path = $installer.FullName
 }
 Write-Info "Package: $Path"
 

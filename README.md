@@ -59,13 +59,33 @@ Set-Location QuickView
 .\build.ps1 -Unpackaged -Configuration Release
 ```
 
-The build script builds the native Rust libraries, builds the app, and launches it. To create the default packaged MSIX build instead, run:
+The build script builds the native Rust libraries, builds the app, and launches it. To build and run the packaged configuration locally, run:
 
 ```powershell
 .\build.ps1 -Configuration Release
 ```
 
-Packaged builds use the package identity and signing configuration in `Package.appxmanifest` and `DocGlance.csproj`; local sideloading may require trusting an appropriate signing certificate. The unpackaged option is generally more convenient for local development.
+The packaged configuration uses the package identity in `Package.appxmanifest`; local sideloading requires trusting a development signing certificate. The unpackaged option is generally more convenient for local development.
+
+To create an MSIX package for local testing, use `.\build-installer.ps1 -MsixOnly`. For a Microsoft Store upload, use `.\build-installer.ps1 -StoreUpload`.
+
+### Build a GitHub release installer
+
+Build an unsigned installer for public distribution:
+
+```powershell
+.\build-installer.ps1 -InstallerOnly -Unsigned
+```
+
+Upload `installer\output\DocGlance-Setup-x64.exe` to a GitHub release tagged with the same version (for example, `v1.0.0`). This mode deliberately avoids the local self-signed certificate; Windows may still show SmartScreen warnings. Do not distribute a self-signed development certificate as proof of publisher identity. `-InstallMsix` is for local sideload testing, and `-StoreUpload` is for Partner Center—not GitHub releases.
+
+After uploading the installer, generate the matching Winget manifests and SHA-256:
+
+```powershell
+.\installer\generate-winget-manifest.ps1 -Version "1.0.0"
+```
+
+The generated manifests are placed under `installer\output\winget\manifests\`; review them and submit them to the Winget repository after confirming the published release URL works.
 
 ### Run tests
 

@@ -20,7 +20,7 @@
   <Identity
     Name="777abhishek.DocGlance"
     Publisher="CN=BBE5B101-6F9F-4DD1-B36A-16425B608E84"
-    Version="20.10.26.0"
+    Version="1.0.0.0"
     ProcessorArchitecture="x64" />
 
   <mp:PhoneIdentity

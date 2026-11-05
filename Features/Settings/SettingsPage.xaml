@@ -446,7 +446,7 @@
                     <Image Source="ms-appx:///Assets/AppIconNew.png" Width="48" Height="48" />
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="DocGlance" FontSize="18" FontWeight="SemiBold" />
-                        <TextBlock x:Name="VersionText" Text="Version 20.10.26"
+                        <TextBlock x:Name="VersionText" Text="Version 1.0.0"
                                    Style="{StaticResource SettingDescriptionStyle}" />
                     </StackPanel>
                 </StackPanel>

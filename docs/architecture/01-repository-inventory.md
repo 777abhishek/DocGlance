@@ -3,7 +3,7 @@
 Full evidence per file lives in `09-file-migration-map.md`; this document is the area-level inventory with measured sizes. "App source" = compiled into `DocGlance.csproj` (excludes `tools/`, `DocGlance.Tests/`, `native/`).
 
 ## Root (11 files)
-`DocGlance.csproj`, `Program.cs` (232), `App.xaml` (22) + `App.xaml.cs` (208), `Package.appxmanifest`, `app.manifest`, `.gitignore`, `DocGlance.cer`, `build.ps1`, `build-installer.ps1`, `README.md`, `LICENSE`.
+`DocGlance.csproj`, `Program.cs` (232), `App.xaml` (22) + `App.xaml.cs` (208), `Package.appxmanifest`, `app.manifest`, `.gitignore`, `build.ps1`, `build-installer.ps1`, `README.md`, `LICENSE`.
 
 ## App source: 150 files, 28,766 LOC
 
@@ -37,10 +37,10 @@ Mirroring layout post-`10db6a8`: `Common/` ×4, `Core/Constants` ×1, `Features/
 5 crates under `native/`: `pdfcraft_ffi` (lib.rs 2,184; pc_ ×27; `vendor/` = third-party hayro/lopdf, 4.1 MB), `wordcraft_ffi` (895; wc_ ×14), `gridcraft_ffi` (746; gc_ ×11), `deckcraft_ffi` (575; dc_ ×12), `translation_ffi` (584; qv_ ×5). Each has committed `Cargo.toml` + `Cargo.lock`. Only change since baseline `25d7fa1`: test temp-dir string rename in `translation_ffi` (RA-08).
 
 ## Assets, installer, docs
-`Assets/`: AppIcon.ico, AppIconNew.png (source artifact), Preview.jpg, BadgeLogo/SmallTile/SplashScreen ladders (+scale variants), Square44x44/71x71/150x150/310x310/Wide310x150/StoreLogo sets, `FileTypeIcons/` (12 .ico+.png pairs), `Fonts/FluentSystemIcons-Regular.ttf`. `installer/`: Inno script, winget generator + generated manifests, assets, local-only `output/`. `docs/`: this `architecture/` set; `offline-translation.md` deleted by user decision (recoverable from history).
+`Assets/`: AppIcon.ico, AppIconNew.png (source artifact), Preview.jpg, BadgeLogo/SmallTile/SplashScreen ladders (+scale variants), Square44x44/71x71/150x150/310x310/Wide310x150/StoreLogo sets, `FileTypeIcons/` (12 .ico+.png pairs), `Fonts/FluentSystemIcons-Regular.ttf`. `installer/`: Inno script, Winget manifest generator, assets, local-only generated `output/`. `docs/`: this `architecture/` set; `offline-translation.md` deleted by user decision (recoverable from history).
 
 ## Not repository content (untracked/local)
-`DocGlance.pfx`, `build.log`, `bin/`, `obj/`, `native/*/target/`, `installer/output/`, `tools/*/obj/`.
+Local private signing bundles, local `.env` files, build logs, `bin/`, `obj/`, `native/*/target/`, `installer/output/`, and `tools/*/obj/`.
 
 ## Classification
 Maintained app source (150) · tests (17) · build tools (6) · docs (14) · assets/resources (`Assets/`, `installer/assets/`) · third-party (`native/pdfcraft_ffi/vendor/`) · generated (`installer/winget/`) · build outputs (untracked list above). No vendored .NET dependencies; NuGet packages: EFCore.Sqlite 8.0.11, WindowsAppSDK 2.4.0, Win2D 1.4.0, CommunityToolkit.Mvvm 8.4.2, System.Security.Permissions 8.0.0.

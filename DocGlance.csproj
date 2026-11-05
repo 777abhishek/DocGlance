@@ -15,11 +15,9 @@
          EnableMsixTooling wires up the manifest and packaging pipeline. -->
     <EnableMsixTooling>true</EnableMsixTooling>
 
-    <!-- Sign the MSIX with our self-signed cert (Subject must match Identity Publisher).
-         Signed by thumbprint from the current user's cert store: MSBuild cannot import
-         CNG-keyed PFX files (APPX0105). Recreate/re-export with tools\sign-package.ps1. -->
-    <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
-    <PackageCertificateThumbprint>959E3537149C890544FEC5E729DD9A0DC961C44A</PackageCertificateThumbprint>
+    <!-- The packaging script supplies the matching local or Store signing certificate.
+         Do not pin a machine-specific certificate thumbprint in the project. -->
+    <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
 
     <!-- Define PACKAGED symbol so code can branch at compile time between
          packaged (Store) and unpackaged (direct EXE) behaviors. -->
@@ -59,8 +57,8 @@
 
     <!-- Version / file info -->
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>20.10.26.0</FileVersion>
-    <InformationalVersion>20.10.26</InformationalVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <InformationalVersion>1.0.0</InformationalVersion>
     <Company>777abhishek</Company>
     <Product>DocGlance</Product>
     <Description>Fast universal file viewer for Windows</Description>

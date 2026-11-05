@@ -10,9 +10,10 @@
 ; ─────────────────────────────────────────────────────────────────────────────
 
 #define AppName      "DocGlance"
-#define AppVersion   "20.10.26"
+#define AppVersion   "1.0.0"
+#define AppFileVersion AppVersion + ".0"
 #define AppPublisher "777abhishek"
-#define AppURL       "https://github.com/777abhishek/DocGlance"
+#define AppURL       "https://github.com/777abhishek/QuickView"
 #define AppExeName   "DocGlance.exe"
 #define PublishDir   "..\publish"
 
@@ -47,10 +48,12 @@ WizardStyle=classic
 ; Dual-mode install: admin or current user (casual users install without UAC)
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog commandline
-; Sign the installer and generated uninstaller. build-installer.ps1 supplies
-; DocGlanceSign from the Windows SDK and the local signing certificate.
+; Local builds are signed by default. Public GitHub builds can explicitly use
+; the unsigned mode; self-signed certificates are not public identity proofs.
+#ifndef UnsignedBuild
 SignTool=DocGlanceSign
 SignedUninstaller=yes
+#endif
 ; Uninstall
 UninstallDisplayIcon={app}\{#AppExeName}
 UninstallDisplayName={#AppName}
@@ -59,7 +62,7 @@ CloseApplications=yes
 ; Create uninstall entry in Add/Remove Programs
 CreateUninstallRegKey=yes
 ; Version info embedded into the installer EXE (visible in Explorer → Properties)
-VersionInfoVersion=20.10.26.0
+VersionInfoVersion={#AppFileVersion}
 VersionInfoDescription={#AppName} Setup
 VersionInfoProductName={#AppName}
 VersionInfoCompany={#AppPublisher}

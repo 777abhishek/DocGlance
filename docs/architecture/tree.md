@@ -24,8 +24,7 @@ DocGlance/
 │                                                  activation/session logic lives in Services (done)
 ├── Package.appxmanifest                 [FINAL]   MSIX identity + file associations
 ├── app.manifest                         [FINAL]   PerMonitorV2 DPI
-├── .gitignore                           [FINAL]   whitelists docs/architecture/ + offline-translation.md
-├── DocGlance.cer                        [FINAL]   public signing cert (git-tracked; used by installer)
+├── .gitignore                           [FINAL]   excludes local builds, secrets, and generated packages
 ├── build.ps1                            [FINAL]   managed build/publish
 ├── build-installer.ps1                  [FINAL]   MSIX + installer pipeline
 ├── README.md                            [FINAL]   project README (added in 10db6a8)
@@ -354,10 +353,10 @@ DocGlance/
     ├── architecture/                     [FINAL]  this 14-document set (re-audit 2026-10-16)
     └── offline-translation.md            [DELETE-DECISION] removed at user request in 10db6a8;
         recoverable from git history (`git show 6fa6515:docs/offline-translation.md`);
-        .gitignore whitelist line retained in case it is restored
+        whitelist line retained in case it is restored
 ```
 
-Local (untracked) artifacts, not repository content: `DocGlance.pfx`, `build.log`, `bin/`, `obj/`, `native/*/target/`, `installer/output/`, `tools/*/obj/`.
+Local (ignored) artifacts, not repository content: private signing bundles, local `.env` files, `build.log`, `bin/`, `obj/`, `native/*/target/`, `installer/output/`, and `tools/*/obj/`.
 
 ---
 
