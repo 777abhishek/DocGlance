@@ -1,6 +1,7 @@
 using DocGlance.Core.Enums;
 using DocGlance.Core.Models;
 using DocGlance.Features.Viewer.Contracts;
+using DocGlance.Infrastructure.Diagnostics;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
@@ -57,6 +58,7 @@ public sealed partial class ImageViewer : UserControl, IDocumentViewer, ISupport
         _imageWidth = loadedImage.Width;
         _imageHeight = loadedImage.Height;
         SetFitMode(FitMode.FitPage);
+        DocumentOpenTrace.For(document)?.MarkFirstContentRendered();
     }
 
     public Task CleanupAsync()

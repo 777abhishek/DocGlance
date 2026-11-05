@@ -10,6 +10,7 @@ using Windows.UI;
 using Windows.Storage;
 using DocGlance.Core.Models;
 using DocGlance.Features.Viewer.Contracts;
+using DocGlance.Infrastructure.Diagnostics;
 using DocGlance.Infrastructure.Logging;
 
 namespace DocGlance.Features.Viewer.Formats.Rtf;
@@ -49,6 +50,7 @@ public sealed partial class RtfViewer : UserControl, IDocumentViewer
 
             ApplyThemeTextColor();
             ShowLoading(false);
+            DocumentOpenTrace.For(document)?.MarkFirstContentRendered();
             Logger.Log($"[RtfViewer] Successfully loaded RTF: {Path.GetFileName(filePath)}");
         }
         catch (Exception ex)

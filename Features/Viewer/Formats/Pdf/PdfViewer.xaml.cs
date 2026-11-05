@@ -14,6 +14,7 @@ using DocGlance.Core.Models;
 using DocGlance.Features.Viewer.Contracts;
 using DocGlance.Core.Enums;
 using DocGlance.Features.Viewer.Components;
+using DocGlance.Infrastructure.Diagnostics;
 using DocGlance.Rendering.Pdf.Models;
 using DocGlance.Rendering.Pdf;
 using DocGlance.Infrastructure.Logging;
@@ -43,6 +44,7 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
     private int _textMapGeneration;
     private const int TextMapCacheCapacity = 12;
     private PdfDocumentState? _documentState;
+    private DocumentOpenTrace? _openTrace;
     private string? _selectedTextCache;
     private (PdfDocumentState State, int Page, int Start, int End, int Generation)? _selectedTextCacheKey;
 
@@ -704,6 +706,7 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
     public async Task LoadAsync(DocumentItem document, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(document);
+        _openTrace = DocumentOpenTrace.For(document);
         if (string.IsNullOrWhiteSpace(document.FilePath))
             throw new ArgumentException("The document has no file path.", nameof(document));
 
@@ -720,6 +723,8 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
         DocumentState = result.Document;
         PdfRotation = 0;
         CreateThumbnailItems(result.Document);
+        if (_thumbnails.Count == 0)
+            _openTrace?.Mark("ThumbnailsNotAvailable", "Format=PDF");
     }
 
     internal void CreateThumbnailItems(PdfDocumentState documentState)
@@ -747,15 +752,20 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
     {
         PdfDocumentState? documentState = DocumentState;
         if (!sidebarVisible || documentState == null)
+        {
+            _openTrace?.Mark("ThumbnailsNotScheduled", "Format=PDF SidebarHiddenOrNoDocument");
             return Task.CompletedTask;
+        }
 
         var prefetchCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         Task task;
+        DocumentOpenTrace? trace = _openTrace;
         lock (_thumbnailPrefetchSync)
         {
             CancelThumbnailPrefetchLocked();
             _thumbnailPrefetchCts = prefetchCts;
-            task = PrefetchThumbnailsCoreAsync(centerPage, documentState, prefetchCts);
+            trace?.Mark("ThumbnailsStarted", "Format=PDF");
+            task = PrefetchThumbnailsCoreAsync(centerPage, documentState, prefetchCts, trace);
             _thumbnailPrefetchTask = task;
         }
         return task;
@@ -764,9 +774,11 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
     private async Task PrefetchThumbnailsCoreAsync(
         int centerPage,
         PdfDocumentState documentState,
-        CancellationTokenSource prefetchCts)
+        CancellationTokenSource prefetchCts,
+        DocumentOpenTrace? trace)
     {
         CancellationToken token = prefetchCts.Token;
+        int renderedCount = 0;
         try
         {
             int firstPage = Math.Max(0, centerPage - 8);
@@ -792,6 +804,7 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
                     if (ReferenceEquals(DocumentState, documentState) && pageIndex < _thumbnails.Count)
                         _thumbnails[pageIndex].Thumbnail = bitmap;
                 });
+                renderedCount++;
             }
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
@@ -803,6 +816,9 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
         }
         finally
         {
+            trace?.Mark(token.IsCancellationRequested
+                ? "ThumbnailsCanceled"
+                : "ThumbnailsCompleted", $"Format=PDF Rendered={renderedCount}");
             lock (_thumbnailPrefetchSync)
             {
                 if (ReferenceEquals(_thumbnailPrefetchCts, prefetchCts))
@@ -855,6 +871,7 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
     {
         CleanupViewportRendering();
         await StopThumbnailPrefetchAsync();
+        _openTrace = null;
         ResetTextPageMaps();
         SetAnnotations(Array.Empty<PdfTextAnnotation>());
         _outline = Array.Empty<OutlineItem>();

@@ -27,6 +27,7 @@ public sealed partial class HomeViewModel : ObservableObject
 
     /// <summary>Full background index from all scanned folders.</summary>
     public ConcurrentBag<DocumentItem> BackgroundIndex { get; } = new();
+    private readonly object _backgroundIndexLock = new();
 
     // ── View State ────────────────────────────────────────────────────────────
 
@@ -242,13 +243,70 @@ public sealed partial class HomeViewModel : ObservableObject
     /// <summary>Removes all indexed files whose path starts with <paramref name="folderPath"/>.</summary>
     public void RemoveFolderFromIndex(string folderPath)
     {
-        string prefix = NormalizePath(folderPath);
-        var keep = BackgroundIndex
-            .Where(d => !d.FilePath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            .ToList();
+        lock (_backgroundIndexLock)
+        {
+            var keep = BackgroundIndex
+                .Where(document => !IsPathWithinRoot(document.FilePath, folderPath))
+                .ToList();
+            ReplaceBackgroundIndex(keep);
+        }
+    }
 
+    public void UpsertIndexedDocument(DocumentItem document)
+    {
+        lock (_backgroundIndexLock)
+        {
+            var items = BackgroundIndex
+                .Where(existing => !string.Equals(
+                    existing.FilePath, document.FilePath, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            items.Add(document);
+            ReplaceBackgroundIndex(items);
+        }
+    }
+
+    public void RemoveIndexedDocument(string filePath)
+    {
+        lock (_backgroundIndexLock)
+        {
+            var items = BackgroundIndex
+                .Where(document => !string.Equals(
+                    document.FilePath, filePath, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            ReplaceBackgroundIndex(items);
+        }
+    }
+
+    public void ReconcileIndexedFolder(
+        string folderPath, IEnumerable<DocumentItem> documents, bool isComplete)
+    {
+        lock (_backgroundIndexLock)
+        {
+            var items = BackgroundIndex
+                .Where(document => !isComplete || !IsPathWithinRoot(document.FilePath, folderPath))
+                .GroupBy(document => document.FilePath, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.First(),
+                    StringComparer.OrdinalIgnoreCase);
+            foreach (DocumentItem document in documents)
+                items[document.FilePath] = document;
+            ReplaceBackgroundIndex(items.Values);
+        }
+    }
+
+    private void ReplaceBackgroundIndex(IEnumerable<DocumentItem> documents)
+    {
         while (BackgroundIndex.TryTake(out _)) { }
-        foreach (var item in keep) BackgroundIndex.Add(item);
+        foreach (DocumentItem document in documents)
+            BackgroundIndex.Add(document);
+    }
+
+    public static bool IsPathWithinRoot(string filePath, string folderPath)
+    {
+        string root = Path.GetFullPath(folderPath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        string path = Path.GetFullPath(filePath);
+        return path.StartsWith(root, StringComparison.OrdinalIgnoreCase);
     }
 
     // ── Type Group Matching ──────────────────────────────────────────────────

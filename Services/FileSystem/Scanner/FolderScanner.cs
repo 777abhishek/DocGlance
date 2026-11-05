@@ -26,85 +26,104 @@ public static class FolderScanner
             ".png", ".svg", ".svgz", ".tif", ".tiff", ".wdp",
         };
 
-    public static async Task<List<DocumentItem>> ScanFolderAsync(
+    public static Task<FolderScanResult> ScanFolderAsync(
         StorageFolder root, CancellationToken ct = default)
     {
-        Logger.Log($"[SCAN] Starting: {root.Path}");
+        string rootPath = Path.GetFullPath(root.Path);
+        return ScanDirectoryAsync(rootPath, ct);
+    }
+
+    public static Task<FolderScanResult> ScanDirectoryAsync(
+        string rootPath, CancellationToken ct = default)
+    {
+        Logger.Log($"[SCAN] Starting: {rootPath}");
         var results = new List<DocumentItem>();
-        var pending = new Stack<StorageFolder>();
-        pending.Push(root);
+        bool isComplete = true;
 
-        while (pending.Count > 0)
+        try
         {
-            ct.ThrowIfCancellationRequested();
-            StorageFolder folder = pending.Pop();
-
-            try
+            var options = new EnumerationOptions
             {
-                foreach (StorageFile file in await folder.GetFilesAsync())
-                {
-                    ct.ThrowIfCancellationRequested();
-                    if (!SupportedExtensions.Contains(Path.GetExtension(file.Name)))
-                        continue;
+                RecurseSubdirectories = true,
+                IgnoreInaccessible = true,
+                AttributesToSkip = FileAttributes.Hidden | FileAttributes.System | FileAttributes.ReparsePoint,
+            };
 
-                    try
-                    {
-                        var attributes = File.GetAttributes(file.Path);
-                        if ((attributes & FileAttributes.Hidden) != 0 ||
-                            (attributes & FileAttributes.System) != 0)
-                            continue;
-
-                        if (!PathValidator.IsValidFilePathWithinRoot(file.Path, root.Path, out var reason))
-                        {
-                            Logger.Log($"[SCAN] Skipped invalid path: {file.Name} (Reason: {reason})");
-                            continue;
-                        }
-
-                        var properties = await file.GetBasicPropertiesAsync();
-                        DateTime lastWriteTime = properties.DateModified.DateTime;
-                        long fileSize = checked((long)properties.Size);
-                        results.Add(new DocumentItem
-                        {
-                            Title = file.Name,
-                            FilePath = file.Path,
-                            FolderPath = folder.Path,
-                            FileType = Path.GetExtension(file.Name).TrimStart('.').ToUpperInvariant(),
-                            FileSizeBytes = fileSize,
-                            FileSize = FileSizeFormatter.Format(fileSize),
-                            LastWriteTime = lastWriteTime,
-                            LastModified = lastWriteTime.ToString("MMM dd, yyyy"),
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Warn($"[SCAN] Skipped file '{file.Path}': {ex.Message}");
-                    }
-                }
-
-                foreach (StorageFolder child in await folder.GetFoldersAsync())
-                {
-                    ct.ThrowIfCancellationRequested();
-                    try
-                    {
-                        var attributes = File.GetAttributes(child.Path);
-                        if ((attributes & FileAttributes.Hidden) == 0 &&
-                            (attributes & FileAttributes.System) == 0)
-                            pending.Push(child);
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Warn($"[SCAN] Skipped folder '{child.Path}': {ex.Message}");
-                    }
-                }
-            }
-            catch (OperationCanceledException) { throw; }
-            catch (Exception ex)
+            foreach (string path in Directory.EnumerateFiles(rootPath, "*", options))
             {
-                Logger.Warn($"[SCAN] Skipped folder '{folder.Path}': {ex.Message}");
+                ct.ThrowIfCancellationRequested();
+                if (!IsSupportedFilePath(path))
+                    continue;
+
+                try
+                {
+                    DocumentItem? item = ReadDocument(path, rootPath);
+                    if (item != null)
+                        results.Add(item);
+                }
+                catch (Exception ex)
+                {
+                    isComplete = false;
+                    Logger.Warn($"[SCAN] Skipped file '{path}': {ex.Message}");
+                }
             }
         }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            isComplete = false;
+            Logger.Warn($"[SCAN] Failed to enumerate '{rootPath}': {ex.Message}");
+        }
 
-        Logger.Log($"[SCAN] Done: {root.Path} — {results.Count} files");
-        return results;
+        Logger.Log($"[SCAN] Done: {rootPath} — {results.Count} files (complete: {isComplete})");
+        return Task.FromResult(new FolderScanResult(results, isComplete));
+    }
+
+    public static bool IsSupportedFilePath(string path) =>
+        SupportedExtensions.Contains(Path.GetExtension(path));
+
+    public static Task<DocumentItem?> ReadDocumentAsync(string filePath, string rootPath)
+        => Task.FromResult(ReadDocument(filePath, rootPath));
+
+    private static DocumentItem? ReadDocument(string filePath, string rootPath)
+    {
+        if (!IsSupportedFilePath(filePath))
+            return null;
+
+        try
+        {
+            var attributes = File.GetAttributes(filePath);
+            if ((attributes & (FileAttributes.Hidden | FileAttributes.System |
+                               FileAttributes.Directory | FileAttributes.ReparsePoint)) != 0)
+                return null;
+
+            if (!PathValidator.IsValidFilePathWithinRoot(filePath, rootPath, out var reason))
+            {
+                Logger.Log($"[SCAN] Skipped invalid path: {filePath} (Reason: {reason})");
+                return null;
+            }
+
+            var info = new FileInfo(filePath);
+            DateTime lastWriteTime = info.LastWriteTime;
+            long fileSize = info.Length;
+            return new DocumentItem
+            {
+                Title = info.Name,
+                FilePath = info.FullName,
+                FolderPath = info.DirectoryName ?? string.Empty,
+                FileType = info.Extension.TrimStart('.').ToUpperInvariant(),
+                FileSizeBytes = fileSize,
+                FileSize = FileSizeFormatter.Format(fileSize),
+                LastWriteTime = lastWriteTime,
+                LastModified = lastWriteTime.ToString("MMM dd, yyyy"),
+            };
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"[SCAN] Skipped file '{filePath}': {ex.Message}");
+            return null;
+        }
     }
 }
+
+public sealed record FolderScanResult(List<DocumentItem> Items, bool IsComplete);

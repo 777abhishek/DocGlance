@@ -1,5 +1,6 @@
 using DocGlance.Core.Models;
 using DocGlance.Features.Viewer.Contracts;
+using DocGlance.Infrastructure.Diagnostics;
 using DocGlance.Infrastructure.Logging;
 using DocGlance.Interop.WordCraft;
 using DocGlance.Rendering.Docx;
@@ -40,6 +41,7 @@ public sealed partial class DocxViewer :
     private DispatcherTimer? _renderDebounceTimer;
     private CancellationTokenSource? _renderCts;
     private CancellationTokenSource? _documentCts;
+    private DocumentOpenTrace? _openTrace;
     private double _zoom = 1.0;
     private double _rotation;
     private int _currentPage;
@@ -66,6 +68,7 @@ public sealed partial class DocxViewer :
     {
         ArgumentNullException.ThrowIfNull(document);
         await CleanupAsync();
+        _openTrace = DocumentOpenTrace.For(document);
         cancellationToken.ThrowIfCancellationRequested();
 
         if (!WordCraftNative.IsAvailable)
@@ -113,6 +116,7 @@ public sealed partial class DocxViewer :
 
         DocxDocument? document = Document;
         Document = null;
+        _openTrace = null;
         document?.Dispose();
         _pageTopLp = Array.Empty<double>();
         _pageWidthLp = Array.Empty<double>();
@@ -361,6 +365,8 @@ public sealed partial class DocxViewer :
                 ViewportCanvas.Children.Add(image);
                 _pageCache[i] = image;
                 _pageScale[i] = renderScale;
+                if (i == 0)
+                    _openTrace?.MarkFirstContentRendered();
             }
 
             int[] toRemove = _pageCache.Keys
@@ -636,27 +642,42 @@ public sealed partial class DocxViewer :
 
     private async Task LoadThumbnailsAsync(DocxDocument document, CancellationToken cancellationToken)
     {
-        for (int i = 0; i < document.PageCount && i < 50; i++)
+        DocumentOpenTrace? trace = _openTrace;
+        trace?.Mark("ThumbnailsStarted", "Format=DOCX");
+        int renderedCount = 0;
+        try
         {
-            if (cancellationToken.IsCancellationRequested)
-                return;
-            try
+            for (int i = 0; i < document.PageCount && i < 50; i++)
             {
-                WriteableBitmap? thumbnail = await document.RenderPageAsync(
-                    i, RenderBudget.ThumbnailOfficeScale, cancellationToken);
-                if (thumbnail == null)
-                    continue;
-                if (ReferenceEquals(Document, document) && i < _thumbnails.Count)
-                    _thumbnails[i].Thumbnail = thumbnail;
+                if (cancellationToken.IsCancellationRequested)
+                    return;
+                try
+                {
+                    WriteableBitmap? thumbnail = await document.RenderPageAsync(
+                        i, RenderBudget.ThumbnailOfficeScale, cancellationToken);
+                    if (thumbnail == null)
+                        continue;
+                    if (ReferenceEquals(Document, document) && i < _thumbnails.Count)
+                    {
+                        _thumbnails[i].Thumbnail = thumbnail;
+                        renderedCount++;
+                    }
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"LoadDocxThumbnails: page {i}", ex);
+                }
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                return;
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"LoadDocxThumbnails: page {i}", ex);
-            }
+        }
+        finally
+        {
+            trace?.Mark(cancellationToken.IsCancellationRequested
+                ? "ThumbnailsCanceled"
+                : "ThumbnailsCompleted", $"Format=DOCX Rendered={renderedCount}");
         }
     }
 }

@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml.Media.Imaging;
 using DocGlance.Interop.WordCraft;
 using DocGlance.Rendering.Shared;
+using DocGlance.Infrastructure.Diagnostics;
 using System;
 using System.Collections.Generic;
 using System.IO.Compression;
@@ -69,6 +70,7 @@ public sealed class DocxDocument : IDisposable
             return null;
         }
 
+        DocumentOpenTrace.Current?.Mark("NativeParseStarted", $"Format=DOCX Bytes={bytes.Length}");
         var handle = await Task.Run(() =>
         {
             unsafe
@@ -80,6 +82,8 @@ public sealed class DocxDocument : IDisposable
             }
         }, ct);
 
+        DocumentOpenTrace.Current?.Mark("NativeParseCompleted",
+            $"Format=DOCX Success={handle.IsValid}");
         return handle.IsValid ? new DocxDocument(handle) : null;
     }
 

@@ -3,6 +3,7 @@ using DocGlance.Core.Models;
 using DocGlance.Interop.DeckCraft;
 using DocGlance.Rendering.Pdf.Models;
 using DocGlance.Rendering.Shared;
+using DocGlance.Infrastructure.Diagnostics;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -73,6 +74,7 @@ public sealed class PptxDocument : IDisposable
             return null;
         }
 
+        DocumentOpenTrace.Current?.Mark("NativeParseStarted", $"Format=PPTX Bytes={bytes.Length}");
         var handle = await Task.Run(() =>
         {
             unsafe
@@ -84,6 +86,8 @@ public sealed class PptxDocument : IDisposable
             }
         }, ct);
 
+        DocumentOpenTrace.Current?.Mark("NativeParseCompleted",
+            $"Format=PPTX Success={handle.IsValid}");
         return handle.IsValid ? new PptxDocument(handle) : null;
     }
 

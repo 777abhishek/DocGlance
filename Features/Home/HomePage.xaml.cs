@@ -5,9 +5,11 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
@@ -42,6 +44,22 @@ public sealed partial class HomePage : Page
     private int    _recentLoadGeneration;
     private DispatcherQueue _dispatcherQueue = null!;
     private List<DocGlance.Services.Storage.SavedWorkspace> _allWorkspaces = new();
+    private Task _databaseInitializationTask = Task.CompletedTask;
+    private static readonly SemaphoreSlim ScanScheduler = new(3, 3);
+    private readonly Dictionary<string, FileSystemWatcher> _folderWatchers =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, CancellationTokenSource> _watchDebounce =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Timer> _folderReconciliationTimers =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, PendingFolderChanges> _pendingFolderChanges =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, byte> _activeFolderRoots =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _rootSynchronization =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _watcherGate = new();
+    private int _activeScanCount;
 
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -66,14 +84,10 @@ public sealed partial class HomePage : Page
         RefreshDisplay();
 
         // Initialize database in background - don't block UI
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await FileIndexService.InitializeDatabaseAsync();
-            }
-            catch (Exception ex) { Logger.Log($"[DB ERROR] {ex.Message}"); }
-        });
+        _databaseInitializationTask = Task.Run(FileIndexService.InitializeDatabaseAsync);
+        _ = _databaseInitializationTask.ContinueWith(
+            task => Logger.Error("Database initialization failed.", task.Exception!.GetBaseException()),
+            TaskContinuationOptions.OnlyOnFaulted);
     }
 
 
@@ -85,7 +99,7 @@ public sealed partial class HomePage : Page
     {
         try
         {
-            ViewModel.IsScanning = true;
+            await _databaseInitializationTask;
             var folders     = await FileIndexService.GetScannedFoldersAsync();
             var cachedFiles = await FileIndexService.LoadIndexedFilesAsync();
 
@@ -96,6 +110,7 @@ public sealed partial class HomePage : Page
                 try
                 {
                     await StorageAccessStore.GetFolderAsync(folder);
+                    StartFolderWatcher(folder);
                 }
                 catch (Exception ex)
                 {
@@ -109,13 +124,14 @@ public sealed partial class HomePage : Page
 
             foreach (var file in cachedFiles)
                 if (File.Exists(file.FilePath) &&
-                    folderSet.Any(f => file.FilePath.StartsWith(f, StringComparison.OrdinalIgnoreCase)))
-                    ViewModel.BackgroundIndex.Add(file);
+                    folderSet.Any(f => HomeViewModel.IsPathWithinRoot(file.FilePath, f)))
+                    ViewModel.UpsertIndexedDocument(file);
 
             RefreshDisplay();
+            foreach (string folder in folders)
+                _ = ScanFolderAsync(folder);
         }
         catch (Exception ex) { Logger.Log($"[DB ERROR] LoadCachedIndex: {ex.Message}"); }
-        finally { ViewModel.IsScanning = false; }
     }
 
 
@@ -500,9 +516,18 @@ public sealed partial class HomePage : Page
             var folder = await picker.PickSingleFolderAsync();
             if (folder == null) return;
 
+            if (ScannedFolders.Any(existing =>
+                    HomeViewModel.IsPathWithinRoot(folder.Path, existing) ||
+                    HomeViewModel.IsPathWithinRoot(existing, folder.Path)))
+            {
+                Logger.Warn($"[SCAN] Ignored overlapping folder root: {folder.Path}");
+                return;
+            }
+
             StorageAccessStore.RememberFolder(folder);
             if (!ScannedFolders.Contains(folder.Path, StringComparer.OrdinalIgnoreCase))
                 ScannedFolders.Add(folder.Path);
+            StartFolderWatcher(folder.Path);
             await ScanFolderAsync(folder);
         }
         catch (Exception ex) { Logger.Error("AddFolder_Click", ex); }
@@ -513,6 +538,7 @@ public sealed partial class HomePage : Page
         if (sender is not Button btn || btn.Tag is not string path) return;
 
         StorageAccessStore.ForgetFolder(path);
+        StopFolderWatcher(path);
         ViewModel.CancelScanForFolder(path);
         ViewModel.ScannedFolders.Remove(path);
         ViewModel.RemoveFolderFromIndex(path);
@@ -529,11 +555,7 @@ public sealed partial class HomePage : Page
     private async void Rescan_Click(object sender, RoutedEventArgs e)
     {
         ViewModel.CancelAllScans();
-        while (ViewModel.BackgroundIndex.TryTake(out _)) { }
-        FilteredDocuments.Clear();
-        await FileIndexService.ClearIndexAsync();
-        foreach (var folder in ViewModel.ScannedFolders.ToList())
-            await ScanFolderAsync(folder);
+        await Task.WhenAll(ViewModel.ScannedFolders.ToList().Select(ScanFolderAsync));
     }
 
     private async Task ScanFolderAsync(string folderPath)
@@ -553,36 +575,281 @@ public sealed partial class HomePage : Page
     {
         string folderPath = folder.Path;
         var cts = ViewModel.CreateScanToken(folderPath);
+        Interlocked.Increment(ref _activeScanCount);
         ViewModel.IsScanning = true;
+        bool schedulerAcquired = false;
+        bool rootAcquired = false;
+        SemaphoreSlim rootGate = _rootSynchronization.GetOrAdd(
+            folderPath, _ => new SemaphoreSlim(1, 1));
         try
         {
-            var known    = new System.Collections.Generic.HashSet<string>(
-                ViewModel.BackgroundIndex.Select(d => d.FilePath), StringComparer.OrdinalIgnoreCase);
-            var items    = await FolderScanner.ScanFolderAsync(folder, cts.Token);
-            var newItems = items.Where(d => known.Add(d.FilePath)).ToList();
-
-            foreach (var item in newItems) ViewModel.BackgroundIndex.Add(item);
+            await ScanScheduler.WaitAsync(cts.Token);
+            schedulerAcquired = true;
+            await rootGate.WaitAsync(cts.Token);
+            rootAcquired = true;
+            FolderScanResult result = await FolderScanner.ScanFolderAsync(folder, cts.Token);
+            cts.Token.ThrowIfCancellationRequested();
+            await FileIndexService.CommitScanAsync(
+                folderPath, result.Items, result.IsComplete, cts.Token);
+            cts.Token.ThrowIfCancellationRequested();
+            if (!ScannedFolders.Contains(folderPath, StringComparer.OrdinalIgnoreCase))
+                return;
+            ViewModel.ReconcileIndexedFolder(folderPath, result.Items, result.IsComplete);
             RefreshDisplay();
-
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await FileIndexService.SaveFilesToIndexAsync(newItems);
-                    await FileIndexService.AddScannedFolderAsync(folderPath, newItems.Count);
-                }
-                catch (Exception ex) { Logger.Log($"[DB] Save: {ex.Message}"); }
-            });
-
-            _ = LoadThumbnailsAsync(newItems, cts.Token);
+            _ = LoadThumbnailsAsync(result.Items, cts.Token);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { Logger.Log($"[SCAN] {folderPath}: {ex.Message}"); }
         finally
         {
-            ViewModel.IsScanning = false;
+            if (rootAcquired)
+                rootGate.Release();
+            if (schedulerAcquired)
+                ScanScheduler.Release();
+            ViewModel.IsScanning = Interlocked.Decrement(ref _activeScanCount) > 0;
             ViewModel.RemoveScanToken(folderPath, cts);
         }
+    }
+
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // LIVE FOLDER MONITORING
+    // ═════════════════════════════════════════════════════════════════════════
+
+    private void StartFolderWatcher(string folderPath)
+    {
+        _activeFolderRoots.TryAdd(folderPath, 0);
+        lock (_watcherGate)
+        {
+            if (_folderWatchers.ContainsKey(folderPath))
+                return;
+
+            try
+            {
+                var watcher = new FileSystemWatcher(folderPath)
+                {
+                    IncludeSubdirectories = true,
+                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName |
+                                   NotifyFilters.LastWrite | NotifyFilters.Size,
+                    InternalBufferSize = 64 * 1024,
+                };
+                watcher.Created += (_, e) =>
+                    QueueFolderChange(folderPath, e.FullPath, Directory.Exists(e.FullPath));
+                watcher.Changed += (_, e) =>
+                    QueueFolderChange(folderPath, e.FullPath, Directory.Exists(e.FullPath));
+                watcher.Deleted += (_, e) =>
+                    QueueFolderChange(folderPath, e.FullPath,
+                        !FolderScanner.IsSupportedFilePath(e.FullPath) ||
+                        ViewModel.BackgroundIndex.Any(document =>
+                            HomeViewModel.IsPathWithinRoot(document.FilePath, e.FullPath)));
+                watcher.Renamed += (_, e) =>
+                {
+                    bool isDirectory = Directory.Exists(e.FullPath);
+                    QueueFolderChange(folderPath, e.FullPath, isDirectory, e.OldFullPath);
+                };
+                watcher.Error += (_, e) =>
+                {
+                    Logger.Warn($"[WATCH] Rescanning '{folderPath}' after watcher error: {e.GetException().Message}");
+                    QueueFolderChange(folderPath, folderPath, requiresRescan: true);
+                };
+                watcher.EnableRaisingEvents = true;
+                _folderWatchers.Add(folderPath, watcher);
+                _folderReconciliationTimers.Add(folderPath, new Timer(
+                    _ => QueueFolderRescan(folderPath),
+                    null,
+                    TimeSpan.FromMinutes(30),
+                    TimeSpan.FromMinutes(30)));
+                Logger.Log($"[WATCH] Monitoring: {folderPath}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"[WATCH] Could not monitor '{folderPath}'", ex);
+            }
+        }
+    }
+
+    private void StopFolderWatcher(string folderPath)
+    {
+        _activeFolderRoots.TryRemove(folderPath, out _);
+        lock (_watcherGate)
+        {
+            if (_folderWatchers.Remove(folderPath, out FileSystemWatcher? watcher))
+            {
+                watcher.EnableRaisingEvents = false;
+                watcher.Dispose();
+            }
+            if (_watchDebounce.Remove(folderPath, out CancellationTokenSource? debounce))
+            {
+                debounce.Cancel();
+                debounce.Dispose();
+            }
+            if (_folderReconciliationTimers.Remove(folderPath, out Timer? timer))
+                timer.Dispose();
+            _pendingFolderChanges.TryRemove(folderPath, out _);
+        }
+    }
+
+    private void QueueFolderChange(
+        string folderPath, string path, bool requiresRescan, string? oldPath = null)
+    {
+        PendingFolderChanges pending = _pendingFolderChanges.GetOrAdd(
+            folderPath, _ => new PendingFolderChanges());
+        lock (pending)
+        {
+            pending.Paths.Add(path);
+            if (oldPath != null)
+                pending.Paths.Add(oldPath);
+            pending.RequiresRescan |= requiresRescan;
+        }
+
+        var debounce = new CancellationTokenSource();
+        lock (_watcherGate)
+        {
+            if (_watchDebounce.TryGetValue(folderPath, out CancellationTokenSource? previous))
+            {
+                previous.Cancel();
+                previous.Dispose();
+            }
+            _watchDebounce[folderPath] = debounce;
+        }
+        _ = FlushFolderChangesAsync(folderPath, debounce);
+    }
+
+    private async Task FlushFolderChangesAsync(
+        string folderPath, CancellationTokenSource debounce)
+    {
+        try
+        {
+            await Task.Delay(350, debounce.Token);
+            lock (_watcherGate)
+            {
+                if (!_watchDebounce.TryGetValue(folderPath, out CancellationTokenSource? current) ||
+                    !ReferenceEquals(current, debounce))
+                    return;
+                _watchDebounce.Remove(folderPath);
+            }
+
+            if (!_pendingFolderChanges.TryRemove(folderPath, out PendingFolderChanges? pending))
+                return;
+            string[] paths;
+            bool requiresRescan;
+            lock (pending)
+            {
+                paths = pending.Paths.ToArray();
+                requiresRescan = pending.RequiresRescan;
+            }
+
+            if (requiresRescan)
+            {
+                QueueFolderRescan(folderPath);
+                return;
+            }
+            await ApplyFolderChangesAsync(folderPath, paths);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { Logger.Error($"[WATCH] Could not apply changes for '{folderPath}'", ex); }
+        finally
+        {
+            debounce.Dispose();
+        }
+    }
+
+    private void QueueFolderRescan(string folderPath)
+    {
+        if (!_activeFolderRoots.ContainsKey(folderPath))
+            return;
+        if (!_dispatcherQueue.TryEnqueue(() =>
+            {
+                if (_activeFolderRoots.ContainsKey(folderPath))
+                    _ = ScanFolderAsync(folderPath);
+            }))
+            Logger.Warn($"[WATCH] Could not queue reconciliation for '{folderPath}'.");
+    }
+
+    private async Task ApplyFolderChangesAsync(string folderPath, IEnumerable<string> paths)
+    {
+        SemaphoreSlim rootGate = _rootSynchronization.GetOrAdd(
+            folderPath, _ => new SemaphoreSlim(1, 1));
+        await rootGate.WaitAsync();
+        try
+        {
+            await ApplyFolderChangesCoreAsync(folderPath, paths);
+        }
+        finally { rootGate.Release(); }
+    }
+
+    private async Task ApplyFolderChangesCoreAsync(string folderPath, IEnumerable<string> paths)
+    {
+        if (!_activeFolderRoots.ContainsKey(folderPath))
+            return;
+
+        var changedDocuments = new List<DocumentItem>();
+        var removedPaths = new List<string>();
+        bool requiresRescan = false;
+        foreach (string path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!_activeFolderRoots.ContainsKey(folderPath))
+                return;
+            if (!FolderScanner.IsSupportedFilePath(path))
+                continue;
+
+            try
+            {
+                DocumentItem? document = File.Exists(path)
+                    ? await FolderScanner.ReadDocumentAsync(path, folderPath)
+                    : null;
+                if (document == null)
+                    removedPaths.Add(path);
+                else
+                    changedDocuments.Add(document);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"[WATCH] Could not update '{path}': {ex.Message}");
+                requiresRescan = true;
+            }
+        }
+
+        if (changedDocuments.Count > 0 || removedPaths.Count > 0)
+        {
+            if (!_activeFolderRoots.ContainsKey(folderPath))
+                return;
+            try
+            {
+                await FileIndexService.ApplyFileChangesAsync(changedDocuments, removedPaths);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"[WATCH] Could not persist changes for '{folderPath}': {ex.Message}");
+                requiresRescan = true;
+            }
+        }
+
+        if (changedDocuments.Count > 0 || removedPaths.Count > 0)
+        {
+            if (!_dispatcherQueue.TryEnqueue(() =>
+                {
+                    if (!_activeFolderRoots.ContainsKey(folderPath))
+                        return;
+                    foreach (string path in removedPaths)
+                        ViewModel.RemoveIndexedDocument(path);
+                    foreach (DocumentItem document in changedDocuments)
+                        ViewModel.UpsertIndexedDocument(document);
+                    RefreshDisplay();
+                }))
+                Logger.Warn($"[WATCH] Could not update the UI for changes in '{folderPath}'.");
+        }
+
+        if (changedDocuments.Count > 0)
+            _ = LoadThumbnailsAsync(changedDocuments, CancellationToken.None);
+        if (requiresRescan)
+            QueueFolderRescan(folderPath);
+    }
+
+    private sealed class PendingFolderChanges
+    {
+        public HashSet<string> Paths { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public bool RequiresRescan { get; set; }
     }
 
 

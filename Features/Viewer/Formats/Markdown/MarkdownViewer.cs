@@ -1,5 +1,6 @@
 using DocGlance.Core.Models;
 using DocGlance.Features.Viewer.Contracts;
+using DocGlance.Infrastructure.Diagnostics;
 using DocGlance.Infrastructure.Logging;
 using DocGlance.Rendering.Shared;
 using Markdig;
@@ -85,6 +86,7 @@ public sealed class MarkdownViewer : UserControl, IDocumentViewer, ISupportsSear
         {
             _document.Children.Add(mermaidDiagram);
             Logger.Log("[MarkdownViewer] Rendered native Mermaid flowchart");
+            DocumentOpenTrace.For(document)?.MarkFirstContentRendered();
             return;
         }
 
@@ -94,11 +96,16 @@ public sealed class MarkdownViewer : UserControl, IDocumentViewer, ISupportsSear
         renderToken.ThrowIfCancellationRequested();
 
         int renderedBlocks = RenderBlocks(parsed, 0);
-        if (renderLength < loaded.Text.Length || loaded.Truncated)
+        bool hasLimitNotice = renderLength < loaded.Text.Length || loaded.Truncated;
+        if (hasLimitNotice)
         {
             AddNotice("Preview limited to keep memory use low. Open the file in a text editor to view the full source.");
         }
 
+        if (renderedBlocks > 0 || hasLimitNotice)
+            DocumentOpenTrace.For(document)?.MarkFirstContentRendered();
+        else
+            DocumentOpenTrace.For(document)?.Mark("ContentPublished", "EmptyMarkdown");
         Logger.Log(
             $"[MarkdownViewer] Rendered {renderedBlocks:N0} blocks and {renderLength:N0} characters");
     }

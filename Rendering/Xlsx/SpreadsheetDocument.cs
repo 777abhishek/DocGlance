@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Globalization;
+using DocGlance.Infrastructure.Diagnostics;
 
 namespace DocGlance.Rendering.Xlsx;
 
@@ -65,6 +66,7 @@ public sealed class SpreadsheetDocument : IDisposable
             return null;
         }
 
+        DocumentOpenTrace.Current?.Mark("NativeParseStarted", $"Format=XLSX Bytes={bytes.Length}");
         var handle = await Task.Run(() =>
         {
             unsafe
@@ -76,6 +78,8 @@ public sealed class SpreadsheetDocument : IDisposable
             }
         }, ct);
 
+        DocumentOpenTrace.Current?.Mark("NativeParseCompleted",
+            $"Format=XLSX Success={handle.IsValid}");
         return handle.IsValid ? new SpreadsheetDocument(handle) : null;
     }
 
