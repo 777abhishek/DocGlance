@@ -180,7 +180,8 @@ public sealed class PdfViewerService : IPdfViewerService, IDisposable
         int pageIndex,
         float zoomFactor = 1.0f,
         Action<WriteableBitmap>? onFullQuality = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        double rasterizationScale = 1.0)
     {
         if (_document == null)
             return null;
@@ -191,8 +192,8 @@ public sealed class PdfViewerService : IPdfViewerService, IDisposable
 
         try
         {
-            // Calculate DPI based on zoom factor (96 at 1.0x, 144 at 1.5x, 192 at 2.0x)
-            float renderDpi = PdfRenderer.GetRenderDpi(zoomFactor);
+            // Calculate DPI based on zoom factor and display scaling (96 at 1.0x on 100% DPI, 144 on 150% DPI)
+            float renderDpi = PdfRenderer.GetRenderDpi(zoomFactor, rasterizationScale);
             
             var bmp = await PdfRenderer.RenderPageAsync(_document, pageIndex, renderDpi, ct);
 

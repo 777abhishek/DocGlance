@@ -230,7 +230,7 @@ public sealed partial class ViewerPage
         Clipboard.SetContent(pkg);
     }
 
-    private async void CopyPageTextMenuItem_Click(object? sender, EventArgs e)
+    private void CopyPageTextMenuItem_Click(object? sender, EventArgs e)
     {
         if (_spreadsheetDocument != null)
         {

@@ -13,7 +13,8 @@ deckcraft-render = { git = "https://github.com/storytold/deckcraft", tag = "v0.1
 deckcraft-model  = { git = "https://github.com/storytold/deckcraft", tag = "v0.15.0" }
 deckcraft-fonts  = { git = "https://github.com/storytold/deckcraft", tag = "v0.15.0" }
 deckcraft-geom   = { git = "https://github.com/storytold/deckcraft", tag = "v0.15.0" }
-deckcraft-pdf    = { git = "https://github.com/storytold/deckcraft", tag = "v0.15.0" }
+# deckcraft-pdf removed — not used by the PPTX renderer FFI surface and
+# generated an `unused_dependencies` cargo warning on every build.
 
 [patch.crates-io]
 krilla = { git = "https://github.com/storytold/craft-libs", rev = "c5a1cbfb5f9049f9270955caffb5bee5997aebf7" }

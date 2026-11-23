@@ -377,8 +377,10 @@ public sealed partial class ViewerPage : Page
         ViewModel.IsLoading = on;
     }
 
-    // Natural zoom is 1.0 — render at screen DPI × zoom dynamically.
-    private float NaturalZoom => 1.0f;
+    // Natural zoom accounts for display DPI scaling (PerMonitorV2).
+    // On a 150%-scaled monitor RasterizationScale = 1.5, so "100%" zoom
+    // must render at 1.5× device pixels to remain pixel-perfect.
+    private float NaturalZoom => (float)(XamlRoot?.RasterizationScale ?? 1.0);
 
     // ── Top-level load entry point ────────────────────────────────────────────
 
@@ -437,12 +439,16 @@ public sealed partial class ViewerPage : Page
         _officeSelectionFocus   = null;
         _pptxTextMaps.Clear();
 
-        await SpreadsheetViewerControl.CleanupAsync();
-        await ImageViewerControl.CleanupAsync();
-        await MarkdownViewerControl.CleanupAsync();
-        await PdfViewerControl.CleanupAsync();
-        await DocxViewerControl.CleanupAsync();
-        await PptxViewerControl.CleanupAsync();
+        // Parallelise all viewer cleanups: they own independent native handles
+        // and cancel their own CTS tokens, so running concurrently is safe and
+        // avoids the previous ~6× sequential wait time before each file load.
+        await Task.WhenAll(
+            SpreadsheetViewerControl.CleanupAsync(),
+            ImageViewerControl.CleanupAsync(),
+            MarkdownViewerControl.CleanupAsync(),
+            PdfViewerControl.CleanupAsync(),
+            DocxViewerControl.CleanupAsync(),
+            PptxViewerControl.CleanupAsync());
 
         _cts = new CancellationTokenSource();
         var ct = _cts.Token;

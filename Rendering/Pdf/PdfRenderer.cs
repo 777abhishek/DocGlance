@@ -29,8 +29,8 @@ public static class PdfRenderer
     public static bool IsAvailable
         => File.Exists(Path.Combine(AppContext.BaseDirectory, "pdfcraft_ffi.dll"));
 
-    public static float GetRenderDpi(float zoomFactor)
-        => ScreenDpi * Math.Clamp(zoomFactor, 0.5f, 8.0f) * RenderBudget.TextOversample;
+    public static float GetRenderDpi(float zoomFactor, double rasterizationScale = 1.0)
+        => ScreenDpi * (float)Math.Max(1.0, rasterizationScale) * Math.Clamp(zoomFactor, 0.5f, 8.0f) * RenderBudget.TextOversample;
 
     public static void EnsureInitialized()
     {

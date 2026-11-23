@@ -54,6 +54,13 @@ public sealed partial class TitleBarWindow : Window
 
     private readonly QuickLookHotkeyService _quickLookHotkeyService;
 
+    // ── Session save debounce ──────────────────────────────────────────────────
+    // Calling SaveSession() on every tab open/close causes synchronous disk I/O
+    // on the UI thread. We coalesce rapid bursts (tab restore, workspace open)
+    // into a single write 400 ms after the last call.
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _sessionSaveDebounceTimer;
+    private static readonly TimeSpan SessionSaveDebounceInterval = TimeSpan.FromMilliseconds(400);
+
     // ── HWND (for pickers in unpackaged apps) ─────────────────────────────────
     public IntPtr Hwnd => WindowNative.GetWindowHandle(this);
 
@@ -158,10 +165,12 @@ public sealed partial class TitleBarWindow : Window
         };
         
         // Save session when the window closes.
+        // SaveSessionImmediate() bypasses the debounce timer so the write is
+        // guaranteed to complete before the process tears down.
         Closed += (s, e) =>
         {
             ReleaseQuickLookHotkeyOwner();
-            SaveSession();
+            SaveSessionImmediate();
         };
 
         // Set the window icon
@@ -412,15 +421,12 @@ public sealed partial class TitleBarWindow : Window
         var flyout = new MenuFlyout();
         flyout.Items.Add(CreateTabMenuItem("Save all open tabs as workspace", SaveWorkspaceFromTab_Click, tab));
 
+        // "Add this tab to workspace" submenu — intentionally left empty here.
+        // Populating it requires WorkspaceStore.Load() (a disk read); doing that
+        // at tab-creation time blocks the UI thread on every OpenDocument call.
+        // Instead we populate it lazily the first time the user actually opens
+        // the flyout, via the Opening event below.
         var addToWorkspace = new MenuFlyoutSubItem { Text = "Add this tab to workspace" };
-        foreach (var workspace in DocGlance.Services.Storage.WorkspaceStore.Load())
-        {
-            addToWorkspace.Items.Add(CreateTabMenuItem(
-                workspace.Name,
-                AddTabToWorkspace_Click,
-                (workspace.Id, document.FilePath)));
-        }
-        addToWorkspace.IsEnabled = addToWorkspace.Items.Count > 0;
         flyout.Items.Add(addToWorkspace);
         flyout.Items.Add(new MenuFlyoutSeparator());
         flyout.Items.Add(CreateTabMenuItem("Open in new window", OpenTabInNewWindow_Click, tab));
@@ -431,6 +437,21 @@ public sealed partial class TitleBarWindow : Window
         flyout.Items.Add(CreateTabMenuItem("Close other tabs", CloseOtherTabs_Click, tab));
         flyout.Items.Add(CreateTabMenuItem("Close tabs to the right", CloseTabsToRight_Click, tab));
         tab.ContextFlyout = flyout;
+
+        // Lazy workspace population: runs only when the user right-clicks the tab,
+        // so WorkspaceStore.Load() never blocks the tab-open hot path.
+        flyout.Opening += (_, _) =>
+        {
+            addToWorkspace.Items.Clear();
+            foreach (var workspace in DocGlance.Services.Storage.WorkspaceStore.Load())
+            {
+                addToWorkspace.Items.Add(CreateTabMenuItem(
+                    workspace.Name,
+                    AddTabToWorkspace_Click,
+                    (workspace.Id, document.FilePath)));
+            }
+            addToWorkspace.IsEnabled = addToWorkspace.Items.Count > 0;
+        };
     }
 
     private static MenuFlyoutItem CreateTabMenuItem(string text, RoutedEventHandler handler, object tag)
@@ -1345,15 +1366,40 @@ public sealed partial class TitleBarWindow : Window
     // ── Session State Management ──────────────────────────────────────────────
 
     /// <summary>
-    /// Saves the current session state (open tabs) so it can be restored on next launch.
+    /// Schedules a session save 400 ms after the last call, coalescing rapid
+    /// bursts (tab restore, workspace open) into a single background disk write.
+    /// Call sites that must guarantee a flush before the process exits (window
+    /// Closed event) should call SaveSessionImmediate() instead.
     /// </summary>
     public void SaveSession()
     {
+        if (_sessionSaveDebounceTimer == null)
+        {
+            _sessionSaveDebounceTimer = DispatcherQueue.CreateTimer();
+            _sessionSaveDebounceTimer.IsRepeating = false;
+            _sessionSaveDebounceTimer.Interval = SessionSaveDebounceInterval;
+            _sessionSaveDebounceTimer.Tick += (_, _) => SaveSessionImmediate();
+        }
+        _sessionSaveDebounceTimer.Stop();
+        _sessionSaveDebounceTimer.Start();
+    }
+
+    /// <summary>
+    /// Immediately writes the current session to disk on a background thread.
+    /// Used by the window Closed event and any path that must guarantee a flush.
+    /// </summary>
+    private void SaveSessionImmediate()
+    {
+        _sessionSaveDebounceTimer?.Stop();
+
+        // Snapshot UI state on the UI thread, then hand off to a thread-pool
+        // thread so the actual disk write never blocks the message loop.
         int selectedIndex = -1;
         if (Tabs.SelectedItem is TabViewItem selectedTab && _tabData.ContainsKey(selectedTab))
             selectedIndex = _tabData.Keys.ToList().IndexOf(selectedTab);
 
-        SessionService.SaveSession(_tabData.Values.Select(value => value.doc), selectedIndex);
+        var docs = _tabData.Values.Select(value => value.doc).ToList();
+        _ = Task.Run(() => SessionService.SaveSession(docs, selectedIndex));
     }
 
     /// <summary>

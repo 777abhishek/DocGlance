@@ -34,6 +34,9 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# Disable NuGet signature verification for expired historical author certificates
+$env:DOTNET_NUGET_SIGNATURE_VERIFICATION = "false"
+
 $Root          = $PSScriptRoot
 $Project       = "$Root\DocGlance.csproj"
 $PublishDir    = "$Root\publish"

@@ -72,7 +72,7 @@ public sealed partial class HomePage : Page
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
     }
 
-    private async void Page_Loaded(object sender, RoutedEventArgs e)
+    private void Page_Loaded(object sender, RoutedEventArgs e)
     {
         _loaded = true;
         RecentModeButton.IsChecked = true;
@@ -168,31 +168,52 @@ public sealed partial class HomePage : Page
 
     private async Task LoadRecentDocumentsAsync(int generation)
     {
-        var documents = new List<DocumentItem>();
-        foreach (string path in RecentFilesStore.Load())
+        // Fan out all WinRT StorageFile and GetBasicProperties calls in parallel
+        // (bounded to 8 concurrent calls so we don't hammer the Future Access List).
+        // Previously these ran sequentially: on 20+ recent files the UI would stall
+        // for several hundred milliseconds on each app launch.
+        var paths = RecentFilesStore.Load().ToList();
+        var semaphore = new SemaphoreSlim(8, 8);
+        var tasks = paths.Select(async path =>
         {
+            await semaphore.WaitAsync().ConfigureAwait(false);
             try
             {
-                Windows.Storage.StorageFile file = await StorageAccessStore.GetFileAsync(path);
-                var properties = await file.GetBasicPropertiesAsync();
+                Windows.Storage.StorageFile file = await StorageAccessStore.GetFileAsync(path).ConfigureAwait(false);
+                var properties = await file.GetBasicPropertiesAsync().AsTask().ConfigureAwait(false);
                 long fileSize = checked((long)properties.Size);
-                documents.Add(new DocumentItem
+                return (DocumentItem?)new DocumentItem
                 {
-                    FilePath = file.Path,
-                    Title = file.Name,
-                    FolderPath = Path.GetDirectoryName(file.Path) ?? string.Empty,
-                    FileType = file.FileType.TrimStart('.').ToUpperInvariant(),
+                    FilePath      = file.Path,
+                    Title         = file.Name,
+                    FolderPath    = Path.GetDirectoryName(file.Path) ?? string.Empty,
+                    FileType      = file.FileType.TrimStart('.').ToUpperInvariant(),
                     FileSizeBytes = fileSize,
-                    FileSize = FileSizeFormatter.Format(fileSize),
+                    FileSize      = FileSizeFormatter.Format(fileSize),
                     LastWriteTime = properties.DateModified.DateTime,
-                    LastModified = properties.DateModified.DateTime.ToString("MMM dd, yyyy"),
-                });
+                    LastModified  = properties.DateModified.DateTime.ToString("MMM dd, yyyy"),
+                };
             }
             catch (Exception ex)
             {
                 Logger.Warn($"[RecentFiles] Could not restore access to '{path}': {ex.Message}");
+                return (DocumentItem?)null;
             }
-        }
+            finally
+            {
+                semaphore.Release();
+            }
+        });
+
+        DocumentItem?[] results = await Task.WhenAll(tasks).ConfigureAwait(false);
+
+        // Filter nulls and preserve the original recency order (paths list order).
+        var documents = results
+            .Select((item, i) => (item, originalIndex: i))
+            .Where(t => t.item != null)
+            .OrderBy(t => t.originalIndex)
+            .Select(t => t.item!)
+            .ToList();
 
         _dispatcherQueue.TryEnqueue(() =>
         {

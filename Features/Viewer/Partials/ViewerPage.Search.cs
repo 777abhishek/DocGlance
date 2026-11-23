@@ -220,7 +220,7 @@ public sealed partial class ViewerPage
 
     // ── Ctrl+C on the scroll viewer → copy current page text ─────────────────
 
-    private async void DocumentScrollViewer_KeyDown(object sender, KeyRoutedEventArgs e)
+    private void DocumentScrollViewer_KeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (e.Key != Windows.System.VirtualKey.C) return;
 

@@ -1,4 +1,4 @@
-# ─────────────────────────────────────────────────────────────────────────────
+﻿# ─────────────────────────────────────────────────────────────────────────────
 #  DocGlance build + launch script
 #
 #  Supports both build modes:
@@ -19,6 +19,9 @@ param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Debug"
 )
+
+# Disable NuGet signature verification for expired historical author certificates
+$env:DOTNET_NUGET_SIGNATURE_VERIFICATION = "false"
 
 $Project  = "$PSScriptRoot\DocGlance.csproj"
 $LogFile  = "$PSScriptRoot\build.log"

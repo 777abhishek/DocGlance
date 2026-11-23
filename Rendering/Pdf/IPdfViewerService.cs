@@ -52,7 +52,8 @@ public interface IPdfViewerService
         int pageIndex,
         float zoomFactor = 1.0f,
         Action<WriteableBitmap>? onFullQuality = null,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        double rasterizationScale = 1.0);
 
     /// <summary>Renders a thumbnail at low DPI.</summary>
     Task<WriteableBitmap?> RenderThumbnailAsync(

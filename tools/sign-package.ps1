@@ -1,4 +1,4 @@
-# ─────────────────────────────────────────────────────────────────────────────
+﻿# ─────────────────────────────────────────────────────────────────────────────
 #  DocGlance local signing setup + sign script
 #
 #  Creates a self-signed code-signing certificate (CN=777abhishek), exports

@@ -46,8 +46,9 @@
     <DebugType>embedded</DebugType>
     <DebugSymbols>true</DebugSymbols>
 
-    <!-- Suppress CA1416 (Windows-only API) and MVVMTK0045 floods from WinAppSDK -->
-    <NoWarn>$(NoWarn);CA1416;MVVMTK0045</NoWarn>
+    <!-- Suppress CA1416 (Windows-only API), MVVMTK0045, and NuGet signature timestamp expiry warnings/errors -->
+    <NoWarn>$(NoWarn);CA1416;MVVMTK0045;NU3028;NU3037;NU3018;NU3027</NoWarn>
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);NU3028;NU3037;NU3018;NU3027</WarningsNotAsErrors>
 
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
 

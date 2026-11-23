@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 namespace DocGlance.Common.Formatters;
 
@@ -35,7 +36,7 @@ public static class DateFormatter
                 return "Just now";
             if (diff.TotalHours < 1)
                 return $"{(int)diff.TotalMinutes} min ago";
-            return date.ToString("h:mm tt");
+            return date.ToString("h:mm tt", CultureInfo.InvariantCulture);
         }
         
         // Yesterday
@@ -51,10 +52,10 @@ public static class DateFormatter
         
         // Current year: show month and day
         if (date.Year == now.Year)
-            return date.ToString("MMM dd");
+            return date.ToString("MMM dd", CultureInfo.InvariantCulture);
         
         // Different year: show full date
-        return date.ToString("MMM dd, yyyy");
+        return date.ToString("MMM dd, yyyy", CultureInfo.InvariantCulture);
     }
 
     /// <summary>
@@ -66,7 +67,7 @@ public static class DateFormatter
         if (date.Kind == DateTimeKind.Utc)
             date = date.ToLocalTime();
 
-        return date.ToString("MMM dd, yyyy 'at' h:mm tt");
+        return date.ToString("MMM dd, yyyy 'at' h:mm tt", CultureInfo.InvariantCulture);
     }
 
     /// <summary>
@@ -78,7 +79,7 @@ public static class DateFormatter
         if (date.Kind == DateTimeKind.Utc)
             date = date.ToLocalTime();
 
-        return date.ToString("yyyy-MM-dd");
+        return date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
     }
 
     /// <summary>
@@ -94,13 +95,13 @@ public static class DateFormatter
 
         // Same year and month
         if (start.Year == end.Year && start.Month == end.Month)
-            return $"{start:MMM dd}-{end:dd}";
+            return $"{start.ToString("MMM dd", CultureInfo.InvariantCulture)}-{end.ToString("dd", CultureInfo.InvariantCulture)}";
 
         // Same year, different months
         if (start.Year == end.Year)
-            return $"{start:MMM dd} - {end:MMM dd}";
+            return $"{start.ToString("MMM dd", CultureInfo.InvariantCulture)} - {end.ToString("MMM dd", CultureInfo.InvariantCulture)}";
 
         // Different years
-        return $"{start:MMM dd, yyyy} - {end:MMM dd, yyyy}";
+        return $"{start.ToString("MMM dd, yyyy", CultureInfo.InvariantCulture)} - {end.ToString("MMM dd, yyyy", CultureInfo.InvariantCulture)}";
     }
 }

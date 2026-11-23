@@ -1,9 +1,24 @@
-# DocGlance — build all native Rust libraries
+﻿# DocGlance — build all native Rust libraries
 # Run from: C:\Code\DocGlance\native\
 # Requires: rustup (winget install Rustlang.Rustup)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Continue"  # Don't treat stderr as terminating errors
+
+# Ensure MSVC tools and Windows SDK are discoverable by rustc and cc-rs (for VS 2026 / Dev18)
+$vsPath = "C:\Program Files\Microsoft Visual Studio\18\Community"
+$msvcDir = "$vsPath\VC\Tools\MSVC"
+if (Test-Path $msvcDir) {
+    $msvcVer = (Get-ChildItem $msvcDir | Sort-Object Name -Descending | Select-Object -First 1).FullName
+    $sdkLib = "C:\Program Files (x86)\Windows Kits\10\Lib\10.0.26100.0"
+
+    $env:VSINSTALLDIR = "$vsPath\"
+    $env:VCINSTALLDIR = "$vsPath\VC\"
+    $env:WindowsSdkDir = "C:\Program Files (x86)\Windows Kits\10\"
+    $env:WindowsSDKVersion = "10.0.26100.0\"
+    $env:PATH = "$msvcVer\bin\HostX64\x64;$env:PATH"
+    $env:LIB = "$msvcVer\lib\x64;$sdkLib\um\x64;$sdkLib\ucrt\x64"
+}
 
 $targets = @(
     "..\..\bin\Debug\net8.0-windows10.0.19041.0\win-x64",
