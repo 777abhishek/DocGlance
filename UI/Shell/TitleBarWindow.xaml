@@ -68,7 +68,7 @@
              CONTENT AREA — each tab's page is shown here.
              Home page always present; viewer pages added per tab.
              ═══════════════════════════════════════════════════════ -->
-        <Grid Grid.Row="2" Background="{ThemeResource AppContentBackground}">
+        <Grid x:Name="PageContentGrid" Grid.Row="2" Background="{ThemeResource AppContentBackground}">
 
             <!-- Home page — always loaded, shown/hidden per tab selection -->
             <Frame x:Name="HomeFrame"
@@ -102,6 +102,27 @@
                     <ScalarTransition Duration="0:0:0.15" />
                 </ContentControl.OpacityTransition>
             </ContentControl>
+
+            <Grid x:Name="DocumentOpeningOverlay"
+                  Canvas.ZIndex="20"
+                  Visibility="Collapsed"
+                  Background="{ThemeResource AppContentBackground}">
+                <StackPanel HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Spacing="14">
+                    <ProgressRing IsActive="True"
+                                  Width="44"
+                                  Height="44"
+                                  HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="DocumentOpeningText"
+                               Text="Opening document..."
+                               Style="{StaticResource BodyTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               TextTrimming="CharacterEllipsis"
+                               MaxWidth="420"
+                               TextAlignment="Center"/>
+                </StackPanel>
+            </Grid>
 
         </Grid>
 

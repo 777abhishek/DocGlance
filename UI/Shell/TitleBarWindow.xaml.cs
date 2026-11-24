@@ -333,6 +333,8 @@ public sealed partial class TitleBarWindow : Window
                 var existingTrace = Infrastructure.Diagnostics.DocumentOpenTrace.Start(doc);
                 existingTrace.Mark("ExistingTabFocused");
                 existingTrace.MarkFirstContentRendered();
+                if (ReferenceEquals(Tabs.SelectedItem, _homeTab))
+                    ShowDocumentOpening($"Opening {doc.Title}...");
                 Tabs.SelectedItem = kv.Key;
                 if (ReferenceEquals(Tabs.SelectedItem, kv.Key))
                     ShowDocumentTab(kv.Key, kv.Value);
@@ -343,17 +345,26 @@ public sealed partial class TitleBarWindow : Window
         if (!_documentOpensInProgress.Add(doc.FilePath))
             return;
 
-        _ = OpenDocumentWithAccessAsync(doc, Infrastructure.Diagnostics.DocumentOpenTrace.Start(doc));
+        bool openingFromHome = ReferenceEquals(Tabs.SelectedItem, _homeTab);
+        if (openingFromHome)
+            ShowDocumentOpening($"Opening {doc.Title}...");
+
+        _ = OpenDocumentWithAccessAsync(
+            doc, Infrastructure.Diagnostics.DocumentOpenTrace.Start(doc), openingFromHome);
     }
 
     private async Task OpenDocumentWithAccessAsync(
-        DocumentItem doc, Infrastructure.Diagnostics.DocumentOpenTrace trace)
+        DocumentItem doc,
+        Infrastructure.Diagnostics.DocumentOpenTrace trace,
+        bool openingFromHome)
     {
+        bool opened = false;
         try
         {
             await DocGlance.Services.Storage.StorageAccessStore.GetFileAsync(doc.FilePath);
             trace.Mark("FileAccessAcquired");
             OpenDocumentCore(doc, trace);
+            opened = true;
         }
         catch (Exception ex)
         {
@@ -366,8 +377,19 @@ public sealed partial class TitleBarWindow : Window
         finally
         {
             _documentOpensInProgress.Remove(doc.FilePath);
+            if (openingFromHome && !opened)
+                HideDocumentOpening();
         }
     }
+
+    private void ShowDocumentOpening(string message)
+    {
+        DocumentOpeningText.Text = message;
+        DocumentOpeningOverlay.Visibility = Visibility.Visible;
+    }
+
+    private void HideDocumentOpening() =>
+        DocumentOpeningOverlay.Visibility = Visibility.Collapsed;
 
     private void OpenDocumentCore(
         DocumentItem doc, Infrastructure.Diagnostics.DocumentOpenTrace trace)
@@ -634,12 +656,18 @@ public sealed partial class TitleBarWindow : Window
 
         RefreshRecentDocuments();
         if (tabs.Count == 0)
+        {
+            HideDocumentOpening();
             return;
+        }
 
         int index = selectedIndex >= 0 && selectedIndex < tabs.Count
             ? selectedIndex
             : tabs.Count - 1;
         Tabs.SelectedItem = tabs[index];
+        if (ReferenceEquals(Tabs.SelectedItem, tabs[index]) &&
+            _tabData.TryGetValue(tabs[index], out var selectedData))
+            ShowDocumentTab(tabs[index], selectedData);
         SaveSession();
     }
 
@@ -669,11 +697,13 @@ public sealed partial class TitleBarWindow : Window
             target.Activate();
         }
 
+        target.ShowDocumentOpening($"Opening {workspace.Name}...");
         SessionService.RestoreWorkspace(
             target.DispatcherQueue,
             workspace.FilePaths,
             workspace.SelectedIndex,
-            target.OpenWorkspaceDocuments);
+            target.OpenWorkspaceDocuments,
+            target.HideDocumentOpening);
     }
 
     public DocGlance.Services.Storage.SavedWorkspace SaveCurrentWorkspace(
@@ -720,6 +750,7 @@ public sealed partial class TitleBarWindow : Window
         DocHost.Content = viewer;
         DocHost.Visibility = Visibility.Visible;
         HomeFrame.Visibility = Visibility.Collapsed;
+        HideDocumentOpening();
         Title = data.doc.Title + " — DocGlance";
     }
 
@@ -899,6 +930,7 @@ public sealed partial class TitleBarWindow : Window
             DocHost.Content = viewerData.viewer;
             DocHost.Visibility = Visibility.Visible;
             DocHost.Opacity = 1.0;
+            HideDocumentOpening();
         }
         // Special tabs (Settings, etc.) - stored in _specialTabs
         else if (_specialTabs.TryGetValue(selected, out var content))
@@ -915,6 +947,7 @@ public sealed partial class TitleBarWindow : Window
             DocHost.Content = content;
             DocHost.Visibility = Visibility.Visible;
             DocHost.Opacity = 1.0;
+            HideDocumentOpening();
         }
     }
 
@@ -1407,7 +1440,9 @@ public sealed partial class TitleBarWindow : Window
     /// </summary>
     public void RestoreSession()
     {
-        SessionService.RestoreSession(DispatcherQueue, RestoreDocuments);
+        ShowDocumentOpening("Restoring your session...");
+        SessionService.RestoreSession(
+            DispatcherQueue, RestoreDocuments, HideDocumentOpening);
     }
 
     private void RestoreDocuments(IReadOnlyList<DocumentItem> documents, int selectedIndex)
@@ -1437,7 +1472,12 @@ public sealed partial class TitleBarWindow : Window
         if (selectedTab != null)
         {
             Tabs.SelectedItem = selectedTab;
+            if (ReferenceEquals(Tabs.SelectedItem, selectedTab) &&
+                _tabData.TryGetValue(selectedTab, out var selectedData))
+                ShowDocumentTab(selectedTab, selectedData);
             SaveSession();
         }
+        else
+            HideDocumentOpening();
     }
 }

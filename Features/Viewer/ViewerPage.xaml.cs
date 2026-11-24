@@ -394,11 +394,13 @@ public sealed partial class ViewerPage : Page
         }
         catch (OperationCanceledException)
         {
+            ShowLoading(false);
             Infrastructure.Diagnostics.DocumentOpenTrace.For(doc)?.Mark("OpenCanceled");
             // Expected when switching documents or closing a tab mid-load.
         }
         catch (Exception ex)
         {
+            ShowLoading(false);
             Infrastructure.Diagnostics.DocumentOpenTrace.For(doc)?.Mark(
                 "OpenFailed", $"ErrorType={ex.GetType().Name}");
             Logger.Error($"[Viewer] LoadDocumentAsync failed for {doc.FilePath}", ex);
@@ -414,6 +416,7 @@ public sealed partial class ViewerPage : Page
             Infrastructure.Diagnostics.DocumentOpenTrace.For(doc);
         using IDisposable? traceScope = openTrace?.Activate();
         openTrace?.Mark("ViewerLoadStarted");
+        ShowLoading(true);
 
         if (!await FlushPendingPdfAnnotationsAsync())
             throw new InvalidOperationException(
@@ -426,7 +429,7 @@ public sealed partial class ViewerPage : Page
 
         // ── Reset shared state ────────────────────────────────────────────────
         _doc = doc;
-        ClearPdfAnnotationHistory();
+        await ClearPdfAnnotationHistoryAsync();
         _cts?.Cancel();
         _searchCts?.Cancel();
         _searchDebounceCts?.Cancel();
@@ -479,7 +482,6 @@ public sealed partial class ViewerPage : Page
         string ext = System.IO.Path.GetExtension(doc.FilePath ?? "").ToLowerInvariant();
         IDocumentViewerFactory factory = _viewerRegistry.Resolve(ext);
 
-        ShowLoading(true);
         try
         {
             IDocumentViewer viewer = ActivateHostedViewer(factory, doc);

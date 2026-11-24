@@ -29,6 +29,7 @@ public sealed partial class ViewerPage
     private readonly List<string> _pdfUndoSnapshots = new();
     private readonly List<string> _pdfRedoSnapshots = new();
     private readonly SemaphoreSlim _pdfAnnotationSaveGate = new(1, 1);
+    private readonly SemaphoreSlim _pdfHistoryRestoreGate = new(1, 1);
     private string? _pdfHistoryDirectory;
     private string? _pdfWorkingPath;
     private bool _pdfChangesPending;
@@ -494,12 +495,23 @@ public sealed partial class ViewerPage
     private async Task SaveAndReloadAnnotatedPdfAsync(
         PdfDocumentState sourceState,
         byte[] updatedPdf,
-        bool recordHistory = true)
+        bool recordHistory = true,
+        bool historyRestoreGateAlreadyHeld = false)
     {
-        await _pdfAnnotationSaveGate.WaitAsync(_cts?.Token ?? default);
+        bool restoreGateAcquired = false;
+        bool saveGateAcquired = false;
         string? newWorkingPath = null;
         try
         {
+            if (!historyRestoreGateAlreadyHeld)
+            {
+                await _pdfHistoryRestoreGate.WaitAsync(_cts?.Token ?? default);
+                restoreGateAcquired = true;
+            }
+
+            await _pdfAnnotationSaveGate.WaitAsync(_cts?.Token ?? default);
+            saveGateAcquired = true;
+
             if (!ReferenceEquals(_pdfState, sourceState))
                 return;
             string? filePath = _doc?.FilePath;
@@ -569,7 +581,10 @@ public sealed partial class ViewerPage
         }
         finally
         {
-            _pdfAnnotationSaveGate.Release();
+            if (saveGateAcquired)
+                _pdfAnnotationSaveGate.Release();
+            if (restoreGateAcquired)
+                _pdfHistoryRestoreGate.Release();
         }
     }
 
@@ -678,13 +693,21 @@ public sealed partial class ViewerPage
             File.Delete(path);
     }
 
-    private void ClearPdfAnnotationHistory()
+    private async Task ClearPdfAnnotationHistoryAsync()
     {
-        ClearPdfHistorySnapshots(_pdfUndoSnapshots);
-        ClearPdfHistorySnapshots(_pdfRedoSnapshots);
-        if (_pdfHistoryDirectory != null && Directory.Exists(_pdfHistoryDirectory))
-            Directory.Delete(_pdfHistoryDirectory, recursive: true);
-        _pdfHistoryDirectory = null;
+        await _pdfHistoryRestoreGate.WaitAsync();
+        try
+        {
+            ClearPdfHistorySnapshots(_pdfUndoSnapshots);
+            ClearPdfHistorySnapshots(_pdfRedoSnapshots);
+            if (_pdfHistoryDirectory != null && Directory.Exists(_pdfHistoryDirectory))
+                Directory.Delete(_pdfHistoryDirectory, recursive: true);
+            _pdfHistoryDirectory = null;
+        }
+        finally
+        {
+            _pdfHistoryRestoreGate.Release();
+        }
     }
 
     private void UpdatePdfHistoryAvailability() =>
@@ -694,26 +717,31 @@ public sealed partial class ViewerPage
 
     private async Task RestorePdfAnnotationHistoryAsync(bool undo)
     {
-        var sourceStack = undo ? _pdfUndoSnapshots : _pdfRedoSnapshots;
-        var destinationStack = undo ? _pdfRedoSnapshots : _pdfUndoSnapshots;
-        if (sourceStack.Count == 0 || _pdfState == null)
-            return;
-
-        PdfDocumentState state = _pdfState;
-        string? filePath = _doc?.FilePath;
-        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
-            return;
-
-        string targetSnapshot = sourceStack[^1];
+        bool restoreGateAcquired = false;
         try
         {
+            await _pdfHistoryRestoreGate.WaitAsync(_cts?.Token ?? default);
+            restoreGateAcquired = true;
+
+            var sourceStack = undo ? _pdfUndoSnapshots : _pdfRedoSnapshots;
+            var destinationStack = undo ? _pdfRedoSnapshots : _pdfUndoSnapshots;
+            if (sourceStack.Count == 0 || _pdfState == null)
+                return;
+
+            PdfDocumentState state = _pdfState;
+            string? filePath = _doc?.FilePath;
+            if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+                return;
+
+            string targetSnapshot = sourceStack[^1];
             string currentVersionPath = _pdfChangesPending && _pdfWorkingPath != null
                 ? _pdfWorkingPath
                 : filePath;
             if (!await RecordPdfHistorySnapshotAsync(currentVersionPath, destinationStack))
                 throw new InvalidOperationException("The current PDF is too large for annotation history.");
             byte[] targetPdf = await File.ReadAllBytesAsync(targetSnapshot, _cts?.Token ?? default);
-            await SaveAndReloadAnnotatedPdfAsync(state, targetPdf, recordHistory: false);
+            await SaveAndReloadAnnotatedPdfAsync(
+                state, targetPdf, recordHistory: false, historyRestoreGateAlreadyHeld: true);
             DeletePdfHistoryFile(targetSnapshot);
             sourceStack.RemoveAt(sourceStack.Count - 1);
             UpdatePdfHistoryAvailability();
@@ -725,6 +753,11 @@ public sealed partial class ViewerPage
         {
             await ShowPdfAnnotationErrorAsync(
                 undo ? "Could not undo annotation" : "Could not redo annotation", ex);
+        }
+        finally
+        {
+            if (restoreGateAcquired)
+                _pdfHistoryRestoreGate.Release();
         }
     }
 

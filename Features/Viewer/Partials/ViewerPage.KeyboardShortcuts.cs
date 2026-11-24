@@ -43,6 +43,8 @@ public sealed partial class ViewerPage
                 Toolbar.SidebarIsChecked = !(Toolbar.SidebarIsChecked ?? false);
                 Toolbar_SidebarToggled(this, EventArgs.Empty);
             });
+        AddViewerShortcut(VirtualKey.F1, VirtualKeyModifiers.None,
+            () => _doc != null, () => ShowKeyboardShortcuts(this, EventArgs.Empty));
         AddViewerShortcut(VirtualKey.F, VirtualKeyModifiers.Control,
             () => _doc != null, () => Toolbar_FindRequested(this, EventArgs.Empty));
         AddViewerShortcut(VirtualKey.I, VirtualKeyModifiers.Control,
@@ -59,6 +61,12 @@ public sealed partial class ViewerPage
             () => Toolbar.WordWrapVisibility == Visibility.Visible, ToggleWordWrap);
         AddViewerShortcut(VirtualKey.C, VirtualKeyModifiers.Menu,
             () => FindBar.Visibility == Visibility.Visible, ToggleMatchCase);
+        AddViewerShortcut(VirtualKey.Z, VirtualKeyModifiers.Control,
+            CanUndoPdfAnnotationFromShortcut, () => _ = RestorePdfAnnotationHistoryAsync(undo: true));
+        AddViewerShortcut(VirtualKey.Y, VirtualKeyModifiers.Control,
+            CanRedoPdfAnnotationFromShortcut, () => _ = RestorePdfAnnotationHistoryAsync(undo: false));
+        AddViewerShortcut(VirtualKey.Z, VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift,
+            CanRedoPdfAnnotationFromShortcut, () => _ = RestorePdfAnnotationHistoryAsync(undo: false));
 
         AddViewerShortcut(OemMinusKey, VirtualKeyModifiers.Control,
             CanZoomCurrentDocument, ZoomOutFromShortcut);
@@ -98,6 +106,17 @@ public sealed partial class ViewerPage
     private bool CanZoomCurrentDocument() =>
         _pdfState != null || _pptxDocument != null || _docxDocument != null ||
         _spreadsheetDocument != null || _activeViewer is ImageViewer;
+
+    private bool CanUndoPdfAnnotationFromShortcut() =>
+        _pdfState != null && _pdfUndoSnapshots.Count > 0 && !IsTextEntryFocused();
+
+    private bool CanRedoPdfAnnotationFromShortcut() =>
+        _pdfState != null && _pdfRedoSnapshots.Count > 0 && !IsTextEntryFocused();
+
+    private bool IsTextEntryFocused() =>
+        XamlRoot != null &&
+        Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot) is
+            TextBox or RichEditBox or PasswordBox or AutoSuggestBox or NumberBox;
 
     private void ToggleWordWrap()
     {
@@ -139,6 +158,7 @@ public sealed partial class ViewerPage
         });
         AddKeyboardShortcutSection(sections, "Viewer", new[]
         {
+            ("F1", "Show this keyboard shortcuts guide"),
             ("F9", "Toggle the sidebar"),
             ("Ctrl+F", "Open or close Find"),
             ("Ctrl+I", "Show document information"),
@@ -148,6 +168,15 @@ public sealed partial class ViewerPage
             ("Ctrl+Shift+= / Ctrl+Numpad +", "Zoom in"),
             ("Ctrl+R", "Rotate right (PDF)"),
             ("Ctrl+Mouse wheel", "Zoom in or out"),
+        });
+        AddKeyboardShortcutSection(sections, "PDF annotations", new[]
+        {
+            ("Ctrl+Z", "Undo the last annotation change"),
+            ("Ctrl+Y / Ctrl+Shift+Z", "Redo an annotation change"),
+        });
+        AddKeyboardShortcutSection(sections, "Text selection", new[]
+        {
+            ("Ctrl+C", "Copy selected PDF, Word, or PowerPoint text, or selected spreadsheet cells"),
         });
         AddKeyboardShortcutSection(sections, "Text and Find", new[]
         {

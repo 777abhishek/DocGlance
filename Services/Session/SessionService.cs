@@ -33,7 +33,8 @@ public static class SessionService
 
     public static void RestoreSession(
         DispatcherQueue dispatcherQueue,
-        Action<IReadOnlyList<DocumentItem>, int> restoreDocuments)
+        Action<IReadOnlyList<DocumentItem>, int> restoreDocuments,
+        Action restoreUnavailable)
     {
         DocGlance.Infrastructure.Diagnostics.DiagnosticsService.Milestone("SessionRestoreStarted");
 
@@ -73,11 +74,20 @@ public static class SessionService
                             if (documents.Count == 0)
                             {
                                 Logger.Log("[Session] No previous session to restore");
+                                restoreUnavailable();
                                 return;
                             }
 
                             Logger.Log($"[Session] Restoring {documents.Count} tabs");
-                            restoreDocuments(documents, selectedDocumentIndex);
+                            try
+                            {
+                                restoreDocuments(documents, selectedDocumentIndex);
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.Error("Failed to apply restored session", ex);
+                                restoreUnavailable();
+                            }
                         }
                         finally
                         {
@@ -92,6 +102,8 @@ public static class SessionService
             {
                 Logger.Error("RestoreSession failed", ex);
                 DocGlance.Infrastructure.Diagnostics.DiagnosticsService.Milestone("SessionRestoreFailed");
+                if (!dispatcherQueue.TryEnqueue(() => restoreUnavailable()))
+                    Logger.Warn("[Session] Could not dismiss the session restore overlay");
             }
         });
     }
@@ -100,7 +112,8 @@ public static class SessionService
         DispatcherQueue dispatcherQueue,
         IReadOnlyList<string> filePaths,
         int selectedIndex,
-        Action<IReadOnlyList<DocumentItem>, int> restoreDocuments)
+        Action<IReadOnlyList<DocumentItem>, int> restoreDocuments,
+        Action restoreUnavailable)
     {
         _ = Task.Run(async () =>
         {
@@ -130,11 +143,18 @@ public static class SessionService
                     {
                         try
                         {
+                            if (documents.Count == 0)
+                            {
+                                restoreUnavailable();
+                                return;
+                            }
+
                             restoreDocuments(documents, restoredSelectedIndex);
                         }
                         catch (Exception ex)
                         {
                             Logger.Error("Failed to restore workspace tabs", ex);
+                            restoreUnavailable();
                         }
                     }))
                 {
@@ -144,6 +164,8 @@ public static class SessionService
             catch (Exception ex)
             {
                 Logger.Error("Workspace restore failed", ex);
+                if (!dispatcherQueue.TryEnqueue(() => restoreUnavailable()))
+                    Logger.Warn("[Workspace] Could not dismiss the workspace restore overlay");
             }
         });
     }
