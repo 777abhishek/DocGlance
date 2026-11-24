@@ -30,7 +30,7 @@ if ($Version -notmatch '^\d+\.\d+\.\d+$') {
 $installerFileName = "DocGlance-$Version-Setup-x64.exe"
 $defaultReleaseDirectory = Join-Path $repositoryRoot "GitHubRelease\v$Version"
 if ([string]::IsNullOrWhiteSpace($DownloadUrl)) {
-    $DownloadUrl = "https://github.com/777abhishek/QuickView/releases/download/v$Version/$installerFileName"
+    $DownloadUrl = "https://github.com/777abhishek/DocGlance/releases/download/v$Version/$installerFileName"
 }
 
 if ([string]::IsNullOrWhiteSpace($InstallerPath)) {
@@ -42,14 +42,14 @@ if (-not (Test-Path $InstallerPath)) {
 }
 
 if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
-    $OutputDirectory = Join-Path $defaultReleaseDirectory "winget"
+    $OutputDirectory = $repositoryRoot
 }
 
 Write-Host "Computing SHA-256 hash for $InstallerPath..." -ForegroundColor Cyan
 $hash = (Get-FileHash -Path $InstallerPath -Algorithm SHA256).Hash
 Write-Host "SHA-256: $hash" -ForegroundColor Green
 
-$manifestDir = Join-Path $OutputDirectory "manifests\q\DocGlance\DocGlance\$Version"
+$manifestDir = Join-Path $OutputDirectory "manifests\d\DocGlance\DocGlance\$Version"
 New-Item -ItemType Directory -Force -Path $manifestDir | Out-Null
 
 $installerYaml = @"
@@ -87,13 +87,13 @@ PackageIdentifier: DocGlance.DocGlance
 PackageVersion: $Version
 PackageLocale: en-US
 Publisher: 777abhishek
-PublisherUrl: https://github.com/777abhishek/QuickView
-PublisherSupportUrl: https://github.com/777abhishek/QuickView/issues
+PublisherUrl: https://github.com/777abhishek/DocGlance
+PublisherSupportUrl: https://github.com/777abhishek/DocGlance/issues
 Author: 777abhishek
 PackageName: DocGlance
-PackageUrl: https://github.com/777abhishek/QuickView
+PackageUrl: https://github.com/777abhishek/DocGlance
 License: MIT
-LicenseUrl: https://github.com/777abhishek/QuickView/blob/main/LICENSE
+LicenseUrl: https://github.com/777abhishek/DocGlance/blob/main/LICENSE
 Copyright: Copyright (c) 2026 777abhishek
 ShortDescription: Native Windows viewer for documents, spreadsheets, presentations, and text files
 Description: DocGlance is a 64-bit Windows desktop application built with .NET 8, WinUI 3, and native Rust rendering engines.
@@ -105,7 +105,7 @@ Tags:
   - document-viewer
   - file-preview
   - winui3
-ReleaseNotesUrl: https://github.com/777abhishek/QuickView/releases/tag/v$Version
+ReleaseNotesUrl: https://github.com/777abhishek/DocGlance/releases/tag/v$Version
 ManifestType: defaultLocale
 ManifestVersion: 1.6.0
 "@

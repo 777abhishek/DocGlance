@@ -13,7 +13,7 @@
 #define AppFileVersion AppVersion + ".0"
 #define OutputBaseFilename "DocGlance-" + AppVersion + "-Setup-x64"
 #define AppPublisher "777abhishek"
-#define AppURL       "https://github.com/777abhishek/QuickView"
+#define AppURL       "https://github.com/777abhishek/DocGlance"
 #define AppExeName   "DocGlance.exe"
 #define PublishDir   "..\publish"
 

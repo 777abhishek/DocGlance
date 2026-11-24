@@ -1,0 +1,27 @@
+﻿# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+
+PackageIdentifier: DocGlance.DocGlance
+PackageVersion: 1.0.0
+PackageLocale: en-US
+Publisher: 777abhishek
+PublisherUrl: https://github.com/777abhishek/DocGlance
+PublisherSupportUrl: https://github.com/777abhishek/DocGlance/issues
+Author: 777abhishek
+PackageName: DocGlance
+PackageUrl: https://github.com/777abhishek/DocGlance
+License: MIT
+LicenseUrl: https://github.com/777abhishek/DocGlance/blob/main/LICENSE
+Copyright: Copyright (c) 2026 777abhishek
+ShortDescription: Native Windows viewer for documents, spreadsheets, presentations, and text files
+Description: DocGlance is a 64-bit Windows desktop application built with .NET 8, WinUI 3, and native Rust rendering engines.
+Moniker: DocGlance
+Tags:
+  - viewer
+  - pdf
+  - preview
+  - document-viewer
+  - file-preview
+  - winui3
+ReleaseNotesUrl: https://github.com/777abhishek/DocGlance/releases/tag/v1.0.0
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0
