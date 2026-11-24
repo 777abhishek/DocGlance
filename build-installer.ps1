@@ -2,7 +2,9 @@
 #  DocGlance — Package build script
 #
 #  Creates a Store upload package, a signed sideload package, and/or the
-#  unpackaged EXE installer. Store packages use Microsoft's re-signing flow;
+#  unpackaged EXE installer. Use -StoreUpload for public Microsoft Store
+#  submission; the Store signs accepted packages. Store packages use Microsoft's
+#  re-signing flow;
 #  sideload packages are signed with a local cert matching manifest Publisher.
 #
 #  Usage:

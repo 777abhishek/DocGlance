@@ -1,11 +1,31 @@
 # GitHub release artifacts
 
-Run `.\build-installer.ps1 -GitHubRelease` from the repository root to create an
-unsigned versioned release package under `GitHubRelease\v<version>\`. For a
-trusted signed release, import a CA-issued Authenticode code-signing certificate
-with its private key into `Cert:\CurrentUser\My` and pass its thumbprint. A
-self-signed Store/MSIX publisher certificate does not establish trust for the
-public EXE installer:
+The Microsoft Store is the recommended public distribution channel for
+DocGlance. To create a Store submission bundle, run this from the repository
+root:
+
+```powershell
+.\build-installer.ps1 -StoreUpload
+```
+
+This produces an `.msixupload` bundle under `installer\output\`; upload it to
+Partner Center. It is not an MSI and is not a customer installer. Microsoft
+signs the package accepted for Store distribution, and users install it from
+the [DocGlance Store listing](https://apps.microsoft.com/detail/9P6KFLR429Z6?hl=en-us&gl=IN).
+
+## Optional GitHub EXE installer
+
+The GitHub release workflow creates a separate direct-download setup EXE:
+
+```powershell
+.\build-installer.ps1 -GitHubRelease
+```
+
+It creates an unsigned versioned release package under
+`GitHubRelease\v<version>\`. For a trusted signed EXE, import a CA-issued
+Authenticode code-signing certificate with its private key into
+`Cert:\CurrentUser\My` and pass its thumbprint. A self-signed Store/MSIX
+publisher certificate does not establish trust for the public EXE installer:
 
 ```powershell
 .\build-installer.ps1 -GitHubRelease -SigningCertificateThumbprint "<thumbprint>"

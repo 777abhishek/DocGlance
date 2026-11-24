@@ -9,6 +9,11 @@
     <img src="https://img.shields.io/badge/WinUI-3-blue?style=for-the-badge" alt="WinUI 3">
   </p>
   <p>
+    <a href="https://apps.microsoft.com/detail/9P6KFLR429Z6?hl=en-us&amp;gl=IN">
+      <img src="https://get.microsoft.com/images/en-us%20dark.svg" alt="Get it from Microsoft" height="52">
+    </a>
+  </p>
+  <p>
     <a href="https://github.com/777abhishek/DocGlance/releases">⬇️ Download latest release</a>
     ·
     <a href="https://github.com/777abhishek/DocGlance/issues">🐛 Report a bug</a>
@@ -52,27 +57,25 @@
 
 ## Install
 
-### Option 1 — GitHub Release (Recommended, No Store Validation)
+### Option 1 — Microsoft Store (Recommended)
 
-Download the latest installer from [GitHub Releases](https://github.com/777abhishek/DocGlance/releases):
+Install DocGlance from the [Microsoft Store](https://apps.microsoft.com/detail/9P6KFLR429Z6?hl=en-us&gl=IN).
 
-```
-DocGlance-1.0.0-Setup-x64.exe
-```
-
-> **Note:** Unsigned or newly signed installers may trigger a Windows SmartScreen warning. Verify the installer’s SHA-256 against the checksum published with the GitHub release before running it.
-
-### Option 2 — WinGet
-
-After DocGlance is accepted into the WinGet community repository, install it from PowerShell or Command Prompt:
+Or install it from PowerShell or Command Prompt:
 
 ```powershell
-winget install --id DocGlance.DocGlance --exact
+winget install DocGlance
 ```
 
-### Option 3 — Microsoft Store
+WinGet may show **Version Unknown** while retrieving a Microsoft Store app. This is Store-source metadata and does not mean the installation failed or that the app version is missing.
 
-*(Coming soon — pending Store certification)*
+### Option 2 — GitHub Release (Direct download)
+
+Download the setup executable from [GitHub Releases](https://github.com/777abhishek/DocGlance/releases).
+
+> **Note:** The GitHub setup executable is a separate, unsigned distribution and may trigger a Windows SmartScreen warning. The Microsoft Store version is the recommended way to install DocGlance.
+
+The `DocGlance.DocGlance` community WinGet package is a separate listing for the GitHub installer; it requires acceptance of its manifest pull request in [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs). The command above installs the Store listing directly and does not depend on that pull request.
 
 ---
 
@@ -110,21 +113,23 @@ cd DocGlance
 .\build.ps1 -Unpackaged -Configuration Release
 ```
 
-### Create a GitHub release installer
-
-```powershell
-.\build-installer.ps1 -GitHubRelease
-```
-
-Output: `installer\output\GitHubRelease\v1.0.0\DocGlance-1.0.0-Setup-x64.exe`
-
-### Create a Microsoft Store package
+### Create a Microsoft Store submission package
 
 ```powershell
 .\build-installer.ps1 -StoreUpload
 ```
 
 Output: `installer\output\777abhishek.DocGlance_1.0.0_x64.msixupload`
+
+Upload the `.msixupload` package to Partner Center for Store submission. This is an MSIX upload bundle, not an MSI installer; customers install the published app from the Microsoft Store. Microsoft signs the accepted Store package.
+
+### Optional: Create a GitHub release installer
+
+```powershell
+.\build-installer.ps1 -GitHubRelease
+```
+
+This creates a separate direct-download EXE installer. It is not required for Store releases.
 
 ### Run tests
 
