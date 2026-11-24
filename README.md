@@ -60,7 +60,7 @@ Download the latest installer from [GitHub Releases](https://github.com/777abhis
 DocGlance-1.0.0-Setup-x64.exe
 ```
 
-> **Note:** Windows SmartScreen may show a warning on first run because the installer is unsigned. Click **"More info" → "Run anyway"** to proceed. This is normal for open-source apps distributed outside the Store.
+> **Note:** Unsigned or newly signed installers may trigger a Windows SmartScreen warning. Verify the installer’s SHA-256 against the checksum published with the GitHub release before running it.
 
 ### Option 2 — WinGet
 

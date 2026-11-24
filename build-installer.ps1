@@ -12,7 +12,9 @@
 #    .\build-installer.ps1 -InstallMsix        (build, trust, replace, and install sideload MSIX)
 #    .\build-installer.ps1 -InstallerOnly      (EXE installer only)
 #    .\build-installer.ps1 -InstallerOnly -Unsigned (unsigned EXE for public release)
-#    .\build-installer.ps1 -GitHubRelease      (build versioned public release bundle)
+#    .\build-installer.ps1 -GitHubRelease      (build unsigned versioned public release bundle)
+#    .\build-installer.ps1 -GitHubRelease -SigningCertificateThumbprint <thumbprint>
+#                                               (build and verify a signed public release bundle)
 #    .\build-installer.ps1 -SkipPublish        (reuse existing publish folder)
 #
 #  Requirements:
@@ -28,6 +30,7 @@ param(
     [switch]$InstallerOnly,
     [switch]$Unsigned,
     [switch]$GitHubRelease,
+    [string]$SigningCertificateThumbprint = "",
     [string]$ReleaseNotesPath
 )
 
@@ -54,11 +57,14 @@ function Write-OK  ([string]$msg) { Write-Host "  ✓  $msg" -ForegroundColor Gr
 function Write-Fail([string]$msg) { Write-Host "  ✗  $msg" -ForegroundColor Red; exit 1 }
 function Write-Info([string]$msg) { Write-Host "     $msg" -ForegroundColor Gray }
 
-function Get-DocGlanceSigningCertificate {
+function Get-DocGlanceSigningCertificate([string]$thumbprint = "") {
+    $normalizedThumbprint = $thumbprint -replace '\s', ''
     Get-ChildItem "Cert:\CurrentUser\My" |
         Where-Object {
-            $_.Subject -eq "CN=777abhishek" -and
+            (([string]::IsNullOrWhiteSpace($normalizedThumbprint) -and $_.Subject -eq "CN=777abhishek") -or
+                (-not [string]::IsNullOrWhiteSpace($normalizedThumbprint) -and $_.Thumbprint -eq $normalizedThumbprint)) -and
             $_.HasPrivateKey -and
+            $_.NotBefore -le (Get-Date) -and
             $_.NotAfter -gt (Get-Date) -and
             $_.EnhancedKeyUsageList.ObjectId -contains "1.3.6.1.5.5.7.3.3"
         } |
@@ -66,9 +72,12 @@ function Get-DocGlanceSigningCertificate {
         Select-Object -First 1
 }
 
-function Get-OrCreateDocGlanceSigningCertificate {
-    $certificate = Get-DocGlanceSigningCertificate
+function Get-OrCreateDocGlanceSigningCertificate([string]$thumbprint = "") {
+    $certificate = Get-DocGlanceSigningCertificate $thumbprint
     if ($certificate) { return $certificate }
+    if (-not [string]::IsNullOrWhiteSpace($thumbprint)) {
+        Write-Fail "No current-user code-signing certificate with private key and thumbprint '$thumbprint' was found."
+    }
 
     Write-Step "Creating local EXE signing certificate for CN=777abhishek…"
     New-SelfSignedCertificate -Type Custom `
@@ -151,6 +160,9 @@ Write-Host "  ╚═════════════════════
 if ($GitHubRelease -and ($SkipPublish -or $MsixOnly -or $StoreUpload -or $InstallMsix -or $InstallerOnly -or $Unsigned)) {
     Write-Fail "-GitHubRelease cannot be combined with other build mode switches."
 }
+if (-not [string]::IsNullOrWhiteSpace($SigningCertificateThumbprint) -and -not $GitHubRelease) {
+    Write-Fail "-SigningCertificateThumbprint is only supported with -GitHubRelease."
+}
 if (($StoreUpload -and ($InstallMsix -or $MsixOnly -or $InstallerOnly)) -or
     ($InstallMsix -and $InstallerOnly) -or
     ($MsixOnly -and $InstallerOnly)) {
@@ -158,7 +170,7 @@ if (($StoreUpload -and ($InstallMsix -or $MsixOnly -or $InstallerOnly)) -or
 }
 if ($GitHubRelease) {
     $InstallerOnly = $true
-    $Unsigned = $true
+    $Unsigned = [string]::IsNullOrWhiteSpace($SigningCertificateThumbprint)
 }
 if ($Unsigned -and (-not $InstallerOnly -or $SkipPublish)) {
     Write-Fail "-Unsigned requires a fresh publish and is only supported with -InstallerOnly (do not use -SkipPublish)."
@@ -209,7 +221,8 @@ if ($StoreUpload) {
     Write-Info "Mode: Signed sideload MSIX only"
 } elseif ($InstallerOnly) {
     $installerMode = if ($GitHubRelease) {
-        "GitHub release bundle v$PackageVersion"
+        $signatureMode = if ($Unsigned) { "unsigned" } else { "signed" }
+        "GitHub release bundle v$PackageVersion ($signatureMode)"
     } elseif ($Unsigned) {
         "Unsigned EXE installer only"
     } else {
@@ -220,6 +233,14 @@ if ($StoreUpload) {
     Write-Info "Mode: Signed sideload MSIX + EXE installer"
 }
 Write-Info "Package identity: $PackageName | $PackagePublisher | $PackageVersion"
+
+$releaseSigningCertificate = $null
+if ($GitHubRelease -and -not $Unsigned) {
+    $releaseSigningCertificate = Get-DocGlanceSigningCertificate $SigningCertificateThumbprint
+    if (-not $releaseSigningCertificate) {
+        Write-Fail "No current-user code-signing certificate with private key and thumbprint '$SigningCertificateThumbprint' was found. Import the certificate into Cert:\CurrentUser\My before building."
+    }
+}
 
 # ── 0. Build native libraries ────────────────────────────────────────────────
 Write-Step "Building native Rust libraries…"
@@ -238,9 +259,13 @@ if ($BuildInstaller) {
     $signingCertificate = $null
     $signtool = $null
     if (-not $Unsigned) {
-        $signingCertificate = Get-OrCreateDocGlanceSigningCertificate
+        if ($GitHubRelease) {
+            $signingCertificate = $releaseSigningCertificate
+        } else {
+            $signingCertificate = Get-OrCreateDocGlanceSigningCertificate
+        }
         if (-not $signingCertificate -or -not $signingCertificate.HasPrivateKey) {
-            Write-Fail "Could not create or find the CN=777abhishek EXE signing certificate."
+            Write-Fail "Could not find a usable Authenticode code-signing certificate."
         }
 
         $signtool = Get-WindowsSdkSignTool
@@ -312,7 +337,17 @@ if ($BuildInstaller) {
             -SignTool $signtool -Thumbprint $signingCertificate.Thumbprint -Path $exePath
         if ($LASTEXITCODE -ne 0) { Write-Fail "Signing DocGlance.exe failed (exit $LASTEXITCODE)" }
         Write-OK "Signed DocGlance.exe as $($signingCertificate.Subject)"
-        Write-Info "This is a self-signed test certificate; other PCs must explicitly trust it."
+        if ($GitHubRelease) {
+            $appSignature = Get-AuthenticodeSignature -FilePath $exePath
+            if ($appSignature.Status -ne "Valid" -or
+                -not $appSignature.SignerCertificate -or
+                $appSignature.SignerCertificate.Thumbprint -ne $signingCertificate.Thumbprint) {
+                Write-Fail "DocGlance.exe does not have a valid trusted signature from the selected certificate: $($appSignature.StatusMessage)"
+            }
+            Write-OK "Verified the trusted Authenticode signature on DocGlance.exe."
+        } else {
+            Write-Info "This is a self-signed test certificate; other PCs must explicitly trust it."
+        }
     } else {
         Write-Info "DocGlance.exe is unsigned. Windows may show SmartScreen warnings until reputation is established."
     }
@@ -551,6 +586,16 @@ if ($BuildInstaller) {
 
     $sizeMb = [math]::Round((Get-Item $exeInstaller).Length / 1MB, 1)
     Write-OK "EXE installer: $exeInstaller  ($sizeMb MB)"
+
+    if ($GitHubRelease -and -not $Unsigned) {
+        $installerSignature = Get-AuthenticodeSignature -FilePath $exeInstaller
+        if ($installerSignature.Status -ne "Valid" -or
+            -not $installerSignature.SignerCertificate -or
+            $installerSignature.SignerCertificate.Thumbprint -ne $signingCertificate.Thumbprint) {
+            Write-Fail "The setup installer does not have a valid trusted signature from the selected certificate: $($installerSignature.StatusMessage)"
+        }
+        Write-OK "Verified the trusted Authenticode signature on the setup installer."
+    }
 
     if ($GitHubRelease) {
         New-Item -ItemType Directory -Force -Path $ReleaseDirectory | Out-Null
