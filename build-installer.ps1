@@ -240,6 +240,9 @@ if ($GitHubRelease -and -not $Unsigned) {
     if (-not $releaseSigningCertificate) {
         Write-Fail "No current-user code-signing certificate with private key and thumbprint '$SigningCertificateThumbprint' was found. Import the certificate into Cert:\CurrentUser\My before building."
     }
+    if ($releaseSigningCertificate.Subject -eq $releaseSigningCertificate.Issuer) {
+        Write-Fail "The selected certificate is self-signed and cannot establish publisher trust for a public EXE release. Use a CA-issued Authenticode code-signing certificate; the Store/MSIX publisher certificate is not a substitute."
+    }
 }
 
 # ── 0. Build native libraries ────────────────────────────────────────────────

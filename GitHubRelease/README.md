@@ -2,8 +2,10 @@
 
 Run `.\build-installer.ps1 -GitHubRelease` from the repository root to create an
 unsigned versioned release package under `GitHubRelease\v<version>\`. For a
-trusted signed release, import your Authenticode code-signing certificate with
-its private key into `Cert:\CurrentUser\My` and pass its thumbprint:
+trusted signed release, import a CA-issued Authenticode code-signing certificate
+with its private key into `Cert:\CurrentUser\My` and pass its thumbprint. A
+self-signed Store/MSIX publisher certificate does not establish trust for the
+public EXE installer:
 
 ```powershell
 .\build-installer.ps1 -GitHubRelease -SigningCertificateThumbprint "<thumbprint>"
