@@ -105,10 +105,20 @@ public static class WorkspaceStore
     }
 
     public static void AddDocument(string workspaceId, string filePath)
+        => AddDocuments(workspaceId, new[] { filePath });
+
+    public static void AddDocuments(string workspaceId, IEnumerable<string> filePaths)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
-        if (!StorageAccessStore.HasRememberedFile(filePath))
-            throw new InvalidOperationException("The document's access permission has expired. Reopen it before adding it to a workspace.");
+        ArgumentNullException.ThrowIfNull(filePaths);
+        List<string> paths = filePaths
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (paths.Count == 0)
+            throw new InvalidOperationException("Select at least one document to add to a workspace.");
+        if (paths.Any(path => !StorageAccessStore.HasRememberedFile(path)))
+            throw new InvalidOperationException(
+                "A document's access permission has expired. Reopen it before adding it to a workspace.");
 
         lock (Gate)
         {
@@ -118,11 +128,9 @@ public static class WorkspaceStore
             if (workspace == null)
                 throw new InvalidOperationException("The workspace no longer exists.");
 
-            if (workspace.FilePaths.Any(path =>
-                    string.Equals(path, filePath, StringComparison.OrdinalIgnoreCase)))
-                return;
-
-            workspace.FilePaths.Add(filePath);
+            var existingPaths = new HashSet<string>(
+                workspace.FilePaths, StringComparer.OrdinalIgnoreCase);
+            workspace.FilePaths.AddRange(paths.Where(existingPaths.Add));
             SaveAll(workspaces);
         }
     }

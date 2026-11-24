@@ -36,6 +36,8 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
     private readonly object _thumbnailPrefetchSync = new();
     private CancellationTokenSource? _thumbnailPrefetchCts;
     private Task? _thumbnailPrefetchTask;
+    private int _thumbnailCacheFirstPage = -1;
+    private int _thumbnailCacheLastPage = -1;
     private IReadOnlyList<OutlineItem> _outline = Array.Empty<OutlineItem>();
     private readonly List<Rectangle> _selectionOverlays = new();
     private readonly Dictionary<int, PdfPageTextMap> _textPageMaps = new();
@@ -751,18 +753,41 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
         CancellationToken cancellationToken)
     {
         PdfDocumentState? documentState = DocumentState;
-        if (!sidebarVisible || documentState == null)
+        if (documentState == null)
         {
-            _openTrace?.Mark("ThumbnailsNotScheduled", "Format=PDF SidebarHiddenOrNoDocument");
+            _openTrace?.Mark("ThumbnailsNotScheduled", "Format=PDF NoDocument");
             return Task.CompletedTask;
         }
 
+        centerPage = Math.Clamp(centerPage, 0, documentState.PageCount - 1);
+        int firstPage = sidebarVisible ? Math.Max(0, centerPage - 8) : -1;
+        int lastPage = sidebarVisible
+            ? Math.Min(documentState.PageCount - 1, centerPage + 8)
+            : -1;
         var prefetchCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         Task task;
         DocumentOpenTrace? trace = _openTrace;
         lock (_thumbnailPrefetchSync)
         {
             CancelThumbnailPrefetchLocked();
+            _thumbnailCacheFirstPage = firstPage;
+            _thumbnailCacheLastPage = lastPage;
+            for (int pageIndex = 0; pageIndex < _thumbnails.Count; pageIndex++)
+            {
+                if (pageIndex >= firstPage && pageIndex <= lastPage)
+                    continue;
+
+                _thumbnails[pageIndex].Thumbnail = null;
+                _pdfService.EvictThumbnail(pageIndex);
+            }
+
+            if (!sidebarVisible)
+            {
+                prefetchCts.Dispose();
+                _openTrace?.Mark("ThumbnailsNotScheduled", "Format=PDF SidebarHidden");
+                return Task.CompletedTask;
+            }
+
             _thumbnailPrefetchCts = prefetchCts;
             trace?.Mark("ThumbnailsStarted", "Format=PDF");
             task = PrefetchThumbnailsCoreAsync(centerPage, documentState, prefetchCts, trace);
@@ -801,8 +826,15 @@ public sealed partial class PdfViewer : UserControl, IDocumentViewer, ISupportsZ
 
                 DispatcherQueue.TryEnqueue(() =>
                 {
-                    if (ReferenceEquals(DocumentState, documentState) && pageIndex < _thumbnails.Count)
+                    if (!ReferenceEquals(DocumentState, documentState))
+                        return;
+
+                    if (pageIndex >= _thumbnailCacheFirstPage &&
+                        pageIndex <= _thumbnailCacheLastPage &&
+                        pageIndex < _thumbnails.Count)
                         _thumbnails[pageIndex].Thumbnail = bitmap;
+                    else
+                        _pdfService.EvictThumbnail(pageIndex);
                 });
                 renderedCount++;
             }

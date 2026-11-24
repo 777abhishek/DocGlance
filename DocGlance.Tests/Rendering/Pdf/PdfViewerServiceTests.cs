@@ -1,4 +1,5 @@
 using DocGlance.Rendering.Pdf;
+using DocGlance.Rendering.Shared;
 using Xunit;
 using System.IO;
 using System;
@@ -231,6 +232,24 @@ public sealed class PdfViewerServiceTests : IDisposable
     }
 
     // ── Thumbnails ────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(612.0, 200.0)]
+    [InlineData(1224.0, 200.0)]
+    public void PdfThumbnailDpi_ScalesLargePagesToTargetWidth(double pageWidthPt, double expectedWidth)
+    {
+        float dpi = RenderBudget.PdfThumbnailDpi(pageWidthPt);
+
+        Assert.Equal(expectedWidth, pageWidthPt * dpi / 72.0, precision: 1);
+    }
+
+    [Fact]
+    public void PdfThumbnailDpi_DoesNotExceedMaximumForSmallPages()
+    {
+        float dpi = RenderBudget.PdfThumbnailDpi(100.0);
+
+        Assert.Equal(RenderBudget.ThumbnailDpi, dpi);
+    }
 
     [Fact]
     public async Task RenderThumbnailAsync_NoDocument_ReturnsNull()

@@ -166,6 +166,25 @@
                     </Button>
                 </Grid>
             </Viewbox>
+            <Button x:Name="SelectionToggleButton"
+                    Width="24"
+                    Height="24"
+                    Margin="9"
+                    Padding="0"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Top"
+                    Background="{ThemeResource AccentFillColorDefaultBrush}"
+                    BorderThickness="0"
+                    CornerRadius="12"
+                    Visibility="Collapsed"
+                    Click="SelectionToggleButton_Click"
+                    ToolTipService.ToolTip="Remove from selection">
+                <FontIcon Glyph="&#xE73E;"
+                          FontSize="12"
+                          Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"/>
+            </Button>
         </Grid>
     </Button>
 </UserControl>

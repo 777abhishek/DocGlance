@@ -202,6 +202,48 @@
                     </Grid>
                 </Border>
 
+                <StackPanel x:Name="SelectionActionBar"
+                            Grid.Column="1"
+                            Orientation="Horizontal"
+                            Spacing="8"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Visibility="Collapsed">
+                    <TextBlock x:Name="SelectionCountText"
+                               VerticalAlignment="Center"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    <StackPanel x:Name="WideSelectionActions"
+                                Orientation="Horizontal"
+                                Spacing="8">
+                        <Button Content="Open"
+                                Click="OpenSelectedDocuments_Click"/>
+                        <Button x:Name="AddToWorkspaceButton"
+                                Content="Add to workspace"
+                                Click="AddSelectedToWorkspace_Click"/>
+                        <Button Content="New workspace"
+                                Click="CreateWorkspaceFromSelection_Click"/>
+                        <Button Content="Cancel"
+                                Click="ClearDocumentSelection_Click"/>
+                    </StackPanel>
+                    <Button x:Name="CompactSelectionActionsButton"
+                            Content="Actions"
+                            Visibility="Collapsed">
+                        <Button.Flyout>
+                            <MenuFlyout>
+                                <MenuFlyoutItem Text="Open selected"
+                                                Click="OpenSelectedDocuments_Click"/>
+                                <MenuFlyoutSubItem x:Name="CompactAddToWorkspaceMenu"
+                                                   Text="Add to workspace"/>
+                                <MenuFlyoutItem Text="New workspace"
+                                                Click="CreateWorkspaceFromSelection_Click"/>
+                                <MenuFlyoutSeparator/>
+                                <MenuFlyoutItem Text="Clear selection"
+                                                Click="ClearDocumentSelection_Click"/>
+                            </MenuFlyout>
+                        </Button.Flyout>
+                    </Button>
+                </StackPanel>
+
                 <!-- Count label + spinner -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8"
                             Margin="0,0,10,0" VerticalAlignment="Center">
@@ -227,10 +269,18 @@
                         <TextBlock Text="Clear" FontSize="13" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
+                <Button x:Name="CreateWorkspaceFromFilesButton"
+                        Grid.Column="3"
+                        Padding="10,8"
+                        Click="CreateWorkspaceFromFiles_Click"
+                        ToolTipService.ToolTip="Create a workspace from files"
+                        Visibility="Collapsed">
+                    <FontIcon Glyph="&#xE710;" FontSize="14"/>
+                </Button>
             </Grid>
 
             <!-- ── CONTENT ────────────────────────────────────────────────── -->
-            <Grid Grid.Row="2">
+            <Grid x:Name="DocumentsContent" Grid.Row="2">
 
                 <!-- Empty Spaces State -->
                 <StackPanel
@@ -251,7 +301,7 @@
                         FontWeight="SemiBold"
                         HorizontalAlignment="Center"/>
                     <TextBlock
-                        Text="Open related documents, then save their tabs as a workspace."
+                        Text="Create a workspace from files, or save your currently open tabs."
                         FontSize="13"
                         TextAlignment="Center"
                         TextWrapping="Wrap"
@@ -262,6 +312,10 @@
                         HorizontalAlignment="Center"
                         Click="SaveWorkspace_Click"
                         Style="{StaticResource AccentButtonStyle}"/>
+                    <Button
+                        Content="Create from files"
+                        HorizontalAlignment="Center"
+                        Click="CreateWorkspaceFromFiles_Click"/>
                 </StackPanel>
 
                 <!-- Workspaces Grid View -->
@@ -426,7 +480,8 @@
                                     
                                     <!-- Group Items -->
                                     <ItemsRepeater
-                                        ItemsSource="{x:Bind Items}">
+                                        ItemsSource="{x:Bind Items}"
+                                        ElementPrepared="DocumentsRepeater_ElementPrepared">
                                         <ItemsRepeater.Layout>
                                             <UniformGridLayout
                                                 MinItemWidth="185"
@@ -448,6 +503,15 @@
                     </ItemsRepeater>
                 </ScrollViewer>
 
+                <Canvas x:Name="SelectionCanvas"
+                        IsHitTestVisible="False"
+                        Visibility="Collapsed">
+                    <Border x:Name="SelectionRectangle"
+                            BorderThickness="1"
+                            BorderBrush="#A00078D4"
+                            Background="#100078D4"/>
+                </Canvas>
+
             </Grid>
         </Grid>
 
@@ -456,6 +520,9 @@
              No border or opaque fill — layers over the root Acrylic surface.
              ════════════════════════════════════════════════════════════════ -->
         <Grid x:Name="FilterPanel" Grid.Column="1">
+            <Grid.RenderTransform>
+                <TranslateTransform/>
+            </Grid.RenderTransform>
             <Grid.RowDefinitions>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>

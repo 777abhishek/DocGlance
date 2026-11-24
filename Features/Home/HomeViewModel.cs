@@ -253,15 +253,26 @@ public sealed partial class HomeViewModel : ObservableObject
     }
 
     public void UpsertIndexedDocument(DocumentItem document)
+        => UpsertIndexedDocuments(new[] { document });
+
+    public void UpsertIndexedDocuments(IEnumerable<DocumentItem> documents)
     {
+        var updates = documents
+            .GroupBy(document => document.FilePath, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.Last(),
+                StringComparer.OrdinalIgnoreCase);
+        if (updates.Count == 0)
+            return;
+
         lock (_backgroundIndexLock)
         {
             var items = BackgroundIndex
-                .Where(existing => !string.Equals(
-                    existing.FilePath, document.FilePath, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-            items.Add(document);
-            ReplaceBackgroundIndex(items);
+                .GroupBy(document => document.FilePath, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.First(),
+                    StringComparer.OrdinalIgnoreCase);
+            foreach (var (path, document) in updates)
+                items[path] = document;
+            ReplaceBackgroundIndex(items.Values);
         }
     }
 

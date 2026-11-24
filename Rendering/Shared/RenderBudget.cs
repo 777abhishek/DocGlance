@@ -17,8 +17,9 @@ internal static class RenderBudget
     /// <summary>Decoded pages kept in the viewer cache (visible + small lookahead).</summary>
     public const long MaxViewerCacheBytes = 160L * 1024 * 1024;
 
-    /// <summary>Sidebar thumbs target ~160 CSS px wide - reduced DPI for memory efficiency.</summary>
+    /// <summary>Maximum PDF thumbnail DPI; large pages are rendered at thumbnail size.</summary>
     public const float ThumbnailDpi = 72f;
+    public const double PdfThumbnailWidthPixels = 200.0;
 
     /// <summary>Office thumbnails at 0.5x scale for better quality while staying memory efficient.</summary>
     public const double ThumbnailOfficeScale = 0.5;
@@ -30,6 +31,17 @@ internal static class RenderBudget
             * Math.Clamp(zoom, 0.25f, 8f)
             * TextOversample;
         return CapDpi(dpi, widthPt, heightPt);
+    }
+
+    public static float PdfThumbnailDpi(double pageWidthPt)
+    {
+        if (!double.IsFinite(pageWidthPt) || pageWidthPt <= 0)
+            return ThumbnailDpi;
+
+        return (float)Math.Clamp(
+            PdfThumbnailWidthPixels * 72.0 / pageWidthPt,
+            1.0,
+            ThumbnailDpi);
     }
 
     public static bool NeedsRerender(float cachedDpi, float targetDpi)

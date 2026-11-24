@@ -64,7 +64,9 @@ public static class StorageAccessStore
             throw new UnauthorizedAccessException(
                 $"Folder access is no longer available for '{folderPath}'. Remove and add the folder again.");
 
-        return await accessList.GetFolderAsync(token);
+        StorageFolder folder = await accessList.GetFolderAsync(token);
+        ActiveFolders[folder.Path] = folder;
+        return folder;
     }
 
     public static void ForgetFolder(string folderPath)

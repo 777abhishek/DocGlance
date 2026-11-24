@@ -323,6 +323,24 @@ public class HomeViewModelTests
     }
 
     [Fact]
+    public void UpsertIndexedDocuments_AddsBatchAndReplacesMatchingPaths()
+    {
+        var vm = new HomeViewModel();
+        vm.BackgroundIndex.Add(MakeDoc("Report", "PDF", sizeBytes: 100));
+
+        vm.UpsertIndexedDocuments(new[]
+        {
+            MakeDoc("Report", "PDF", sizeBytes: 200),
+            MakeDoc("Notes", "TXT"),
+        });
+
+        vm.BackgroundIndex.Should().HaveCount(2);
+        vm.BackgroundIndex.Should().ContainSingle(item => item.Title == "Report")
+            .Which.FileSizeBytes.Should().Be(200);
+        vm.BackgroundIndex.Should().Contain(item => item.Title == "Notes");
+    }
+
+    [Fact]
     public void ReconcileIndexedFolder_RemovesStaleEntriesOnlyAfterCompleteScan()
     {
         var vm = new HomeViewModel();

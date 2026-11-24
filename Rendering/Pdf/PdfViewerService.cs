@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml.Media.Imaging;
 using DocGlance.Core.Models;
 using DocGlance.Infrastructure.Logging;
+using DocGlance.Rendering.Shared;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -234,7 +235,9 @@ public sealed class PdfViewerService : IPdfViewerService, IDisposable
     {
         try
         {
-            var bmp = await PdfRenderer.RenderPageAsync(_document!, pageIndex, PdfRenderer.ThumbnailDpi, ct);
+            var (pageWidth, _) = _document!.GetPageSize(pageIndex);
+            var dpi = RenderBudget.PdfThumbnailDpi(pageWidth);
+            var bmp = await PdfRenderer.RenderPageAsync(_document, pageIndex, dpi, ct);
             if (bmp == null || ct.IsCancellationRequested)
             {
                 _renderedThumbs.Remove(pageIndex);

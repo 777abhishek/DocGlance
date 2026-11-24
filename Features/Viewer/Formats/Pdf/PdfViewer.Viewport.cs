@@ -419,8 +419,20 @@ public sealed partial class PdfViewer
                 .Where(i => NeedsRender(i) && !visibleToRender.Contains(i))
                 .ToList();
 
-            // FEAT-004: Estimate bytes needed for new pages (conservative estimate)
-            long estimatedNewBytes = (visibleToRender.Count + bufferToRender.Count) * 8_000_000L; // ~8MB per page estimate
+            long EstimateAdditionalBytes(int pageIndex)
+            {
+                var (widthPt, heightPt) = DocumentState.GetPageSize(pageIndex);
+                float targetDpi = TargetDpi(pageIndex);
+                long renderedBytes = (long)Math.Ceiling(
+                    RenderBudget.PixelBytes(widthPt, heightPt, targetDpi / 72.0));
+                return _pdfPageByteSize.TryGetValue(pageIndex, out long cachedBytes)
+                    ? Math.Max(0, renderedBytes - cachedBytes)
+                    : renderedBytes;
+            }
+
+            long estimatedNewBytes = visibleToRender
+                .Concat(bufferToRender)
+                .Sum(EstimateAdditionalBytes);
             
             if (_cachedBitmapBytes + estimatedNewBytes > MaxCacheBudgetBytes)
             {

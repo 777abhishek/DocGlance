@@ -1,6 +1,7 @@
 using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using DocGlance.Core.Models;
 using DocGlance.Services.FileSystem;
 
@@ -12,9 +13,12 @@ namespace DocGlance.UI.Controls;
 /// </summary>
 public sealed partial class DocumentCardV2 : UserControl
 {
+    private bool _suppressNextOpen;
+
     public DocumentCardV2() => InitializeComponent();
 
     public event EventHandler<BookmarkEventArgs>? BookmarkToggled;
+    internal event Action<DocumentCardV2>? SelectionToggleRequested;
 
     public static readonly DependencyProperty DocumentProperty =
         DependencyProperty.Register(nameof(Document), typeof(DocumentItem), typeof(DocumentCardV2),
@@ -25,6 +29,53 @@ public sealed partial class DocumentCardV2 : UserControl
         get => (DocumentItem?)GetValue(DocumentProperty);
         set => SetValue(DocumentProperty, value);
     }
+
+    public static readonly DependencyProperty IsSelectedProperty =
+        DependencyProperty.Register(nameof(IsSelected), typeof(bool), typeof(DocumentCardV2),
+            new PropertyMetadata(false, OnIsSelectedChanged));
+
+    public bool IsSelected
+    {
+        get => (bool)GetValue(IsSelectedProperty);
+        set => SetValue(IsSelectedProperty, value);
+    }
+
+    private static void OnIsSelectedChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is DocumentCardV2 card)
+            card.SelectionToggleButton.Visibility = (bool)e.NewValue
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+    }
+
+    internal bool IsContextMenuElement(DependencyObject? source)
+    {
+        while (source != null && !ReferenceEquals(source, this))
+        {
+            if (ReferenceEquals(source, ContextMenuButton))
+                return true;
+            source = VisualTreeHelper.GetParent(source);
+        }
+        return false;
+    }
+
+    internal bool IsSelectionToggleElement(DependencyObject? source)
+    {
+        while (source != null && !ReferenceEquals(source, this))
+        {
+            if (ReferenceEquals(source, SelectionToggleButton))
+                return true;
+            source = VisualTreeHelper.GetParent(source);
+        }
+        return false;
+    }
+
+    internal void SuppressNextOpen()
+    {
+        _suppressNextOpen = true;
+    }
+
+    internal void ResetClickSuppression() => _suppressNextOpen = false;
 
     private static void OnDocumentChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
@@ -71,8 +122,19 @@ public sealed partial class DocumentCardV2 : UserControl
 
     private void CardButton_Click(object sender, RoutedEventArgs e)
     {
+        if (_suppressNextOpen)
+        {
+            _suppressNextOpen = false;
+            return;
+        }
         if (Document == null) return;
         global::DocGlance.UI.Shell.TitleBarWindow.Current?.OpenDocument(Document);
+    }
+
+    private void SelectionToggleButton_Click(object sender, RoutedEventArgs e)
+    {
+        _suppressNextOpen = true;
+        SelectionToggleRequested?.Invoke(this);
     }
 
     private void OpenMenuItem_Click(object sender, RoutedEventArgs e) => CardButton_Click(sender, e);

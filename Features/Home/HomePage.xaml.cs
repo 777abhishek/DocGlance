@@ -3,6 +3,10 @@
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using System;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
@@ -20,6 +24,8 @@ using DocGlance.Services.FileSystem.Scanner;
 using DocGlance.Services.Thumbnails;
 using DocGlance.Infrastructure.Logging;
 using DocGlance.Services.Storage;
+using DocGlance.UI.Controls;
+using Windows.Foundation;
 
 namespace DocGlance.Features.Home;
 
@@ -46,6 +52,13 @@ public sealed partial class HomePage : Page
     private List<DocGlance.Services.Storage.SavedWorkspace> _allWorkspaces = new();
     private Task _databaseInitializationTask = Task.CompletedTask;
     private static readonly SemaphoreSlim ScanScheduler = new(3, 3);
+    private DispatcherQueueTimer _scanRefreshTimer = null!;
+    private bool _scanRefreshScheduled;
+    private const double FilterPanelBreakpoint = 1120;
+    private const double CompactSelectionBreakpoint = 1280;
+    private bool _responsiveLayoutInitialized;
+    private bool _filterPanelShouldShow;
+    private Storyboard? _filterPanelStoryboard;
     private readonly Dictionary<string, FileSystemWatcher> _folderWatchers =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, CancellationTokenSource> _watchDebounce =
@@ -58,8 +71,17 @@ public sealed partial class HomePage : Page
         new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _rootSynchronization =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, DocumentItem> _selectedDocuments =
+        new(StringComparer.OrdinalIgnoreCase);
     private readonly object _watcherGate = new();
     private int _activeScanCount;
+    private uint _selectionPointerId;
+    private Point _selectionStart;
+    private bool _selectionTracking;
+    private bool _selectionGestureStarted;
+    private bool _selectionAdditive;
+    private DocumentCardV2? _selectionStartCard;
+    private DocumentCardV2? _suppressedCardAfterMarquee;
 
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -70,6 +92,32 @@ public sealed partial class HomePage : Page
     {
         InitializeComponent();
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+        HomeLayout.SizeChanged += HomeLayout_SizeChanged;
+        _scanRefreshTimer = _dispatcherQueue.CreateTimer();
+        _scanRefreshTimer.IsRepeating = false;
+        _scanRefreshTimer.Interval = TimeSpan.FromMilliseconds(150);
+        _scanRefreshTimer.Tick += (_, _) =>
+        {
+            _scanRefreshScheduled = false;
+            if (!ViewModel.ShowingRecent && !_showingSpaces)
+                RefreshDisplay();
+        };
+        DocumentsContent.AddHandler(
+            UIElement.PointerPressedEvent,
+            new PointerEventHandler(SelectionSurface_PointerPressed),
+            handledEventsToo: true);
+        DocumentsContent.AddHandler(
+            UIElement.PointerMovedEvent,
+            new PointerEventHandler(SelectionSurface_PointerMoved),
+            handledEventsToo: true);
+        DocumentsContent.AddHandler(
+            UIElement.PointerReleasedEvent,
+            new PointerEventHandler(SelectionSurface_PointerReleased),
+            handledEventsToo: true);
+        DocumentsContent.AddHandler(
+            UIElement.PointerCanceledEvent,
+            new PointerEventHandler(SelectionSurface_PointerCanceled),
+            handledEventsToo: true);
     }
 
     private void Page_Loaded(object sender, RoutedEventArgs e)
@@ -100,8 +148,8 @@ public sealed partial class HomePage : Page
         try
         {
             await _databaseInitializationTask;
-            var folders     = await FileIndexService.GetScannedFoldersAsync();
-            var cachedFiles = await FileIndexService.LoadIndexedFilesAsync();
+            var folders = await Task.Run(FileIndexService.GetScannedFoldersAsync);
+            var cachedFiles = await Task.Run(FileIndexService.LoadIndexedFilesAsync);
 
             foreach (var folder in folders)
             {
@@ -122,10 +170,13 @@ public sealed partial class HomePage : Page
                 folders.Select(f => HomeViewModel.NormalizePath(f)),
                 StringComparer.OrdinalIgnoreCase);
 
-            foreach (var file in cachedFiles)
-                if (File.Exists(file.FilePath) &&
-                    folderSet.Any(f => HomeViewModel.IsPathWithinRoot(file.FilePath, f)))
-                    ViewModel.UpsertIndexedDocument(file);
+            List<DocumentItem> validCachedFiles = await Task.Run(() =>
+                cachedFiles.Where(file =>
+                    File.Exists(file.FilePath) &&
+                    folderSet.Any(folderPath =>
+                        HomeViewModel.IsPathWithinRoot(file.FilePath, folderPath)))
+                    .ToList());
+            ViewModel.UpsertIndexedDocuments(validCachedFiles);
 
             RefreshDisplay();
             foreach (string folder in folders)
@@ -142,6 +193,7 @@ public sealed partial class HomePage : Page
     private async void ViewModeToggle_Checked(object sender, RoutedEventArgs e)
     {
         if (!_loaded) return;
+        ClearDocumentSelection();
         ViewModel.ShowingRecent = ReferenceEquals(sender, RecentModeButton);
         _showingSpaces = ReferenceEquals(sender, SpacesModeButton);
         ClearButton.Visibility = ViewModel.ShowingRecent ? Visibility.Visible : Visibility.Collapsed;
@@ -322,7 +374,27 @@ public sealed partial class HomePage : Page
             ApplyWorkspaceFilter();
         else
             ViewModel.RefreshFilter();
+        PruneDocumentSelection();
         UpdateUI();
+    }
+
+    private void PruneDocumentSelection()
+    {
+        if (_selectedDocuments.Count == 0)
+            return;
+
+        IEnumerable<DocumentItem> visibleDocuments = ViewModel.ShowingRecent
+            ? ViewModel.RecentDocuments
+            : ViewModel.GroupByMode == "None"
+                ? ViewModel.FilteredDocuments
+                : ViewModel.GroupedDocuments.SelectMany(group => group.Items);
+        var visiblePaths = new HashSet<string>(
+            visibleDocuments.Select(document => document.FilePath),
+            StringComparer.OrdinalIgnoreCase);
+        foreach (string selectedPath in _selectedDocuments.Keys.ToList())
+            if (!visiblePaths.Contains(selectedPath))
+                _selectedDocuments.Remove(selectedPath);
+        UpdateDocumentSelectionUI();
     }
 
     private void LoadWorkspaces()
@@ -345,6 +417,493 @@ public sealed partial class HomePage : Page
                      workspace.FilePaths.Any(path =>
                          Path.GetFileName(path).Contains(search, StringComparison.OrdinalIgnoreCase))))
             Workspaces.Add(workspace);
+    }
+
+    private async void CreateWorkspaceFromFiles_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var picker = new FileOpenPicker
+            {
+                SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
+                ViewMode = PickerViewMode.List,
+            };
+            picker.FileTypeFilter.Add("*");
+            InitializeWithWindow.Initialize(
+                picker, UI.Shell.TitleBarWindow.Current?.Hwnd ?? IntPtr.Zero);
+            var files = await picker.PickMultipleFilesAsync();
+            if (files == null || files.Count == 0)
+                return;
+
+            foreach (Windows.Storage.StorageFile file in files)
+                StorageAccessStore.RememberFile(file);
+
+            await CreateWorkspaceAsync(files.Select(file => file.Path));
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Failed to create a workspace from selected files", ex);
+            await ShowWorkspaceMessageAsync(ex.Message);
+        }
+    }
+
+    private async void CreateWorkspaceFromSelection_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            await CreateWorkspaceAsync(_selectedDocuments.Keys.ToList());
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Failed to create a workspace from selected documents", ex);
+            await ShowWorkspaceMessageAsync(ex.Message);
+        }
+    }
+
+    private async Task CreateWorkspaceAsync(IEnumerable<string> filePaths)
+    {
+        string? name = await PromptWorkspaceNameAsync("Create workspace from files");
+        if (name == null)
+            return;
+
+        List<string> paths = filePaths
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (paths.Any(path => !StorageAccessStore.HasRememberedFile(path)))
+            throw new InvalidOperationException(
+                "Access to one or more selected files is unavailable. Reopen them and try again.");
+
+        DocGlance.Services.Storage.WorkspaceStore.Save(name, paths, selectedIndex: 0);
+        LoadWorkspaces();
+        ClearDocumentSelection();
+        SpacesModeButton.IsChecked = true;
+    }
+
+    private async Task<string?> PromptWorkspaceNameAsync(string title)
+    {
+        var nameBox = new TextBox
+        {
+            PlaceholderText = "Workspace name",
+            MaxLength = 80,
+        };
+        var dialog = new ContentDialog
+        {
+            Title = title,
+            Content = nameBox,
+            PrimaryButtonText = "Create",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = XamlRoot,
+        };
+        return await dialog.ShowAsync() == ContentDialogResult.Primary
+            ? nameBox.Text
+            : null;
+    }
+
+    private async void OpenSelectedDocuments_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            List<DocumentItem> documents = _selectedDocuments.Values.ToList();
+            if (documents.Count == 0)
+                return;
+
+            List<DocumentItem> missing = documents
+                .Where(document => !File.Exists(document.FilePath))
+                .ToList();
+            if (missing.Count > 0)
+                throw new FileNotFoundException(
+                    $"{missing.Count} selected file(s) are no longer available. Rescan the folder and try again.");
+
+            var window = UI.Shell.TitleBarWindow.Current
+                ?? throw new InvalidOperationException("The active DocGlance window is unavailable.");
+            window.OpenWorkspaceDocuments(documents, documents.Count - 1);
+            ClearDocumentSelection();
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Failed to open selected documents", ex);
+            await ShowWorkspaceMessageAsync(ex.Message);
+        }
+    }
+
+    private async void AddSelectedToWorkspace_Click(object sender, RoutedEventArgs e)
+    {
+        if (_allWorkspaces.Count == 0)
+        {
+            await ShowWorkspaceMessageAsync("Create a workspace before adding documents to it.");
+            return;
+        }
+
+        var flyout = new MenuFlyout();
+        foreach (DocGlance.Services.Storage.SavedWorkspace workspace in _allWorkspaces)
+        {
+            var item = new MenuFlyoutItem
+            {
+                Text = workspace.Name,
+                Tag = workspace.Id,
+            };
+            item.Click += AddSelectedToWorkspaceMenuItem_Click;
+            flyout.Items.Add(item);
+        }
+        flyout.ShowAt(AddToWorkspaceButton);
+    }
+
+    private async void AddSelectedToWorkspaceMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuFlyoutItem { Tag: string workspaceId })
+            return;
+
+        try
+        {
+            DocGlance.Services.Storage.WorkspaceStore.AddDocuments(
+                workspaceId, _selectedDocuments.Keys.ToList());
+            LoadWorkspaces();
+            ClearDocumentSelection();
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Failed to add selected documents to a workspace", ex);
+            await ShowWorkspaceMessageAsync(ex.Message);
+        }
+    }
+
+    private void ClearDocumentSelection_Click(object sender, RoutedEventArgs e)
+        => ClearDocumentSelection();
+
+    private void ClearDocumentSelection()
+    {
+        _selectedDocuments.Clear();
+        UpdateDocumentSelectionUI();
+    }
+
+    private void UpdateDocumentSelectionUI()
+    {
+        UpdateVisibleCardSelection(DocumentsContent);
+        bool hasSelection = _selectedDocuments.Count > 0;
+        SelectionActionBar.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
+        SelectionCountText.Text = hasSelection
+            ? $"{_selectedDocuments.Count} selected"
+            : string.Empty;
+        DocumentCountLabel.Visibility = hasSelection
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+        ClearButton.Visibility = !hasSelection && ViewModel.ShowingRecent
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        AddToWorkspaceButton.IsEnabled = _allWorkspaces.Count > 0;
+        UpdateSelectionActionLayout();
+    }
+
+    private void HomeLayout_SizeChanged(object sender, SizeChangedEventArgs e)
+        => ApplyResponsiveLayout();
+
+    private void ApplyResponsiveLayout()
+    {
+        bool shouldShowFilter = !_showingSpaces &&
+            !ViewModel.ShowingRecent &&
+            HomeLayout.ActualWidth >= FilterPanelBreakpoint;
+        bool animate = _responsiveLayoutInitialized &&
+            shouldShowFilter != _filterPanelShouldShow;
+
+        if (!_responsiveLayoutInitialized || shouldShowFilter != _filterPanelShouldShow)
+        {
+            _filterPanelShouldShow = shouldShowFilter;
+            if (shouldShowFilter)
+            {
+                HomeLayout.ColumnDefinitions[1].Width = new GridLength(300);
+                FilterPanel.Visibility = Visibility.Visible;
+                if (animate)
+                    AnimateFilterPanel(show: true);
+                else
+                {
+                    FilterPanel.Opacity = 1;
+                    ((TranslateTransform)FilterPanel.RenderTransform).X = 0;
+                }
+            }
+            else if (animate && FilterPanel.Visibility == Visibility.Visible)
+            {
+                AnimateFilterPanel(show: false);
+            }
+            else
+            {
+                HomeLayout.ColumnDefinitions[1].Width = new GridLength(0);
+                FilterPanel.Visibility = Visibility.Collapsed;
+                FilterPanel.Opacity = 1;
+                ((TranslateTransform)FilterPanel.RenderTransform).X = 0;
+            }
+        }
+
+        _responsiveLayoutInitialized = true;
+        UpdateSelectionActionLayout();
+    }
+
+    private void AnimateFilterPanel(bool show)
+    {
+        _filterPanelStoryboard?.Stop();
+        var translation = (TranslateTransform)FilterPanel.RenderTransform;
+        if (show)
+        {
+            FilterPanel.Visibility = Visibility.Visible;
+            FilterPanel.Opacity = 0;
+            translation.X = 18;
+        }
+
+        var storyboard = new Storyboard();
+        var opacityAnimation = new DoubleAnimation
+        {
+            To = show ? 1 : 0,
+            Duration = new Duration(TimeSpan.FromMilliseconds(180)),
+            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
+        };
+        Storyboard.SetTarget(opacityAnimation, FilterPanel);
+        Storyboard.SetTargetProperty(opacityAnimation, "Opacity");
+        storyboard.Children.Add(opacityAnimation);
+
+        var slideAnimation = new DoubleAnimation
+        {
+            To = show ? 0 : 18,
+            Duration = new Duration(TimeSpan.FromMilliseconds(180)),
+            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
+        };
+        Storyboard.SetTarget(slideAnimation, translation);
+        Storyboard.SetTargetProperty(slideAnimation, "X");
+        storyboard.Children.Add(slideAnimation);
+
+        if (!show)
+        {
+            storyboard.Completed += (_, _) =>
+            {
+                if (_filterPanelShouldShow)
+                    return;
+
+                FilterPanel.Visibility = Visibility.Collapsed;
+                FilterPanel.Opacity = 1;
+                translation.X = 0;
+                HomeLayout.ColumnDefinitions[1].Width = new GridLength(0);
+            };
+        }
+
+        _filterPanelStoryboard = storyboard;
+        storyboard.Begin();
+    }
+
+    private void UpdateSelectionActionLayout()
+    {
+        bool compact = HomeLayout.ActualWidth < CompactSelectionBreakpoint;
+        WideSelectionActions.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        CompactSelectionActionsButton.Visibility = compact ? Visibility.Visible : Visibility.Collapsed;
+        AddToWorkspaceButton.IsEnabled = _allWorkspaces.Count > 0;
+
+        CompactAddToWorkspaceMenu.Items.Clear();
+        foreach (DocGlance.Services.Storage.SavedWorkspace workspace in _allWorkspaces)
+        {
+            var item = new MenuFlyoutItem
+            {
+                Text = workspace.Name,
+                Tag = workspace.Id,
+            };
+            item.Click += AddSelectedToWorkspaceMenuItem_Click;
+            CompactAddToWorkspaceMenu.Items.Add(item);
+        }
+        CompactAddToWorkspaceMenu.IsEnabled = _allWorkspaces.Count > 0;
+    }
+
+    private void SelectionSurface_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        _suppressedCardAfterMarquee?.ResetClickSuppression();
+        _suppressedCardAfterMarquee = null;
+        if (!e.GetCurrentPoint(DocumentsContent).Properties.IsLeftButtonPressed)
+            return;
+
+        DependencyObject? source = e.OriginalSource as DependencyObject;
+        if (source == null ||
+            (!IsVisualDescendantOf(source, DocumentsGridView) &&
+             !IsVisualDescendantOf(source, GroupedDocumentsView)))
+            return;
+
+        if (FindVisualAncestor<ScrollBar>(source) != null)
+            return;
+
+        DocumentCardV2? card = FindVisualAncestor<DocumentCardV2>(source);
+        if (card?.IsContextMenuElement(source) == true ||
+            card?.IsSelectionToggleElement(source) == true)
+            return;
+
+        _selectionTracking = true;
+        _selectionPointerId = e.Pointer.PointerId;
+        _selectionStart = e.GetCurrentPoint(DocumentsContent).Position;
+        _selectionGestureStarted = false;
+        _selectionAdditive =
+            (e.KeyModifiers & Windows.System.VirtualKeyModifiers.Control) != 0;
+        _selectionStartCard = card;
+    }
+
+    private void SelectionSurface_PointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_selectionTracking || e.Pointer.PointerId != _selectionPointerId ||
+            !e.GetCurrentPoint(DocumentsContent).Properties.IsLeftButtonPressed)
+            return;
+
+        Point current = e.GetCurrentPoint(DocumentsContent).Position;
+        if (!_selectionGestureStarted)
+        {
+            if (Math.Abs(current.X - _selectionStart.X) < 6 &&
+                Math.Abs(current.Y - _selectionStart.Y) < 6)
+                return;
+
+            if (!DocumentsContent.CapturePointer(e.Pointer))
+                return;
+
+            _selectionGestureStarted = true;
+            _selectionStartCard?.SuppressNextOpen();
+            _suppressedCardAfterMarquee = _selectionStartCard;
+            if (!_selectionAdditive)
+                _selectedDocuments.Clear();
+            SelectionCanvas.Visibility = Visibility.Visible;
+        }
+
+        UpdateSelectionRectangle(current);
+        e.Handled = true;
+    }
+
+    private void SelectionSurface_PointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_selectionTracking || e.Pointer.PointerId != _selectionPointerId)
+            return;
+
+        if (_selectionGestureStarted)
+        {
+            Point current = e.GetCurrentPoint(DocumentsContent).Position;
+            UpdateSelectionRectangle(current);
+            SelectCardsInMarquee(current);
+            SelectionCanvas.Visibility = Visibility.Collapsed;
+            DocumentsContent.ReleasePointerCapture(e.Pointer);
+            e.Handled = true;
+        }
+
+        _selectionTracking = false;
+        _selectionGestureStarted = false;
+        _selectionPointerId = 0;
+        _selectionStartCard = null;
+    }
+
+    private void SelectionSurface_PointerCanceled(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_selectionTracking || e.Pointer.PointerId != _selectionPointerId)
+            return;
+
+        SelectionCanvas.Visibility = Visibility.Collapsed;
+        _selectionTracking = false;
+        _selectionGestureStarted = false;
+        _selectionPointerId = 0;
+        _selectionStartCard = null;
+    }
+
+    private void UpdateSelectionRectangle(Point current)
+    {
+        double left = Math.Min(current.X, _selectionStart.X);
+        double top = Math.Min(current.Y, _selectionStart.Y);
+        SelectionRectangle.Width = Math.Abs(current.X - _selectionStart.X);
+        SelectionRectangle.Height = Math.Abs(current.Y - _selectionStart.Y);
+        Canvas.SetLeft(SelectionRectangle, left);
+        Canvas.SetTop(SelectionRectangle, top);
+    }
+
+    private void SelectCardsInMarquee(Point current)
+    {
+        var marquee = new Rect(
+            Math.Min(current.X, _selectionStart.X),
+            Math.Min(current.Y, _selectionStart.Y),
+            Math.Abs(current.X - _selectionStart.X),
+            Math.Abs(current.Y - _selectionStart.Y));
+
+        foreach (DocumentCardV2 card in GetVisibleDocumentCards())
+        {
+            if (card.Document == null || card.ActualWidth <= 0 || card.ActualHeight <= 0)
+                continue;
+
+            try
+            {
+                Rect cardBounds = card.TransformToVisual(DocumentsContent)
+                    .TransformBounds(new Rect(0, 0, card.ActualWidth, card.ActualHeight));
+                if (marquee.Left <= cardBounds.Right && marquee.Right >= cardBounds.Left &&
+                    marquee.Top <= cardBounds.Bottom && marquee.Bottom >= cardBounds.Top)
+                    _selectedDocuments[card.Document.FilePath] = card.Document;
+            }
+            catch (InvalidOperationException ex)
+            {
+                Logger.Warn($"Could not measure a document card for selection: {ex.Message}");
+            }
+        }
+
+        UpdateDocumentSelectionUI();
+    }
+
+    private IEnumerable<DocumentCardV2> GetVisibleDocumentCards()
+    {
+        UIElement activeView = GroupedDocumentsView.Visibility == Visibility.Visible
+            ? GroupedDocumentsView
+            : DocumentsGridView;
+        var cards = new List<DocumentCardV2>();
+        CollectDocumentCards(activeView, cards);
+        return cards;
+    }
+
+    private static void CollectDocumentCards(DependencyObject parent, List<DocumentCardV2> cards)
+    {
+        int childCount = VisualTreeHelper.GetChildrenCount(parent);
+        for (int i = 0; i < childCount; i++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(parent, i);
+            if (child is DocumentCardV2 card)
+            {
+                cards.Add(card);
+                continue;
+            }
+            CollectDocumentCards(child, cards);
+        }
+    }
+
+    private void UpdateVisibleCardSelection(DependencyObject parent)
+    {
+        int childCount = VisualTreeHelper.GetChildrenCount(parent);
+        for (int i = 0; i < childCount; i++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(parent, i);
+            if (child is DocumentCardV2 card)
+            {
+                card.IsSelected = card.Document != null &&
+                    _selectedDocuments.ContainsKey(card.Document.FilePath);
+                continue;
+            }
+            UpdateVisibleCardSelection(child);
+        }
+    }
+
+    private static T? FindVisualAncestor<T>(DependencyObject source)
+        where T : DependencyObject
+    {
+        DependencyObject? current = source;
+        while (current != null)
+        {
+            if (current is T match)
+                return match;
+            current = VisualTreeHelper.GetParent(current);
+        }
+        return null;
+    }
+
+    private static bool IsVisualDescendantOf(DependencyObject source, DependencyObject ancestor)
+    {
+        DependencyObject? current = source;
+        while (current != null)
+        {
+            if (ReferenceEquals(current, ancestor))
+                return true;
+            current = VisualTreeHelper.GetParent(current);
+        }
+        return false;
     }
 
     private async void SaveWorkspace_Click(object sender, RoutedEventArgs e)
@@ -597,7 +1156,7 @@ public sealed partial class HomePage : Page
         string folderPath = folder.Path;
         var cts = ViewModel.CreateScanToken(folderPath);
         Interlocked.Increment(ref _activeScanCount);
-        ViewModel.IsScanning = true;
+        SetScanningState(true);
         bool schedulerAcquired = false;
         bool rootAcquired = false;
         SemaphoreSlim rootGate = _rootSynchronization.GetOrAdd(
@@ -608,14 +1167,34 @@ public sealed partial class HomePage : Page
             schedulerAcquired = true;
             await rootGate.WaitAsync(cts.Token);
             rootAcquired = true;
-            FolderScanResult result = await FolderScanner.ScanFolderAsync(folder, cts.Token);
+            CancellationToken scanToken = cts.Token;
+            Action<IReadOnlyList<DocumentItem>> publishBatch = batch =>
+            {
+                if (!_dispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (scanToken.IsCancellationRequested ||
+                            !ScannedFolders.Contains(folderPath, StringComparer.OrdinalIgnoreCase))
+                            return;
+
+                        ViewModel.UpsertIndexedDocuments(batch);
+                        if (!ViewModel.ShowingRecent && !_showingSpaces)
+                            ScheduleScanRefresh();
+                    }))
+                    Logger.Warn($"[SCAN] Could not publish discovered files for '{folderPath}'.");
+            };
+            FolderScanResult result = await FolderScanner.ScanFolderAsync(
+                folder, publishBatch, scanToken);
             cts.Token.ThrowIfCancellationRequested();
-            await FileIndexService.CommitScanAsync(
-                folderPath, result.Items, result.IsComplete, cts.Token);
+            await Task.Run(
+                () => FileIndexService.CommitScanAsync(
+                    folderPath, result.Items, result.IsComplete, cts.Token),
+                cts.Token);
             cts.Token.ThrowIfCancellationRequested();
             if (!ScannedFolders.Contains(folderPath, StringComparer.OrdinalIgnoreCase))
                 return;
             ViewModel.ReconcileIndexedFolder(folderPath, result.Items, result.IsComplete);
+            _scanRefreshTimer.Stop();
+            _scanRefreshScheduled = false;
             RefreshDisplay();
             _ = LoadThumbnailsAsync(result.Items, cts.Token);
         }
@@ -627,9 +1206,18 @@ public sealed partial class HomePage : Page
                 rootGate.Release();
             if (schedulerAcquired)
                 ScanScheduler.Release();
-            ViewModel.IsScanning = Interlocked.Decrement(ref _activeScanCount) > 0;
+            SetScanningState(Interlocked.Decrement(ref _activeScanCount) > 0);
             ViewModel.RemoveScanToken(folderPath, cts);
         }
+    }
+
+    private void ScheduleScanRefresh()
+    {
+        if (_scanRefreshScheduled)
+            return;
+
+        _scanRefreshScheduled = true;
+        _scanRefreshTimer.Start();
     }
 
 
@@ -899,7 +1487,26 @@ public sealed partial class HomePage : Page
     // ═════════════════════════════════════════════════════════════════════════
 
     private void DocumentsRepeater_ElementPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
-        => _ = args;
+    {
+        if (args.Element is DocumentCardV2 card)
+        {
+            card.SelectionToggleRequested -= DocumentCard_SelectionToggleRequested;
+            card.SelectionToggleRequested += DocumentCard_SelectionToggleRequested;
+            card.IsSelected = card.Document != null &&
+                _selectedDocuments.ContainsKey(card.Document.FilePath);
+        }
+    }
+
+    private void DocumentCard_SelectionToggleRequested(DocumentCardV2 card)
+    {
+        if (card.Document == null)
+            return;
+
+        string path = card.Document.FilePath;
+        if (!_selectedDocuments.Remove(path))
+            _selectedDocuments[path] = card.Document;
+        UpdateDocumentSelectionUI();
+    }
 
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -909,6 +1516,7 @@ public sealed partial class HomePage : Page
     private void UpdateUI()
     {
         if (!_loaded) return;
+        ApplyResponsiveLayout();
 
         if (_showingSpaces)
         {
@@ -923,8 +1531,9 @@ public sealed partial class HomePage : Page
             DocumentsGridView.Visibility = Visibility.Collapsed;
             GroupedDocumentsView.Visibility = Visibility.Collapsed;
             ClearButton.Visibility = Visibility.Collapsed;
-            HomeLayout.ColumnDefinitions[1].Width = new GridLength(0);
-            FilterPanel.Visibility = Visibility.Collapsed;
+            CreateWorkspaceFromFilesButton.Visibility = Visibility.Visible;
+            SelectionActionBar.Visibility = Visibility.Collapsed;
+            DocumentCountLabel.Visibility = Visibility.Visible;
             DocumentCountLabel.Text = Workspaces.Count == 1
                 ? "1 workspace"
                 : $"{Workspaces.Count} workspaces";
@@ -933,8 +1542,11 @@ public sealed partial class HomePage : Page
 
         EmptySpacesState.Visibility = Visibility.Collapsed;
         WorkspacesView.Visibility = Visibility.Collapsed;
-        HomeLayout.ColumnDefinitions[1].Width = new GridLength(300);
-        FilterPanel.Visibility = Visibility.Visible;
+        CreateWorkspaceFromFilesButton.Visibility = Visibility.Collapsed;
+        bool hasSelection = _selectedDocuments.Count > 0;
+        ClearButton.Visibility = ViewModel.ShowingRecent && !hasSelection
+            ? Visibility.Visible
+            : Visibility.Collapsed;
         bool hasFolders = ViewModel.ScannedFolders.Count > 0;
         bool hasItems   = ViewModel.FilteredDocuments.Count > 0;
         bool hasGroups  = ViewModel.GroupedDocuments.Count > 0;
@@ -953,7 +1565,12 @@ public sealed partial class HomePage : Page
         GroupedDocumentsView.Visibility = (isGrouped && hasGroups) ? Visibility.Visible : Visibility.Collapsed;
 
         if (DocumentCountLabel != null)
+        {
             DocumentCountLabel.Text = ViewModel.DocumentCountText;
+            DocumentCountLabel.Visibility = hasSelection
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+        }
 
         if (RescanButton != null)
             RescanButton.Visibility = hasFolders ? Visibility.Visible : Visibility.Collapsed;
